@@ -8,15 +8,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef uint64_t Elf64_Addr;
-typedef uint16_t Elf64_Half;
-typedef int32_t Elf64_Sword;
-typedef uint32_t Elf64_Word;
-typedef int64_t Elf64_Sxword;
-typedef uint64_t Elf64_Xword;
-typedef uint64_t Elf64_Off;
-
-#define EI_NIDENT 16
+#define int16  int16_t
+#define uint16 uint16_t
+#define int32  int32_t
+#define uint32 uint32_t
+#define int64  int64_t
+#define uint64 uint64_t
 
 #define SHT_NULL 0
 #define SHT_PROGBITS 1
@@ -78,6 +75,57 @@ typedef uint64_t Elf64_Off;
 #define R_X86_64_8 14
 #define R_X86_64_PC8 15
 
+/*
+ * Byte String
+ */
+
+#define STRING_BUILDER_INITIAL_SIZE 32
+
+typedef struct StringBuilder {
+    char *buf;
+    int nalloc;
+    int len;
+} StringBuilder;
+
+#define SBUILDER_LEN(b) ((b)->len)
+#define SBUILDER_BODY(b) ((b)->buf)
+
+typedef struct String {
+    char *body;
+    long len;
+} String;
+
+extern StringBuilder *make_sbuilder(void);
+extern void o1(StringBuilder *b, int byte);
+extern void out(StringBuilder *b, void *data, size_t size);
+extern void ostr(StringBuilder *b, char *str);
+extern void o2(StringBuilder *b, uint16 data);
+extern void o4(StringBuilder *b, uint32 data);
+extern void o8(StringBuilder *b, uint64 data);
+extern void align(StringBuilder *b, int n);
+
+/*
+ * List
+ */
+
+#define LIST_INITIAL_SIZE 8
+
+typedef struct List {
+    void **elems;
+    int nalloc;
+    int len;
+} List;
+
+#define LIST_ELEM(type, lis, i) (((type**)(lis)->elems)[i])
+#define LIST_LEN(lis) ((lis)->len)
+
+List *make_list(void);
+void list_push(List *list, void *e);
+
+/*
+ * ELF headers
+ */
+
 typedef struct Symbol {
     char *name;
     long value;
@@ -104,11 +152,9 @@ typedef struct Section {
     int type;
     int flags;
     int align;
-    Symbol *syms[100];
-    int nsym;
+    List *syms;
     int link;
-    Reloc *rels[100];
-    int nrel;
+    List *rels;
     int info;
     int entsize;
 } Section;
@@ -118,43 +164,7 @@ typedef struct Elf {
     int size;
     int shnum;
     int symtabnum;
-    Symbol *syms[100];
-    int nsym;
+    List *syms;
 } Elf;
-
-typedef struct WriteCtx {
-    char *data;
-    int off;
-    int size;
-} WriteCtx;
-
-/*
- * Byte String
- */
-
-#define STRING_BUILDER_INITIAL_SIZE 32
-
-typedef struct StringBuilder {
-    char *buf;
-    int nalloc;
-    int len;
-} StringBuilder;
-
-#define SBUILDER_LEN(b) ((b)->len)
-#define SBUILDER_BODY(b) ((b)->buf)
-
-typedef struct String {
-    char *body;
-    long len;
-} String;
-
-extern StringBuilder *make_sbuilder(void);
-extern void o1(StringBuilder *b, int byte);
-extern void out(StringBuilder *b, void *data, size_t size);
-extern void ostr(StringBuilder *b, char *str);
-extern void o2(StringBuilder *b, uint16_t data);
-extern void o4(StringBuilder *b, uint32_t data);
-extern void o8(StringBuilder *b, uint64_t data);
-extern void align(StringBuilder *b, int n);
 
 #endif

@@ -35,15 +35,15 @@ void ostr(StringBuilder *b, char *str) {
     out(b, str, strlen(str) + 1);
 }
 
-void o2(StringBuilder *b, uint16_t data) {
+void o2(StringBuilder *b, uint16 data) {
     out(b, &data, 2);
 }
 
-void o4(StringBuilder *b, uint32_t data) {
+void o4(StringBuilder *b, uint32 data) {
     out(b, &data, 4);
 }
 
-void o8(StringBuilder *b, uint64_t data) {
+void o8(StringBuilder *b, uint64 data) {
     out(b, &data, 8);
 }
 
