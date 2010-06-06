@@ -20,10 +20,9 @@ static char hello_world_str[] = "Hello, world!\n";
 static Elf *new_elf(void) {
     Elf *elf = malloc(sizeof(Elf));
     elf->size = 0;
-    elf->size = 0;
     elf->shnum = 0;
     elf->symtabnum = 0;
-    elf->nsym = 0;
+    elf->syms = make_list();
     return elf;
 }
 
@@ -38,8 +37,8 @@ static Section *new_section(char *name, int type) {
     sect->type = type;
     sect->flags = 0;
     sect->align = 1;
-    sect->nsym = 0;
-    sect->nrel = 0;
+    sect->syms = make_list();
+    sect->rels = make_list();
     sect->link = 0;
     sect->info = 0;
     strcpy(sect->name, name);
@@ -50,8 +49,8 @@ static Section *new_section(char *name, int type) {
 static void write_sym_to_buf(Elf *elf, StringBuilder *b, StringBuilder *b2, bool localonly) {
     for (int i = 0; i < elf->size; i++) {
         Section *sect = elf->sections[i];
-        for (int j = 0; j < sect->nsym; j++) {
-            Symbol *sym = sect->syms[j];
+        for (int j = 0; j < LIST_LEN(sect->syms); j++) {
+            Symbol *sym = LIST_ELEM(Symbol, sect->syms, j);
             if (localonly && sym->bind != STB_LOCAL)
                 continue;
             if (!localonly && sym->bind == STB_LOCAL)
@@ -72,7 +71,7 @@ static void write_sym_to_buf(Elf *elf, StringBuilder *b, StringBuilder *b2, bool
             }
             o8(b, sym->value); // st_value
             o8(b, 0); // st_size
-            elf->syms[elf->nsym++] = sym;
+            list_push(elf->syms, sym);
         }
     }
 }
@@ -93,7 +92,7 @@ static void add_symtab(Elf *elf) {
     o8(b, 0); // st_size
 
     write_sym_to_buf(elf, b, b2, true);
-    int localidx = elf->nsym;
+    int localidx = LIST_LEN(elf->syms);
     write_sym_to_buf(elf, b, b2, false);
     elf->symtabnum = elf->size + 1;
 
@@ -113,11 +112,12 @@ static void add_symtab(Elf *elf) {
 }
 
 static int find_symbol(Elf *elf, char *sym) {
-    for (int i = 0; i < elf->nsym; i++) {
-        if (elf->syms[i]->name && strcmp(elf->syms[i]->name, sym) == 0)
+    for (int i = 0; i < LIST_LEN(elf->syms); i++) {
+        char *name = LIST_ELEM(Symbol, elf->syms, i)->name;
+        if (name && strcmp(name, sym) == 0)
             return i + 2;
     }
-    fprintf(stderr, "cannot find symbol '%s'\n", sym);
+    fprintf(stderr, "8cc: cannot find symbol '%s'\n", sym);
     exit(-1);
 }
 
@@ -126,18 +126,20 @@ static int find_section(Elf *elf, char *name) {
         if (strcmp(elf->sections[i]->name, name) == 0)
             return i + 1;
     }
-    fprintf(stderr, "cannot find section '%s'\n", name);
+    fprintf(stderr, "8cc: cannot find section '%s'\n", name);
     exit(-1);
 }
 
 
 static int find_symbol_section(Elf *elf, char *name) {
     int sectidx = find_section(elf, name);
-    for (int i = 0; i < elf->nsym; i++) {
-        if (elf->syms[i]->sectidx == sectidx && !elf->syms[i]->name)
+    for (int i = 0; i < LIST_LEN(elf->syms); i++) {
+        if (LIST_ELEM(Symbol, elf->syms, i)->sectidx == sectidx
+            && !LIST_ELEM(Symbol, elf->syms, i)->name) {
             return i + 2;
+        }
     }
-    fprintf(stderr, "cannot find symbol section '%s'\n", name);
+    fprintf(stderr, "8cc: cannot find symbol section '%s'\n", name);
     exit(-1);
 }
 
@@ -145,11 +147,11 @@ static void add_reloc(Elf *elf) {
     char name[100];
     for (int i = 0; i < elf->size; i++) {
         Section *sect = elf->sections[i];
-        if (sect->nrel == 0)
+        if (LIST_LEN(sect->rels) == 0)
             continue;
         StringBuilder *b = make_sbuilder();
-        for (int j = 0; j < sect->nrel; j++) {
-            Reloc *rel = sect->rels[j];
+        for (int j = 0; j < LIST_LEN(sect->rels); j++) {
+            Reloc *rel = LIST_ELEM(Reloc, sect->rels, j);
             o8(b, rel->off);
             if (rel->sym) {
                 o8(b, ELF64_R_INFO(find_symbol(elf, rel->sym), rel->type));
@@ -216,7 +218,7 @@ static Symbol *new_symbol(char *name, long value, int bind, int type, int define
     return sym;
 }
 
-static Reloc *new_reloc(long off, char *sym, char *section, int type, uint64_t addend) {
+static Reloc *new_reloc(long off, char *sym, char *section, int type, uint64 addend) {
     Reloc *rel = malloc(sizeof(Reloc));
     rel->off = off;
     rel->sym = sym;
@@ -276,11 +278,11 @@ int main(int argc, char **argv) {
     text->data = hello_world_insn;
     text->size = sizeof(hello_world_insn);
     text->align = 16;
-    text->syms[text->nsym++] = new_symbol("main", 0, STB_GLOBAL, STT_NOTYPE, 1);
-    text->syms[text->nsym++] = new_symbol("printf", 0, STB_GLOBAL, STT_NOTYPE, 0);
-    text->syms[text->nsym++] = new_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1);
-    text->rels[text->nrel++] = new_reloc(6, NULL, ".data", R_X86_64_64, 0);
-    text->rels[text->nrel++] = new_reloc(0x11, "printf", NULL, R_X86_64_PC32, 0xfffffffffffffffc);
+    list_push(text->syms, new_symbol("main", 0, STB_GLOBAL, STT_NOTYPE, 1));
+    list_push(text->syms, new_symbol("printf", 0, STB_GLOBAL, STT_NOTYPE, 0));
+    list_push(text->syms, new_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
+    list_push(text->rels, new_reloc(6, NULL, ".data", R_X86_64_64, 0));
+    list_push(text->rels, new_reloc(0x11, "printf", NULL, R_X86_64_PC32, 0xfffffffffffffffc));
     elf->sections[elf->size++] = text;
 
     Section *data = new_section(".data", SHT_PROGBITS);
@@ -288,8 +290,8 @@ int main(int argc, char **argv) {
     data->data = hello_world_str;
     data->size = sizeof(hello_world_str);
     data->align = 4;
-    data->syms[data->nsym++] = new_symbol("message", 0, STB_LOCAL, STT_NOTYPE, 1);
-    data->syms[data->nsym++] = new_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1);
+    list_push(data->syms, new_symbol("message", 0, STB_LOCAL, STT_NOTYPE, 1));
+    list_push(data->syms, new_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
     elf->sections[elf->size++] = data;
 
     write_elf(outfile, elf);
