@@ -2,6 +2,10 @@
 #ifndef EIGHTCC_H
 #define EIGHTCC_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef uint64_t Elf64_Addr;
@@ -123,5 +127,34 @@ typedef struct WriteCtx {
     int off;
     int size;
 } WriteCtx;
+
+/*
+ * Byte String
+ */
+
+#define STRING_BUILDER_INITIAL_SIZE 32
+
+typedef struct StringBuilder {
+    char *buf;
+    int nalloc;
+    int len;
+} StringBuilder;
+
+#define SBUILDER_LEN(b) ((b)->len)
+#define SBUILDER_BODY(b) ((b)->buf)
+
+typedef struct String {
+    char *body;
+    long len;
+} String;
+
+extern StringBuilder *make_sbuilder(void);
+extern void o1(StringBuilder *b, int byte);
+extern void out(StringBuilder *b, void *data, size_t size);
+extern void ostr(StringBuilder *b, char *str);
+extern void o2(StringBuilder *b, uint16_t data);
+extern void o4(StringBuilder *b, uint32_t data);
+extern void o8(StringBuilder *b, uint64_t data);
+extern void align(StringBuilder *b, int n);
 
 #endif
