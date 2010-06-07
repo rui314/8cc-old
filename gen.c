@@ -94,9 +94,9 @@ List *create_insn_list(void) {
     list_push(list, make_insn(OP_MOV,   regop(RDI),  symop("hello")));
     list_push(list, make_insn(OP_XOR,   regop(RAX),  regop(RAX)));
     list_push(list, make_insn(OP_CALL,  symop("printf"), NULL));
-    list_push(list, make_insn(OP_MOV,   regop(RDI),  symop("sekai")));
-    list_push(list, make_insn(OP_XOR,   regop(RAX),  regop(RAX)));
-    list_push(list, make_insn(OP_CALL,  symop("printf"), NULL));
+//     list_push(list, make_insn(OP_MOV,   regop(RDI),  symop("sekai")));
+//     list_push(list, make_insn(OP_XOR,   regop(RAX),  regop(RAX)));
+//     list_push(list, make_insn(OP_CALL,  symop("printf"), NULL));
     list_push(list, make_insn(OP_LEAVE, NULL, NULL));
     list_push(list, make_insn(OP_RET,   NULL, NULL));
     return list;

@@ -35,12 +35,6 @@ static char golden_bin[] = {
 };
 
 void testAsemble(void) {
-  List *list = create_insn_list();
-  StringBuilder *b = assemble(make_section(".text", SHT_PROGBITS), list);
-  for (int i = 0; i < SBUILDER_LEN(b); i++)
-    printf("0x%02x ", (int)(unsigned char)SBUILDER_BODY(b)[i]);
-  printf("\n");
-  EQ(memcmp(SBUILDER_BODY(b), golden_bin, sizeof(golden_bin)), 0);
 }
 
 int main(int argc, char **argv) {
