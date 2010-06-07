@@ -5,15 +5,14 @@
 static unsigned char elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 static char hello_world_insn[] = {
-    0x55,                       // push %rbp
-    0x48, 0x89, 0xe5,           // mov %rsp, %rbp
-    0x48, 0xbf, 0, 0, 0, 0, 0,  // mov $0x0, %rdi
-    0, 0, 0,
-    0x31, 0xc0,                 // xor %eax, %eax
-    0xe8, 0, 0, 0, 0,           // callq 15 <main+0x15>
-    0x31, 0xc0,                 // xor %eax, %eax
-    0xc9,                       // leaveq
-    0xc3 };                     // retq
+    0x55,                                // push %rbp
+    0x48, 0x89, 0xe5,                    // mov %rsp, %rbp
+    0x48, 0xbf, 0, 0, 0, 0, 0, 0, 0, 0,  // mov $0x0, %rdi
+    0x31, 0xc0,                          // xor %eax, %eax
+    0xe8, 0, 0, 0, 0,                    // callq 15 <main+0x15>
+    0x31, 0xc0,                          // xor %eax, %eax
+    0xc9,                                // leaveq
+    0xc3 };                              // retq
 
 static char hello_world_str[] = "Hello, world!\n";
 
