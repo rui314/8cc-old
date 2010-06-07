@@ -1,20 +1,19 @@
 /* -*- c-basic-offset: 4 -*- */
 
+#include <stdarg.h>
+
 #include "8cc.h"
 
 static unsigned char elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-static char hello_world_insn[] = {
-    0x55,                                // push %rbp
-    0x48, 0x89, 0xe5,                    // mov %rsp, %rbp
-    0x48, 0xbf, 0, 0, 0, 0, 0, 0, 0, 0,  // mov $0x0, %rdi
-    0x31, 0xc0,                          // xor %eax, %eax
-    0xe8, 0, 0, 0, 0,                    // callq 15 <main+0x15>
-    0x31, 0xc0,                          // xor %eax, %eax
-    0xc9,                                // leaveq
-    0xc3 };                              // retq
+static char hello_world_str[] = "Hello, world!\n\0Hello, sekai!\n\0";
 
-static char hello_world_str[] = "Hello, world!\n";
+void error(char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  vfprintf(stderr, format, ap);
+  exit(-1);
+}
 
 static Elf *new_elf(void) {
     Elf *elf = malloc(sizeof(Elf));
@@ -23,26 +22,6 @@ static Elf *new_elf(void) {
     elf->symtabnum = 0;
     elf->syms = make_list();
     return elf;
-}
-
-static Section *new_section(char *name, int type) {
-    Section *sect = malloc(sizeof(Section));
-    sect->off = 0;
-    sect->data = malloc(1024*10);
-    memset(sect->data, 0, 1024*10);
-    sect->size = 0;
-    sect->name = malloc(strlen(name) + 1);
-    sect->shstrtab_off = 0;
-    sect->type = type;
-    sect->flags = 0;
-    sect->align = 1;
-    sect->syms = make_list();
-    sect->rels = make_list();
-    sect->link = 0;
-    sect->info = 0;
-    strcpy(sect->name, name);
-    sect->entsize = 0;
-    return sect;
 }
 
 static void write_sym_to_buf(Elf *elf, StringBuilder *b, StringBuilder *b2, bool localonly) {
@@ -95,7 +74,7 @@ static void add_symtab(Elf *elf) {
     write_sym_to_buf(elf, b, b2, false);
     elf->symtabnum = elf->size + 1;
 
-    Section *symtab = new_section(".symtab", SHT_SYMTAB);
+    Section *symtab = make_section(".symtab", SHT_SYMTAB);
     symtab->data = SBUILDER_BODY(b);
     symtab->off = symtab->size = SBUILDER_LEN(b);
     symtab->link = elf->size + 2;
@@ -104,7 +83,7 @@ static void add_symtab(Elf *elf) {
     symtab->align = 4;
     elf->sections[elf->size++] = symtab;
 
-    Section *strtab = new_section(".strtab", SHT_STRTAB);
+    Section *strtab = make_section(".strtab", SHT_STRTAB);
     strtab->data = SBUILDER_BODY(b2);
     strtab->off = strtab->size = SBUILDER_LEN(b2);
     elf->sections[elf->size++] = strtab;
@@ -128,7 +107,6 @@ static int find_section(Elf *elf, char *name) {
     fprintf(stderr, "8cc: cannot find section '%s'\n", name);
     exit(-1);
 }
-
 
 static int find_symbol_section(Elf *elf, char *name) {
     int sectidx = find_section(elf, name);
@@ -162,7 +140,7 @@ static void add_reloc(Elf *elf) {
 
         strcpy(name, ".rela");
         strcpy(name + 5, sect->name);
-        Section *relsec = new_section(name, SHT_RELA);
+        Section *relsec = make_section(name, SHT_RELA);
         relsec->link = elf->symtabnum;
         relsec->info = i + 1;
         relsec->data = SBUILDER_BODY(b);
@@ -174,7 +152,7 @@ static void add_reloc(Elf *elf) {
 }
 
 static void add_shstrtab(Elf *elf) {
-    Section *shstr = new_section(".shstrtab", SHT_STRTAB);
+    Section *shstr = make_section(".shstrtab", SHT_STRTAB);
     elf->shnum = elf->size + 1;
     elf->sections[elf->size++] = shstr;
     StringBuilder *b = make_sbuilder();
@@ -205,26 +183,6 @@ static void write_section(StringBuilder *b, StringBuilder *b2, Section *sect, in
 
 static int num_sections(Elf *elf) {
     return elf->size + 1;
-}
-
-static Symbol *new_symbol(char *name, long value, int bind, int type, int defined) {
-    Symbol *sym = malloc(sizeof(Symbol));
-    sym->name = name;
-    sym->value = value;
-    sym->bind = bind;
-    sym->type = type;
-    sym->defined = defined;
-    return sym;
-}
-
-static Reloc *new_reloc(long off, char *sym, char *section, int type, uint64 addend) {
-    Reloc *rel = malloc(sizeof(Reloc));
-    rel->off = off;
-    rel->sym = sym;
-    rel->section = section;
-    rel->type = type;
-    rel->addend = addend;
-    return rel;
 }
 
 static void write_elf(FILE *outfile, Elf *elf) {
@@ -272,26 +230,25 @@ int main(int argc, char **argv) {
 
     Elf *elf = new_elf();
 
-    Section *text = new_section(".text", SHT_PROGBITS);
-    text->flags = SHF_ALLOC | SHF_EXECINSTR;
-    text->data = hello_world_insn;
-    text->size = sizeof(hello_world_insn);
-    text->align = 16;
-    list_push(text->syms, new_symbol("main", 0, STB_GLOBAL, STT_NOTYPE, 1));
-    list_push(text->syms, new_symbol("printf", 0, STB_GLOBAL, STT_NOTYPE, 0));
-    list_push(text->syms, new_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
-    list_push(text->rels, new_reloc(6, NULL, ".data", R_X86_64_64, 0));
-    list_push(text->rels, new_reloc(0x11, "printf", NULL, R_X86_64_PC32, 0xfffffffffffffffc));
-    elf->sections[elf->size++] = text;
-
-    Section *data = new_section(".data", SHT_PROGBITS);
+    Section *data = make_section(".data", SHT_PROGBITS);
     data->flags = SHF_ALLOC | SHF_WRITE;
     data->data = hello_world_str;
     data->size = sizeof(hello_world_str);
     data->align = 4;
-    list_push(data->syms, new_symbol("message", 0, STB_LOCAL, STT_NOTYPE, 1));
-    list_push(data->syms, new_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
+    list_push(data->syms, make_symbol("hello", 0, STB_LOCAL, STT_NOTYPE, 1));
+    list_push(data->syms, make_symbol("sekai", 15, STB_LOCAL, STT_NOTYPE, 1));
+    list_push(data->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
     elf->sections[elf->size++] = data;
+
+    Section *text = make_section(".text", SHT_PROGBITS);
+    StringBuilder *b = assemble(text, data, create_insn_list());
+    text->flags = SHF_ALLOC | SHF_EXECINSTR;
+    text->data = SBUILDER_BODY(b);
+    text->size = SBUILDER_LEN(b);
+    text->align = 16;
+    list_push(text->syms, make_symbol("main", 0, STB_GLOBAL, STT_NOTYPE, 1));
+    list_push(text->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
+    elf->sections[elf->size++] = text;
 
     write_elf(outfile, elf);
 }

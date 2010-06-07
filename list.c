@@ -11,7 +11,7 @@ List *make_list(void) {
 static void ensure_room(List *list) {
   if (list->len < list->nalloc) return;
   int newsize = list->nalloc * 2;
-  void *buf = malloc(newsize);
+  void *buf = malloc(sizeof(void*) * newsize);
   memcpy(buf, list->elems, sizeof(void*) * list->len);
   list->elems = buf;
   list->nalloc = newsize;
