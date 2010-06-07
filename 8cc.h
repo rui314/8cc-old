@@ -1,4 +1,5 @@
 /* -*- c-basic-offset: 4 -*- */
+
 #ifndef EIGHTCC_H
 #define EIGHTCC_H
 
@@ -76,6 +77,11 @@
 #define R_X86_64_PC8 15
 
 /*
+ * Common
+ */
+extern void error(char *format, ...);
+
+/*
  * Byte String
  */
 
@@ -119,8 +125,8 @@ typedef struct List {
 #define LIST_ELEM(type, lis, i) (((type**)(lis)->elems)[i])
 #define LIST_LEN(lis) ((lis)->len)
 
-List *make_list(void);
-void list_push(List *list, void *e);
+extern List *make_list(void);
+extern void list_push(List *list, void *e);
 
 /*
  * ELF headers
@@ -166,5 +172,74 @@ typedef struct Elf {
     int symtabnum;
     List *syms;
 } Elf;
+
+/*
+ * Assembler
+ */
+
+#define RINV (-1)
+#define RAX 0
+#define RCX 1
+#define RDX 2
+#define RBX 3
+#define RSP 4
+#define RBP 5
+#define RSI 6
+#define RDI 7
+#define R8  8
+#define R9  9
+#define R10 10
+#define R11 11
+#define R12 12
+#define R13 13
+#define R14 14
+#define R15 15
+
+#define OP_NULL   0
+#define OP_MOV    1
+#define OP_PUSH   2
+#define OP_XOR    3
+#define OP_CALL   4
+#define OP_LEAVE  5
+#define OP_RET    6
+
+#define TYPE_REG 1
+#define TYPE_IMM 2
+#define TYPE_SYM 3
+
+typedef struct Operand {
+    int type;
+    union {
+        int reg;
+        uint64 imm;
+        char *sym;
+    } val;
+} Operand;
+
+#define IS_REG(op) ((op)->type == TYPE_REG)
+#define IS_IMM(op) ((op)->type == TYPE_IMM)
+#define IS_SYM(op) ((op)->type == TYPE_SYM)
+
+#define OPERAND_REG(op) ((op)->val.reg)
+#define OPERAND_IMM(op) ((op)->val.imm)
+#define OPERAND_SYM(op) ((op)->val.sym)
+
+#define IS_REX(op) (OPERAND_REG(op) >= R8)
+#define MASK_REG(op) (OPERAND_REG(op) & 7)
+#define PACK_REG(code, op1, op2) (((code) << 6) | MASK_REG(op1) << 3| MASK_REG(op2))
+
+typedef struct Insn {
+    int op;
+    Operand *dst;
+    Operand *src;
+} Insn;
+
+extern List *create_insn_list(void);
+extern StringBuilder *assemble(Section *text, Section *data, List *insns);
+
+extern Section *make_section(char *name, int type);
+
+extern Symbol *make_symbol(char *name, long value, int bind, int type, int defined);
+extern Reloc *make_reloc(long off, char *sym, char *section, int type, uint64 addend);
 
 #endif

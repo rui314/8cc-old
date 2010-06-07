@@ -1,16 +1,7 @@
-#include <stdarg.h>
-
 #include "8cc.h"
 
 #define NOT_NULL(p) do { if (!(p)) error("Line %d: must not be null " #p "\n", __LINE__); } while (0)
 #define EQ(x, y) do { if ((x) != (y)) error("Line %d: must be the same\n", __LINE__); } while (0)
-
-static void error(char *format, ...) {
-  va_list ap;
-  va_start(ap, format);
-  vfprintf(stderr, format, ap);
-  exit(-1);
-}
 
 /*
  * StringBuilder
@@ -37,8 +28,24 @@ void testStringBuilder(void) {
   EQ(strcmp(SBUILDER_BODY(b), "abcdefghi"), 0);
 }
 
+static char golden_bin[] = {
+  0x55, 0x48, 0x89, 0xe5, 0x48, 0xbf, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x31, 0xc0,
+  0xe8, 0x00, 0x00, 0x00, 0x00, 0xc9, 0xc3,
+};
+
+void testAsemble(void) {
+  List *list = create_insn_list();
+  StringBuilder *b = assemble(make_section(".text", SHT_PROGBITS), list);
+  for (int i = 0; i < SBUILDER_LEN(b); i++)
+    printf("0x%02x ", (int)(unsigned char)SBUILDER_BODY(b)[i]);
+  printf("\n");
+  EQ(memcmp(SBUILDER_BODY(b), golden_bin, sizeof(golden_bin)), 0);
+}
+
 int main(int argc, char **argv) {
   testStringBuilder();
+  testAsemble();
   printf("OK\n");
   return 0;
 }
