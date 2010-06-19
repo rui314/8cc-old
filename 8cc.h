@@ -1,5 +1,3 @@
-/* -*- c-basic-offset: 4 -*- */
-
 #ifndef EIGHTCC_H
 #define EIGHTCC_H
 
