@@ -1,5 +1,3 @@
-/* -*- c-basic-offset: 4 -*- */
-
 #include "8cc.h"
 
 static unsigned char elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -7,10 +5,10 @@ static unsigned char elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0,
 static char hello_world_str[] = "Hello, world!\n\0Hello, sekai!\n\0";
 
 void error(char *format, ...) {
-  va_list ap;
-  va_start(ap, format);
-  vfprintf(stderr, format, ap);
-  exit(-1);
+    va_list ap;
+    va_start(ap, format);
+    vfprintf(stderr, format, ap);
+    exit(-1);
 }
 
 static Elf *new_elf(void) {

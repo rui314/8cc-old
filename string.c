@@ -1,5 +1,3 @@
-/* -*- c-basic-offset: 4 -*- */
-
 #include "8cc.h"
 
 StringBuilder *make_sbuilder(void) {

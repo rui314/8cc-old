@@ -1,5 +1,3 @@
-/* -*- c-basic-offset: 4 -*- */
-
 #include "8cc.h"
 
 Section *make_section(char *name, int type) {
@@ -73,12 +71,14 @@ static Operand *regop(int reg) {
     return op;
 }
 
-// static Operand *immop(u64 imm) {
-//     Operand *op = malloc(sizeof(Operand));
-//     op->type = TYPE_IMM;
-//     OPERAND_IMM(op) = imm;
-//     return op;
-// }
+#if 0
+static Operand *immop(u64 imm) {
+    Operand *op = malloc(sizeof(Operand));
+    op->type = TYPE_IMM;
+    OPERAND_IMM(op) = imm;
+    return op;
+}
+#endif
 
 static Operand *symop(char *name) {
     Operand *op = malloc(sizeof(Operand));
@@ -94,9 +94,11 @@ List *create_insn_list(void) {
     list_push(list, make_insn(OP_MOV,   regop(RDI),  symop("hello")));
     list_push(list, make_insn(OP_XOR,   regop(RAX),  regop(RAX)));
     list_push(list, make_insn(OP_CALL,  symop("printf"), NULL));
-//     list_push(list, make_insn(OP_MOV,   regop(RDI),  symop("sekai")));
-//     list_push(list, make_insn(OP_XOR,   regop(RAX),  regop(RAX)));
-//     list_push(list, make_insn(OP_CALL,  symop("printf"), NULL));
+#if 0
+    list_push(list, make_insn(OP_MOV,   regop(RDI),  symop("sekai")));
+    list_push(list, make_insn(OP_XOR,   regop(RAX),  regop(RAX)));
+    list_push(list, make_insn(OP_CALL,  symop("printf"), NULL));
+#endif
     list_push(list, make_insn(OP_LEAVE, NULL, NULL));
     list_push(list, make_insn(OP_RET,   NULL, NULL));
     return list;
@@ -107,56 +109,56 @@ StringBuilder *assemble(Section *text, Section *data, List *insns) {
     for (int i = 0; i < LIST_LEN(insns); i++) {
         Insn *insn = LIST_ELEM(Insn, insns, i);
         switch (insn->op) {
-            case OP_MOV:
-                if (IS_REG(insn->dst) && IS_REG(insn->src)) {
-                    o1(b, 0x48 | (IS_REX(insn->src) << 2) | IS_REX(insn->dst));
-                    o1(b, 0x89);
-                    o1(b, PACK_REG(3, insn->src, insn->dst));
-                } else if (IS_REG(insn->dst) && IS_IMM(insn->src)) {
-                    o1(b, 0x48 | IS_REX(insn->dst));
-                    o1(b, 0xb8 | MASK_REG(insn->dst));
-                    o8(b, OPERAND_IMM(insn->src));
-                } else if (IS_REG(insn->dst) && IS_SYM(insn->src)) {
-                    o1(b, 0x48 | IS_REX(insn->dst));
-                    o1(b, 0xb8 | MASK_REG(insn->dst));
-                    Reloc *rel = make_reloc(SBUILDER_LEN(b), NULL, ".data", R_X86_64_64,
-                                            find_data(data, OPERAND_SYM(insn->src)));
-                    list_push(text->rels, rel);
-                 o8(b, 0);
-                } else {
-                    error("8cc: unsupported MOV\n");
-                }
-                break;
-            case OP_PUSH:
-                o1(b, 0x50 | MASK_REG(insn->dst));
-                break;
-            case OP_XOR:
-                if (IS_REG(insn->dst) && IS_REG(insn->src) && !IS_REX(insn->dst) && !IS_REX(insn->src)) {
-                    o1(b, 0x31);
-                    o1(b, PACK_REG(3, insn->src, insn->dst));
-                } else {
-                    error("8cc: unsupported XOR\n");
-                }
-                break;
-            case OP_CALL:
-                o1(b, 0xE8);
-                Symbol *sym = find_symbol(text, OPERAND_SYM(insn->dst));
-                if (!sym) {
-                    sym = make_symbol(OPERAND_SYM(insn->dst), 0, STB_GLOBAL, STT_NOTYPE, 0);
-                    list_push(text->syms, sym);
-                }
-                Reloc *rel = make_reloc(SBUILDER_LEN(b), OPERAND_SYM(insn->dst), NULL, R_X86_64_PC32, 0xfffffffffffffffc);
-                list_push(text->rels, rel);
-                o4(b, 0);
-                break;
-            case OP_LEAVE:
-                o1(b, 0xc9);
-                break;
-            case OP_RET:
-                o1(b, 0xc3);
-                break;
-            default:
-                error("8cc: unknown op\n");
+	case OP_MOV:
+	    if (IS_REG(insn->dst) && IS_REG(insn->src)) {
+		o1(b, 0x48 | (IS_REX(insn->src) << 2) | IS_REX(insn->dst));
+		o1(b, 0x89);
+		o1(b, PACK_REG(3, insn->src, insn->dst));
+	    } else if (IS_REG(insn->dst) && IS_IMM(insn->src)) {
+		o1(b, 0x48 | IS_REX(insn->dst));
+		o1(b, 0xb8 | MASK_REG(insn->dst));
+		o8(b, OPERAND_IMM(insn->src));
+	    } else if (IS_REG(insn->dst) && IS_SYM(insn->src)) {
+		o1(b, 0x48 | IS_REX(insn->dst));
+		o1(b, 0xb8 | MASK_REG(insn->dst));
+		Reloc *rel = make_reloc(SBUILDER_LEN(b), NULL, ".data", R_X86_64_64,
+					find_data(data, OPERAND_SYM(insn->src)));
+		list_push(text->rels, rel);
+		o8(b, 0);
+	    } else {
+		error("8cc: unsupported MOV\n");
+	    }
+	    break;
+	case OP_PUSH:
+	    o1(b, 0x50 | MASK_REG(insn->dst));
+	    break;
+	case OP_XOR:
+	    if (IS_REG(insn->dst) && IS_REG(insn->src) && !IS_REX(insn->dst) && !IS_REX(insn->src)) {
+		o1(b, 0x31);
+		o1(b, PACK_REG(3, insn->src, insn->dst));
+	    } else {
+		error("8cc: unsupported XOR\n");
+	    }
+	    break;
+	case OP_CALL:
+	    o1(b, 0xE8);
+	    Symbol *sym = find_symbol(text, OPERAND_SYM(insn->dst));
+	    if (!sym) {
+		sym = make_symbol(OPERAND_SYM(insn->dst), 0, STB_GLOBAL, STT_NOTYPE, 0);
+		list_push(text->syms, sym);
+	    }
+	    Reloc *rel = make_reloc(SBUILDER_LEN(b), OPERAND_SYM(insn->dst), NULL, R_X86_64_PC32, 0xfffffffffffffffc);
+	    list_push(text->rels, rel);
+	    o4(b, 0);
+	    break;
+	case OP_LEAVE:
+	    o1(b, 0xc9);
+	    break;
+	case OP_RET:
+	    o1(b, 0xc3);
+	    break;
+	default:
+	    error("8cc: unknown op\n");
         }
     }
     return b;
