@@ -3,18 +3,19 @@
 #ifndef EIGHTCC_H
 #define EIGHTCC_H
 
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
-#include <stdint.h>
 
-#define int16  int16_t
-#define uint16 uint16_t
-#define int32  int32_t
-#define uint32 uint32_t
-#define int64  int64_t
-#define uint64 uint64_t
+#define s16 int16_t
+#define u16 uint16_t
+#define s32 int32_t
+#define u32 uint32_t
+#define s64 int64_t
+#define u64 uint64_t
 
 #define SHT_NULL 0
 #define SHT_PROGBITS 1
@@ -105,9 +106,9 @@ extern StringBuilder *make_sbuilder(void);
 extern void o1(StringBuilder *b, int byte);
 extern void out(StringBuilder *b, void *data, size_t size);
 extern void ostr(StringBuilder *b, char *str);
-extern void o2(StringBuilder *b, uint16 data);
-extern void o4(StringBuilder *b, uint32 data);
-extern void o8(StringBuilder *b, uint64 data);
+extern void o2(StringBuilder *b, u16 data);
+extern void o4(StringBuilder *b, u32 data);
+extern void o8(StringBuilder *b, u64 data);
 extern void align(StringBuilder *b, int n);
 
 /*
@@ -146,7 +147,7 @@ typedef struct Reloc {
     char *sym;
     char *section;
     int type;
-    uint64_t addend;
+    u64 addend;
 } Reloc;
 
 typedef struct Section {
@@ -211,7 +212,7 @@ typedef struct Operand {
     int type;
     union {
         int reg;
-        uint64 imm;
+        u64 imm;
         char *sym;
     } val;
 } Operand;
@@ -240,6 +241,6 @@ extern StringBuilder *assemble(Section *text, Section *data, List *insns);
 extern Section *make_section(char *name, int type);
 
 extern Symbol *make_symbol(char *name, long value, int bind, int type, int defined);
-extern Reloc *make_reloc(long off, char *sym, char *section, int type, uint64 addend);
+extern Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend);
 
 #endif
