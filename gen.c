@@ -32,7 +32,7 @@ Symbol *make_symbol(char *name, long value, int bind, int type, int defined) {
     return sym;
 }
 
-Reloc *make_reloc(long off, char *sym, char *section, int type, uint64 addend) {
+Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend) {
     Reloc *rel = malloc(sizeof(Reloc));
     rel->off = off;
     rel->sym = sym;
@@ -73,7 +73,7 @@ static Operand *regop(int reg) {
     return op;
 }
 
-// static Operand *immop(uint64 imm) {
+// static Operand *immop(u64 imm) {
 //     Operand *op = malloc(sizeof(Operand));
 //     op->type = TYPE_IMM;
 //     OPERAND_IMM(op) = imm;

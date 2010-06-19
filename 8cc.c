@@ -1,7 +1,5 @@
 /* -*- c-basic-offset: 4 -*- */
 
-#include <stdarg.h>
-
 #include "8cc.h"
 
 static unsigned char elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
