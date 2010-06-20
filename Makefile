@@ -20,3 +20,5 @@ hello: 8cc
 test: hello tests
 	@if [ "`./hello`" = 'Hello, world!' ]; then echo "OK"; else echo "NG"; fi
 	@./tests
+
+all: 8cc
