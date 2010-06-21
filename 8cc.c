@@ -1,6 +1,6 @@
 #include "8cc.h"
 
-static unsigned char elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static u8 elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 void error(char *format, ...) {
     va_list ap;
