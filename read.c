@@ -40,7 +40,7 @@ static char *read_str(FILE *file) {
 	    break;
 	}
 	case EOF:
-	    error("premature end of input file\n");
+	    error("premature end of input file");
 	default:
 	    o1(b, c);
 	}
@@ -95,7 +95,7 @@ static Token *readtok(FILE *file) {
 	case EOF:
 	    return NULL;
 	default:
-	    error("unimplemented '%c'\n", c);
+	    error("unimplemented '%c'", c);
 	}
     }
     return make_token('(');
@@ -109,9 +109,9 @@ static void expect(FILE *file, char expected) {
 	case ' ': case '\t': case '\r': case '\n':
 	    continue;
 	case EOF:
-	    error("tcc: %c expected, but got EOF", expected);
+	    error("%c expected, but got EOF", expected);
 	default:
-	    error("tcc: %c expected, but got %c", expected, c);
+	    error("%c expected, but got %c", expected, c);
 	}
     }
 }
@@ -127,7 +127,7 @@ static void read_statement(FILE *file, Section *text, Section *data, List *lis) 
 	if (sep->val == ')')
 	    break;
 	if (sep->val != ',')
-	    error("expected ',', but got %c\n", sep->val);
+	    error("expected ',', but got %c", sep->val);
     }
     expect(file, ';');
     
@@ -141,7 +141,7 @@ static void read_statement(FILE *file, Section *text, Section *data, List *lis) 
 	    break;
 	case TOK_IDENT:
 	case TOK_CHAR:
-	    error("identifier or char is not supported here\n");
+	    error("identifier or char is not supported here");
 	case TOK_STR:
 	    args[i] = make_global("", add_string(data, arg->str));
 	}
@@ -155,7 +155,7 @@ static List *read_func(FILE *file, Section *text, Section *data) {
     List *r = make_list();
     Token *tok = readtok(file);
     if (tok->val != TOK_IDENT)
-	error("identifier expected\n");
+	error("identifier expected");
     expect(file, '(');
     expect(file, ')');
     expect(file, '{');
