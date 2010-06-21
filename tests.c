@@ -1,7 +1,7 @@
 #include "8cc.h"
 
-#define NOT_NULL(p) do { if (!(p)) error("Line %d: must not be null " #p "\n", __LINE__); } while (0)
-#define EQ(x, y) do { if ((x) != (y)) error("Line %d: must be the same\n", __LINE__); } while (0)
+#define NOT_NULL(p) do { if (!(p)) error("Line %d: must not be null " #p, __LINE__); } while (0)
+#define EQ(x, y) do { if ((x) != (y)) error("Line %d: must be the same", __LINE__); } while (0)
 
 /*
  * StringBuilder
