@@ -89,6 +89,14 @@ struct Var **make_list1(Var *arg0) {
     return r;
 }
 
+struct Var **make_list2(Var *arg0, Var *arg1) {
+    Var **r = malloc(sizeof(Var *) * 3);
+    r[0] = arg0;
+    r[1] = arg1;
+    r[2] = NULL;
+    return r;
+}
+
 static int add_string(Section *data, char *str) {
     int r = SBUILDER_LEN(data->body);
     out(data->body, str, strlen(str));
@@ -103,8 +111,9 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
 List *create_inst_list(Section *text, Section *data) {
     List *list = make_list();
     Var *printf_ = make_extern("printf", text);
-    Var *msg = make_global("msg", add_string(data, "Hello, world!\n"));
-    list_push(list, make_func_call(printf_, make_list1(msg)));
+    Var *msg0 = make_global("msg0", add_string(data, "Hello, %d!\n"));
+    Var *msg1 = make_imm(42);
+    list_push(list, make_func_call(printf_, make_list2(msg0, msg1)));
     return list;
 }
 
@@ -130,6 +139,10 @@ void assemble(Section *text, List *insts) {
 		    o2(b, PUSH_ABS[j]);
 		    add_reloc(text, SBUILDER_LEN(b), NULL, ".data", R_X86_64_64, args[j]->val);
 		    o8(b, 0);
+		    break;
+		case VAR_IMM:
+		    o2(b, PUSH_ABS[j]);
+		    o8(b, args[j]->val);
 		    break;
 		default:
 		    error("8cc: unsupported var type: %c\n", args[j]->type);
