@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-std=c99 -Wall -g
-OBJS=8cc.o string.o list.o gen.o
+OBJS=8cc.o string.o list.o gen.o read.o
 
 8cc: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS)
@@ -14,7 +14,7 @@ clean:
 	-rm -f 8cc $(OBJS) *.o hello tests
 
 hello: 8cc
-	./8cc hello.o
+	echo 'main() {printf("Hello, world!\n");}' | ./8cc - hello.o
 	$(CC) -o hello hello.o
 
 test: hello tests

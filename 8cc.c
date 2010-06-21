@@ -212,24 +212,26 @@ static void write_elf(FILE *outfile, Elf *elf) {
 }
 
 int main(int argc, char **argv) {
-    FILE *outfile = fopen(argv[1], "w");
-    if (outfile == NULL) {
-        fprintf(stderr, "Usage: 8cc <outfile>\n");
+    if (argc != 3) {
+        fprintf(stderr, "Usage: 8cc <infile> <outfile>\n");
         exit(-1);
     }
 
+    FILE *infile = strcmp(argv[1], "-") ? fopen(argv[1], "r") : stdin;
+    FILE *outfile = fopen(argv[2], "w");
     Elf *elf = new_elf();
 
     Section *data = make_section(".data", SHT_PROGBITS);
     data->flags = SHF_ALLOC | SHF_WRITE;
     data->align = 4;
-    list_push(data->syms, make_symbol("hello", 0, STB_LOCAL, STT_NOTYPE, 1));
+    // list_push(data->syms, make_symbol("hello", 0, STB_LOCAL, STT_NOTYPE, 1));
     list_push(data->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
     elf->sections[elf->size++] = data;
 
     Section *text = make_section(".text", SHT_PROGBITS);
     text->flags = SHF_ALLOC | SHF_EXECINSTR;
-    assemble(text, create_inst_list(text, data));
+    List *insts = parse(infile, text, data);
+    assemble(text, insts);
     text->align = 16;
     list_push(text->syms, make_symbol("main", 0, STB_GLOBAL, STT_NOTYPE, 1));
     list_push(text->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
