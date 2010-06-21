@@ -9,6 +9,10 @@
 #include <string.h>
 #include <ctype.h>
 
+/*
+ * Fixed size data types
+ */
+
 #define s8  int8_t
 #define u8  uint8_t
 #define s16 int16_t
@@ -17,6 +21,10 @@
 #define u32 uint32_t
 #define s64 int64_t
 #define u64 uint64_t
+
+/*
+ * ELF file format constants
+ */
 
 #define SHT_NULL 0
 #define SHT_PROGBITS 1
@@ -87,30 +95,25 @@ extern void error(char *format, ...);
  * Byte String
  */
 
-#define STRING_BUILDER_INITIAL_SIZE 32
+#define STRING_INITIAL_SIZE 32
 
-typedef struct StringBuilder {
+typedef struct String {
     char *buf;
     int nalloc;
     int len;
-} StringBuilder;
-
-#define SBUILDER_LEN(b) ((b)->len)
-#define SBUILDER_BODY(b) ((b)->buf)
-
-typedef struct String {
-    char *body;
-    long len;
 } String;
 
-extern StringBuilder *make_sbuilder(void);
-extern void o1(StringBuilder *b, int byte);
-extern void out(StringBuilder *b, void *data, size_t size);
-extern void ostr(StringBuilder *b, char *str);
-extern void o2(StringBuilder *b, u16 data);
-extern void o4(StringBuilder *b, u32 data);
-extern void o8(StringBuilder *b, u64 data);
-extern void align(StringBuilder *b, int n);
+#define STRING_LEN(b) ((b)->len)
+#define STRING_BODY(b) ((b)->buf)
+
+extern String *make_string(void);
+extern void o1(String *b, int byte);
+extern void out(String *b, void *data, size_t size);
+extern void ostr(String *b, char *str);
+extern void o2(String *b, u16 data);
+extern void o4(String *b, u32 data);
+extern void o8(String *b, u64 data);
+extern void align(String *b, int n);
 
 /*
  * List
@@ -131,7 +134,8 @@ extern List *make_list(void);
 extern void list_push(List *list, void *e);
 
 /*
- * ELF headers
+ * ELF headers (internal representation; not necessarily correspondent
+ * to on-disk ELF format)
  */
 
 typedef struct Symbol {
@@ -152,7 +156,7 @@ typedef struct Reloc {
 } Reloc;
 
 typedef struct Section {
-    StringBuilder *body;
+    String *body;
     char *name;
     int shstrtab_off;
     int type;
@@ -190,7 +194,6 @@ typedef struct Inst {
     Var **args;
 } Inst;
 
-extern List *create_inst_list(Section *text, Section *data);
 extern void assemble(Section *text, List *insts);
 extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(char *name, long value, int bind, int type, int defined);

@@ -2,7 +2,7 @@
 
 Section *make_section(char *name, int type) {
     Section *sect = malloc(sizeof(Section));
-    sect->body = make_sbuilder();
+    sect->body = make_string();
     sect->name = malloc(strlen(name) + 1);
     sect->shstrtab_off = 0;
     sect->type = type;
@@ -98,7 +98,7 @@ struct Var **make_list2(Var *arg0, Var *arg1) {
 }
 
 int add_string(Section *data, char *str) {
-    int r = SBUILDER_LEN(data->body);
+    int r = STRING_LEN(data->body);
     out(data->body, str, strlen(str));
     return r;
 }
@@ -108,21 +108,12 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
     list_push(text->rels, rel);
 }
 
-List *create_inst_list(Section *text, Section *data) {
-    List *list = make_list();
-    Var *printf_ = make_extern("printf", text);
-    Var *msg0 = make_global("msg0", add_string(data, "Hello, %d!\n"));
-    Var *msg1 = make_imm(42);
-    list_push(list, make_func_call(printf_, make_list2(msg0, msg1)));
-    return list;
-}
-
 // rdi, rsi, rdx, rcx, r8, r9
 static u32 PUSH_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
 static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
     
 void assemble(Section *text, List *insts) {
-    StringBuilder *b = text->body;
+    String *b = text->body;
     o1(b, 0x55); // PUSH rbp
     o1(b, 0x48); // MOV rbp, rsp
     o1(b, 0x89);
@@ -137,7 +128,7 @@ void assemble(Section *text, List *insts) {
 		switch (args[j]->type) {
 		case VAR_GLOBAL:
 		    o2(b, PUSH_ABS[j]);
-		    add_reloc(text, SBUILDER_LEN(b), NULL, ".data", R_X86_64_64, args[j]->val);
+		    add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, args[j]->val);
 		    o8(b, 0);
 		    break;
 		case VAR_IMM:
@@ -150,7 +141,7 @@ void assemble(Section *text, List *insts) {
 	    }
 	    o2(b, 0xc031); // XOR eax, eax
 	    o1(b, 0xe8); // CALL
-	    add_reloc(text, SBUILDER_LEN(b), fn->name, NULL, R_X86_64_PC32, 0xfffffffffffffffc);
+	    add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, 0xfffffffffffffffc);
 	    o4(b, 0);
 	    break;
 	}

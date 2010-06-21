@@ -21,12 +21,12 @@ static int read_num(FILE *file, int num) {
 }
 
 static char *read_str(FILE *file) {
-    StringBuilder *b = make_sbuilder();
+    String *b = make_string();
     for (;;) {
 	int c = getc(file);
 	switch (c) {
 	case '"':
-	    return SBUILDER_BODY(b);
+	    return STRING_BODY(b);
 	case '\\': {
 	    int c2 = getc(file);
 	    switch (c2) {
@@ -48,7 +48,7 @@ static char *read_str(FILE *file) {
 }
 
 static char *read_ident(FILE *file, char c0) {
-    StringBuilder *b = make_sbuilder();
+    String *b = make_string();
     o1(b, c0);
     for (;;) {
 	int c = getc(file);
@@ -56,14 +56,14 @@ static char *read_ident(FILE *file, char c0) {
 	    o1(b, c);
 	} else if (c != EOF) {
 	    ungetc(c, file);
-	    return SBUILDER_BODY(b);
+	    return STRING_BODY(b);
 	} else {
-	    return SBUILDER_BODY(b);
+	    return STRING_BODY(b);
 	}
     }
 }
 
-static Token *readtok(FILE *file) {
+static Token *read_token(FILE *file) {
     Token *r;
     for (;;) {
 	int c = getc(file);
@@ -109,25 +109,25 @@ static void expect(FILE *file, char expected) {
 	case ' ': case '\t': case '\r': case '\n':
 	    continue;
 	case EOF:
-	    error("%c expected, but got EOF", expected);
+	    error("'%c' expected, but got EOF", expected);
 	default:
-	    error("%c expected, but got %c", expected, c);
+	    error("'%c' expected, but got '%c'", expected, c);
 	}
     }
 }
 
 static void read_statement(FILE *file, Section *text, Section *data, List *lis) {
-    Token *fntok = readtok(file);
+    Token *fntok = read_token(file);
     List *argtoks = make_list();
     expect(file, '(');
     for (;;) {
-	Token *arg = readtok(file);
+	Token *arg = read_token(file);
 	list_push(argtoks, arg);
-	Token *sep = readtok(file);
+	Token *sep = read_token(file);
 	if (sep->val == ')')
 	    break;
 	if (sep->val != ',')
-	    error("expected ',', but got %c", sep->val);
+	    error("expected ',', but got '%c'", sep->val);
     }
     expect(file, ';');
     
@@ -153,7 +153,7 @@ static void read_statement(FILE *file, Section *text, Section *data, List *lis) 
 
 static List *read_func(FILE *file, Section *text, Section *data) {
     List *r = make_list();
-    Token *tok = readtok(file);
+    Token *tok = read_token(file);
     if (tok->val != TOK_IDENT)
 	error("identifier expected");
     expect(file, '(');

@@ -4,7 +4,7 @@
 #define EQ(x, y) do { if ((x) != (y)) error("Line %d: must be the same", __LINE__); } while (0)
 
 /*
- * StringBuilder
+ * String
  */
 
 int64_t qword(char *str) {
@@ -14,22 +14,22 @@ int64_t qword(char *str) {
     return r;
 }
 
-void testStringBuilder(void) {
-    StringBuilder *b = make_sbuilder();
+void testString(void) {
+    String *b = make_string();
     NOT_NULL(b);
-    EQ(SBUILDER_LEN(b), 0);
+    EQ(STRING_LEN(b), 0);
 
     o1(b, 'a');
-    EQ(SBUILDER_LEN(b), 1);
-    EQ(SBUILDER_BODY(b)[0], 'a');
+    EQ(STRING_LEN(b), 1);
+    EQ(STRING_BODY(b)[0], 'a');
 
     o8(b, qword("bcdefghi"));
-    EQ(SBUILDER_LEN(b), 9);
-    EQ(strcmp(SBUILDER_BODY(b), "abcdefghi"), 0);
+    EQ(STRING_LEN(b), 9);
+    EQ(strcmp(STRING_BODY(b), "abcdefghi"), 0);
 }
 
 int main(int argc, char **argv) {
-    testStringBuilder();
+    testString();
     printf("OK\n");
     return 0;
 }
