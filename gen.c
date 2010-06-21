@@ -45,20 +45,20 @@ static Var *make_var(int type) {
     return r;
 }
 
-static Var *make_imm(u64 val) {
+Var *make_imm(u64 val) {
     Var *r = make_var(VAR_IMM);
     r->val = val;
     return r;
 }
 
-static Var *make_global(char *name, u64 val) {
+Var *make_global(char *name, u64 val) {
     Var *r = make_var(VAR_GLOBAL);
     r->name = name;
     r->val = val;
     return r;
 }
 
-static Var *make_extern(char *name, Section *text) {
+Var *make_extern(char *name, Section *text) {
     Var *r = make_var(VAR_EXTERN);
     r->name = name;
     Symbol *sym = make_symbol(name, 0, STB_GLOBAL, STT_NOTYPE, 0);
@@ -75,7 +75,7 @@ static Inst *make_inst(char op) {
     return r;
 }
 
-struct Inst *make_func_call(Var *fn, Var **args) {
+Inst *make_func_call(Var *fn, Var **args) {
     Inst * r = make_inst('$');
     r->arg0 = fn;
     r->args = args;
@@ -97,7 +97,7 @@ struct Var **make_list2(Var *arg0, Var *arg1) {
     return r;
 }
 
-static int add_string(Section *data, char *str) {
+int add_string(Section *data, char *str) {
     int r = SBUILDER_LEN(data->body);
     out(data->body, str, strlen(str));
     return r;

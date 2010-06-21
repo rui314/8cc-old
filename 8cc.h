@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #define s16 int16_t
 #define u16 uint16_t
@@ -189,10 +190,31 @@ typedef struct Inst {
 
 extern List *create_inst_list(Section *text, Section *data);
 extern void assemble(Section *text, List *insts);
-
 extern Section *make_section(char *name, int type);
-
 extern Symbol *make_symbol(char *name, long value, int bind, int type, int defined);
-extern Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend);
+
+extern Var *make_imm(u64 val);
+extern Var *make_global(char *name, u64 val);
+extern int add_string(Section *data, char *str);
+extern Var *make_extern(char *name, Section *text);
+extern Inst *make_func_call(Var *fn, Var **args);
+
+/*
+ * Parser
+ */
+
+#define TOK_NUM   1
+#define TOK_IDENT 2
+#define TOK_STR   3
+#define TOK_CHAR  4
+
+typedef struct Token {
+    int val;
+    char ch;
+    char *str;
+    u64 num;
+} Token;
+
+extern List *parse(FILE *file, Section *text, Section *data);
 
 #endif
