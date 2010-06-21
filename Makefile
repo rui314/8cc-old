@@ -18,7 +18,6 @@ hello: 8cc
 	$(CC) -o hello hello.o
 
 test: hello tests
-	@if [ "`./hello`" = 'Hello, world!' ]; then echo "OK"; else echo "NG"; fi
-	@./tests
+	@./test.sh
 
 all: 8cc
