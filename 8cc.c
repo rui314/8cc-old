@@ -2,7 +2,7 @@
 
 static unsigned char elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-static char hello_world_str[] = "Hello, world!\n\0Hello, sekai!\n\0";
+static char hello_world_str[] = "Hello, world!\n\0";
 
 void error(char *format, ...) {
     va_list ap;
@@ -20,7 +20,7 @@ static Elf *new_elf(void) {
     return elf;
 }
 
-static void write_sym_to_buf(Elf *elf, StringBuilder *b, StringBuilder *b2, bool localonly) {
+static void write_sym_to_buf(Elf *elf, StringBuilder *symtab, StringBuilder *strtab, bool localonly) {
     for (int i = 0; i < elf->size; i++) {
         Section *sect = elf->sections[i];
         for (int j = 0; j < LIST_LEN(sect->syms); j++) {
@@ -30,49 +30,49 @@ static void write_sym_to_buf(Elf *elf, StringBuilder *b, StringBuilder *b2, bool
             if (!localonly && sym->bind == STB_LOCAL)
                 continue;
             if (sym->name) {
-                o4(b, SBUILDER_LEN(b2)); // st_name
-                ostr(b2, sym->name);
+                o4(symtab, SBUILDER_LEN(strtab)); // st_name
+                ostr(strtab, sym->name);
             } else {
-                o4(b, 0); // st_name
+                o4(symtab, 0); // st_name
             }
-            o1(b, ELF64_ST_INFO(sym->bind, sym->type)); // st_info;
-            o1(b, 0); // st_other;
+            o1(symtab, ELF64_ST_INFO(sym->bind, sym->type)); // st_info;
+            o1(symtab, 0); // st_other;
             if (sym->defined) {
                 sym->sectidx = i + 1;
-                o2(b, sym->sectidx); // st_shndx
+                o2(symtab, sym->sectidx); // st_shndx
             } else {
-                o2(b, 0); // st_shndx
+                o2(symtab, 0); // st_shndx
             }
-            o8(b, sym->value); // st_value
-            o8(b, 0); // st_size
+            o8(symtab, sym->value); // st_value
+            o8(symtab, 0); // st_size
             list_push(elf->syms, sym);
         }
     }
 }
 
 static void add_symtab(Elf *elf) {
-    StringBuilder *b = make_sbuilder();
-    StringBuilder *b2 = make_sbuilder();
-    o1(b2, 0);
+    StringBuilder *symtabb = make_sbuilder();
+    StringBuilder *strtabb = make_sbuilder();
+    o1(strtabb, 0);
     // Null symbol
-    for (int i = 0; i < 24; i++) o1(b, 0);
+    for (int i = 0; i < 24; i++) o1(symtabb, 0);
     // File symbol
-    o4(b, SBUILDER_LEN(b2)); // st_name
-    ostr(b2, "hello.asm");
-    o1(b, ELF64_ST_INFO(STB_LOCAL, STT_FILE)); // st_info
-    o1(b, 0); // other
-    o2(b, SHN_ABS); // st_shndx
-    o8(b, 0); // st_value
-    o8(b, 0); // st_size
+    o4(symtabb, SBUILDER_LEN(strtabb)); // st_name
+    ostr(strtabb, "hello.asm");
+    o1(symtabb, ELF64_ST_INFO(STB_LOCAL, STT_FILE)); // st_info
+    o1(symtabb, 0); // other
+    o2(symtabb, SHN_ABS); // st_shndx
+    o8(symtabb, 0); // st_value
+    o8(symtabb, 0); // st_size
 
-    write_sym_to_buf(elf, b, b2, true);
+    write_sym_to_buf(elf, symtabb, strtabb, true);
     int localidx = LIST_LEN(elf->syms);
-    write_sym_to_buf(elf, b, b2, false);
+    write_sym_to_buf(elf, symtabb, strtabb, false);
     elf->symtabnum = elf->size + 1;
 
     Section *symtab = make_section(".symtab", SHT_SYMTAB);
-    symtab->data = SBUILDER_BODY(b);
-    symtab->off = symtab->size = SBUILDER_LEN(b);
+    symtab->data = SBUILDER_BODY(symtabb);
+    symtab->off = symtab->size = SBUILDER_LEN(symtabb);
     symtab->link = elf->size + 2;
     symtab->info = localidx + 2;
     symtab->entsize = 24;
@@ -80,8 +80,8 @@ static void add_symtab(Elf *elf) {
     elf->sections[elf->size++] = symtab;
 
     Section *strtab = make_section(".strtab", SHT_STRTAB);
-    strtab->data = SBUILDER_BODY(b2);
-    strtab->off = strtab->size = SBUILDER_LEN(b2);
+    strtab->data = SBUILDER_BODY(strtabb);
+    strtab->off = strtab->size = SBUILDER_LEN(strtabb);
     elf->sections[elf->size++] = strtab;
 }
 
@@ -162,19 +162,19 @@ static void add_shstrtab(Elf *elf) {
     shstr->off = shstr->size = SBUILDER_LEN(b);
 }
 
-static void write_section(StringBuilder *b, StringBuilder *b2, Section *sect, int offset) {
-    o4(b, sect->shstrtab_off); // sh_name
-    o4(b, sect->type); // sh_type
-    o8(b, sect->flags); // sh_flags
-    o8(b, 0); // sh_addr
-    o8(b, SBUILDER_LEN(b2) + offset); // sh_offset
-    o8(b, sect->size); // sh_size
-    o4(b, sect->link); // sh_link = SHN_UNDEF
-    o4(b, sect->info); // sh_info
-    o8(b, sect->align); // sh_addralign
-    o8(b, sect->entsize); // sh_entsize
-    out(b2, sect->data, sect->size);
-    align(b2, 16);
+static void write_section(StringBuilder *header, StringBuilder *content, Section *sect, int offset) {
+    o4(header, sect->shstrtab_off); // sh_name
+    o4(header, sect->type); // sh_type
+    o8(header, sect->flags); // sh_flags
+    o8(header, 0); // sh_addr
+    o8(header, SBUILDER_LEN(content) + offset); // sh_offset
+    o8(header, sect->size); // sh_size
+    o4(header, sect->link); // sh_link = SHN_UNDEF
+    o4(header, sect->info); // sh_info
+    o8(header, sect->align); // sh_addralign
+    o8(header, sect->entsize); // sh_entsize
+    out(content, sect->data, sect->size);
+    align(content, 16);
 }
 
 static int num_sections(Elf *elf) {
@@ -186,34 +186,34 @@ static void write_elf(FILE *outfile, Elf *elf) {
     add_reloc(elf);
     add_shstrtab(elf);
 
-    StringBuilder *b = make_sbuilder();
+    StringBuilder *header = make_sbuilder();
     int numsect = num_sections(elf);
-    out(b, elf_ident, sizeof(elf_ident));
-    o2(b, 2);  // e_type = ET_EXEC
-    o2(b, 62); // e_machine = EM_X86_64
-    o4(b, 1);  // e_version = EV_CURRENT
-    o8(b, 0);  // e_entry
-    o8(b, 0);  // e_phoff
-    o8(b, 64); // e_shoff
-    o4(b, 0);  // e_flags
-    o2(b, 64); // e_ehsize
-    o2(b, 0);  // e_phentsize
-    o2(b, 0);  // e_phnum
-    o2(b, 64); // e_shentsize
-    o2(b, numsect);  // e_shnum
-    o2(b, elf->shnum);  // e_shstrndx
+    out(header, elf_ident, sizeof(elf_ident));
+    o2(header, 2);  // e_type = ET_EXEC
+    o2(header, 62); // e_machine = EM_X86_64
+    o4(header, 1);  // e_version = EV_CURRENT
+    o8(header, 0);  // e_entry
+    o8(header, 0);  // e_phoff
+    o8(header, 64); // e_shoff
+    o4(header, 0);  // e_flags
+    o2(header, 64); // e_ehsize
+    o2(header, 0);  // e_phentsize
+    o2(header, 0);  // e_phnum
+    o2(header, 64); // e_shentsize
+    o2(header, numsect);  // e_shnum
+    o2(header, elf->shnum);  // e_shstrndx
 
     // null section
     for (int i = 0; i < 64; i++)
-        o1(b, 0);
+        o1(header, 0);
 
-    StringBuilder *b2 = make_sbuilder();
+    StringBuilder *content = make_sbuilder();
     for (int i = 0; i < elf->size; i++) {
-        write_section(b, b2, elf->sections[i], (numsect + 1) * 64);
+        write_section(header, content, elf->sections[i], (numsect + 1) * 64);
     }
 
-    fwrite(SBUILDER_BODY(b), SBUILDER_LEN(b), 1, outfile);
-    fwrite(SBUILDER_BODY(b2), SBUILDER_LEN(b2), 1, outfile);
+    fwrite(SBUILDER_BODY(header), SBUILDER_LEN(header), 1, outfile);
+    fwrite(SBUILDER_BODY(content), SBUILDER_LEN(content), 1, outfile);
     fclose(outfile);
 }
 
@@ -232,7 +232,6 @@ int main(int argc, char **argv) {
     data->size = sizeof(hello_world_str);
     data->align = 4;
     list_push(data->syms, make_symbol("hello", 0, STB_LOCAL, STT_NOTYPE, 1));
-    list_push(data->syms, make_symbol("sekai", 15, STB_LOCAL, STT_NOTYPE, 1));
     list_push(data->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
     elf->sections[elf->size++] = data;
 
