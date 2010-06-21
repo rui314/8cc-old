@@ -2,8 +2,6 @@
 
 static unsigned char elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-static char hello_world_str[] = "Hello, world!\n\0";
-
 void error(char *format, ...) {
     va_list ap;
     va_start(ap, format);
@@ -71,8 +69,7 @@ static void add_symtab(Elf *elf) {
     elf->symtabnum = elf->size + 1;
 
     Section *symtab = make_section(".symtab", SHT_SYMTAB);
-    symtab->data = SBUILDER_BODY(symtabb);
-    symtab->off = symtab->size = SBUILDER_LEN(symtabb);
+    symtab->body = symtabb;
     symtab->link = elf->size + 2;
     symtab->info = localidx + 2;
     symtab->entsize = 24;
@@ -80,8 +77,7 @@ static void add_symtab(Elf *elf) {
     elf->sections[elf->size++] = symtab;
 
     Section *strtab = make_section(".strtab", SHT_STRTAB);
-    strtab->data = SBUILDER_BODY(strtabb);
-    strtab->off = strtab->size = SBUILDER_LEN(strtabb);
+    strtab->body = strtabb;
     elf->sections[elf->size++] = strtab;
 }
 
@@ -139,8 +135,7 @@ static void add_reloc(Elf *elf) {
         Section *relsec = make_section(name, SHT_RELA);
         relsec->link = elf->symtabnum;
         relsec->info = i + 1;
-        relsec->data = SBUILDER_BODY(b);
-        relsec->off = relsec->size = SBUILDER_LEN(b);
+	relsec->body = b;
         relsec->entsize = 24;
         relsec->align = 4;
         elf->sections[elf->size++] = relsec;
@@ -158,8 +153,7 @@ static void add_shstrtab(Elf *elf) {
         char *name = elf->sections[i]->name;
         ostr(b, name);
     }
-    shstr->data = SBUILDER_BODY(b);
-    shstr->off = shstr->size = SBUILDER_LEN(b);
+    shstr->body = b;
 }
 
 static void write_section(StringBuilder *header, StringBuilder *content, Section *sect, int offset) {
@@ -168,12 +162,12 @@ static void write_section(StringBuilder *header, StringBuilder *content, Section
     o8(header, sect->flags); // sh_flags
     o8(header, 0); // sh_addr
     o8(header, SBUILDER_LEN(content) + offset); // sh_offset
-    o8(header, sect->size); // sh_size
+    o8(header, SBUILDER_LEN(sect->body)); // sh_size
     o4(header, sect->link); // sh_link = SHN_UNDEF
     o4(header, sect->info); // sh_info
     o8(header, sect->align); // sh_addralign
     o8(header, sect->entsize); // sh_entsize
-    out(content, sect->data, sect->size);
+    out(content, SBUILDER_BODY(sect->body), SBUILDER_LEN(sect->body));
     align(content, 16);
 }
 
@@ -228,18 +222,14 @@ int main(int argc, char **argv) {
 
     Section *data = make_section(".data", SHT_PROGBITS);
     data->flags = SHF_ALLOC | SHF_WRITE;
-    data->data = hello_world_str;
-    data->size = sizeof(hello_world_str);
     data->align = 4;
     list_push(data->syms, make_symbol("hello", 0, STB_LOCAL, STT_NOTYPE, 1));
     list_push(data->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
     elf->sections[elf->size++] = data;
 
     Section *text = make_section(".text", SHT_PROGBITS);
-    StringBuilder *b = assemble(text, data, create_insn_list());
     text->flags = SHF_ALLOC | SHF_EXECINSTR;
-    text->data = SBUILDER_BODY(b);
-    text->size = SBUILDER_LEN(b);
+    assemble(text, create_inst_list(text, data));
     text->align = 16;
     list_push(text->syms, make_symbol("main", 0, STB_GLOBAL, STT_NOTYPE, 1));
     list_push(text->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));

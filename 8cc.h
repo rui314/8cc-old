@@ -149,9 +149,7 @@ typedef struct Reloc {
 } Reloc;
 
 typedef struct Section {
-    int off;
-    void *data;
-    int size;
+    StringBuilder *body;
     char *name;
     int shstrtab_off;
     int type;
@@ -233,8 +231,21 @@ typedef struct Insn {
     Operand *src;
 } Insn;
 
-extern List *create_insn_list(void);
-extern StringBuilder *assemble(Section *text, Section *data, List *insns);
+typedef struct Var {
+    enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } type;
+    char *name;
+    u64 val;
+} Var;
+
+typedef struct Inst {
+    char op;
+    Var *arg0;
+    Var *arg1;
+    Var **args;
+} Inst;
+
+extern List *create_inst_list(Section *text, Section *data);
+extern void assemble(Section *text, List *insts);
 
 extern Section *make_section(char *name, int type);
 
