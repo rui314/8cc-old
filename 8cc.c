@@ -89,7 +89,7 @@ static int find_symbol(Elf *elf, char *sym) {
         if (name && strcmp(name, sym) == 0)
             return i + 2;
     }
-    fprintf(stderr, "8cc: cannot find symbol '%s'\n", sym);
+    fprintf(stderr, "cannot find symbol '%s'", sym);
     exit(-1);
 }
 
@@ -98,7 +98,7 @@ static int find_section(Elf *elf, char *name) {
         if (strcmp(elf->sections[i]->name, name) == 0)
             return i + 1;
     }
-    fprintf(stderr, "8cc: cannot find section '%s'\n", name);
+    fprintf(stderr, "cannot find section '%s'", name);
     exit(-1);
 }
 
@@ -110,7 +110,7 @@ static int find_symbol_section(Elf *elf, char *name) {
             return i + 2;
         }
     }
-    fprintf(stderr, "8cc: cannot find symbol section '%s'\n", name);
+    fprintf(stderr, "cannot find symbol section '%s'", name);
     exit(-1);
 }
 
