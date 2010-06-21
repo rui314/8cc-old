@@ -37,6 +37,7 @@ static char *read_str(FILE *file) {
 		o1(b, c2);
 		break;
 	    }
+	    break;
 	}
 	case EOF:
 	    error("premature end of input file\n");
@@ -89,12 +90,12 @@ static Token *readtok(FILE *file) {
 	    r = make_token(TOK_IDENT);
 	    r->str = read_ident(file, c);
 	    return r;
-	case '{': case '}': case '(': case ')': case ';':
+	case '{': case '}': case '(': case ')': case ';': case ',':
 	    return make_token(c);
 	case EOF:
 	    return NULL;
 	default:
-	    error("unimplemented\n");
+	    error("unimplemented '%c'\n", c);
 	}
     }
     return make_token('(');
