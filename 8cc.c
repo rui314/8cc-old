@@ -20,7 +20,7 @@ static Elf *new_elf(void) {
     return elf;
 }
 
-static void write_sym_to_buf(Elf *elf, StringBuilder *symtab, StringBuilder *strtab, bool localonly) {
+static void write_sym_to_buf(Elf *elf, String *symtab, String *strtab, bool localonly) {
     for (int i = 0; i < elf->size; i++) {
         Section *sect = elf->sections[i];
         for (int j = 0; j < LIST_LEN(sect->syms); j++) {
@@ -30,7 +30,7 @@ static void write_sym_to_buf(Elf *elf, StringBuilder *symtab, StringBuilder *str
             if (!localonly && sym->bind == STB_LOCAL)
                 continue;
             if (sym->name) {
-                o4(symtab, SBUILDER_LEN(strtab)); // st_name
+                o4(symtab, STRING_LEN(strtab)); // st_name
                 ostr(strtab, sym->name);
             } else {
                 o4(symtab, 0); // st_name
@@ -51,13 +51,13 @@ static void write_sym_to_buf(Elf *elf, StringBuilder *symtab, StringBuilder *str
 }
 
 static void add_symtab(Elf *elf) {
-    StringBuilder *symtabb = make_sbuilder();
-    StringBuilder *strtabb = make_sbuilder();
+    String *symtabb = make_string();
+    String *strtabb = make_string();
     o1(strtabb, 0);
     // Null symbol
     for (int i = 0; i < 24; i++) o1(symtabb, 0);
     // File symbol
-    o4(symtabb, SBUILDER_LEN(strtabb)); // st_name
+    o4(symtabb, STRING_LEN(strtabb)); // st_name
     ostr(strtabb, "hello.asm");
     o1(symtabb, ELF64_ST_INFO(STB_LOCAL, STT_FILE)); // st_info
     o1(symtabb, 0); // other
@@ -120,7 +120,7 @@ static void add_reloc(Elf *elf) {
         Section *sect = elf->sections[i];
         if (LIST_LEN(sect->rels) == 0)
             continue;
-        StringBuilder *b = make_sbuilder();
+        String *b = make_string();
         for (int j = 0; j < LIST_LEN(sect->rels); j++) {
             Reloc *rel = LIST_ELEM(Reloc, sect->rels, j);
             o8(b, rel->off);
@@ -148,28 +148,28 @@ static void add_shstrtab(Elf *elf) {
     Section *shstr = make_section(".shstrtab", SHT_STRTAB);
     elf->shnum = elf->size + 1;
     elf->sections[elf->size++] = shstr;
-    StringBuilder *b = make_sbuilder();
+    String *b = make_string();
     o1(b, 0);
     for (int i = 0; i < elf->size; i++) {
-        elf->sections[i]->shstrtab_off = SBUILDER_LEN(b);
+        elf->sections[i]->shstrtab_off = STRING_LEN(b);
         char *name = elf->sections[i]->name;
         ostr(b, name);
     }
     shstr->body = b;
 }
 
-static void write_section(StringBuilder *header, StringBuilder *content, Section *sect, int offset) {
+static void write_section(String *header, String *content, Section *sect, int offset) {
     o4(header, sect->shstrtab_off); // sh_name
     o4(header, sect->type); // sh_type
     o8(header, sect->flags); // sh_flags
     o8(header, 0); // sh_addr
-    o8(header, SBUILDER_LEN(content) + offset); // sh_offset
-    o8(header, SBUILDER_LEN(sect->body)); // sh_size
+    o8(header, STRING_LEN(content) + offset); // sh_offset
+    o8(header, STRING_LEN(sect->body)); // sh_size
     o4(header, sect->link); // sh_link = SHN_UNDEF
     o4(header, sect->info); // sh_info
     o8(header, sect->align); // sh_addralign
     o8(header, sect->entsize); // sh_entsize
-    out(content, SBUILDER_BODY(sect->body), SBUILDER_LEN(sect->body));
+    out(content, STRING_BODY(sect->body), STRING_LEN(sect->body));
     align(content, 16);
 }
 
@@ -182,7 +182,7 @@ static void write_elf(FILE *outfile, Elf *elf) {
     add_reloc(elf);
     add_shstrtab(elf);
 
-    StringBuilder *header = make_sbuilder();
+    String *header = make_string();
     int numsect = num_sections(elf);
     out(header, elf_ident, sizeof(elf_ident));
     o2(header, 2);  // e_type = ET_EXEC
@@ -203,13 +203,13 @@ static void write_elf(FILE *outfile, Elf *elf) {
     for (int i = 0; i < 64; i++)
         o1(header, 0);
 
-    StringBuilder *content = make_sbuilder();
+    String *content = make_string();
     for (int i = 0; i < elf->size; i++) {
         write_section(header, content, elf->sections[i], (numsect + 1) * 64);
     }
 
-    fwrite(SBUILDER_BODY(header), SBUILDER_LEN(header), 1, outfile);
-    fwrite(SBUILDER_BODY(content), SBUILDER_LEN(content), 1, outfile);
+    fwrite(STRING_BODY(header), STRING_LEN(header), 1, outfile);
+    fwrite(STRING_BODY(content), STRING_LEN(content), 1, outfile);
     fclose(outfile);
 }
 
@@ -226,7 +226,6 @@ int main(int argc, char **argv) {
     Section *data = make_section(".data", SHT_PROGBITS);
     data->flags = SHF_ALLOC | SHF_WRITE;
     data->align = 4;
-    // list_push(data->syms, make_symbol("hello", 0, STB_LOCAL, STT_NOTYPE, 1));
     list_push(data->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
     elf->sections[elf->size++] = data;
 
