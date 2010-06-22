@@ -128,7 +128,7 @@ static void add_reloc(Elf *elf) {
         Section *relsec = make_section(name, SHT_RELA);
         relsec->link = elf->symtabnum;
         relsec->info = i + 1;
-	relsec->body = b;
+        relsec->body = b;
         relsec->entsize = 24;
         relsec->align = 4;
         elf->sections[elf->size++] = relsec;

@@ -7,13 +7,13 @@
 
 static void eq_str(int line, char *expected, char *got) {
     if (strcmp(expected, got)) {
-	error("line %d: \"%s\" expected, but got \"%s\"", line, expected, got);
+        error("line %d: \"%s\" expected, but got \"%s\"", line, expected, got);
     }
 }
 
 static void eq_char(int line, int expected, int got) {
     if (expected != got) {
-	error("line %d: '%c' expected, but got '%c'", line, expected, got);
+        error("line %d: '%c' expected, but got '%c'", line, expected, got);
     }
 }
 
@@ -24,7 +24,7 @@ static void eq_char(int line, int expected, int got) {
 static int64_t qword(char *str) {
     int64_t r = 0;
     for (int i = strlen(str) - 1; i >= 0; i--)
-	r = (r << 8) | str[i];
+        r = (r << 8) | str[i];
     return r;
 }
 
@@ -46,8 +46,8 @@ static FILE *create_file(char *content) {
     char tmpl[] = "tmpXXXXXX";
     int fd = mkstemp(tmpl);
     if (fd < 0) {
-	perror("fd: ");
-	exit(-1);
+        perror("fd: ");
+        exit(-1);
     }
     unlink(tmpl);
     write(fd, content, strlen(content));
