@@ -6,29 +6,29 @@ static Token *make_token(char c) {
     return r;
 }
 
-static int read_num(FILE *file, int num) {
+static int read_num(File *file, int num) {
     for (;;) {
-	int c = getc(file);
+	int c = readc(file);
 	if (c == EOF) {
 	    return num;
 	} else if ('0' <= c && c <= '9') {
 	    num = num * 10 + (c - '0');
 	} else {
-	    ungetc(c, file);
+	    unreadc(c, file);
 	    return num;
 	}
     }
 }
 
-static char *read_str(FILE *file) {
+static char *read_str(File *file) {
     String *b = make_string();
     for (;;) {
-	int c = getc(file);
+	int c = readc(file);
 	switch (c) {
 	case '"':
 	    return STRING_BODY(b);
 	case '\\': {
-	    int c2 = getc(file);
+	    int c2 = readc(file);
 	    switch (c2) {
 	    case 'n':
 		o1(b, '\n');
@@ -47,15 +47,15 @@ static char *read_str(FILE *file) {
     }
 }
 
-static char *read_ident(FILE *file, char c0) {
+static char *read_ident(File *file, char c0) {
     String *b = make_string();
     o1(b, c0);
     for (;;) {
-	int c = getc(file);
+	int c = readc(file);
 	if (isalnum(c)) {
 	    o1(b, c);
 	} else if (c != EOF) {
-	    ungetc(c, file);
+	    unreadc(c, file);
 	    return STRING_BODY(b);
 	} else {
 	    return STRING_BODY(b);
@@ -63,10 +63,10 @@ static char *read_ident(FILE *file, char c0) {
     }
 }
 
-static Token *read_token(FILE *file) {
+static Token *read_token(File *file) {
     Token *r;
     for (;;) {
-	int c = getc(file);
+	int c = readc(file);
 	switch (c) {
 	case ' ': case '\t': case '\r': case '\n':
 	    continue;
@@ -101,9 +101,9 @@ static Token *read_token(FILE *file) {
     return make_token('(');
 }
 
-static void expect(FILE *file, char expected) {
+static void expect(File *file, char expected) {
     for (;;) {
-	int c = getc(file);
+	int c = readc(file);
 	if (c == expected) return;
 	switch (c) {
 	case ' ': case '\t': case '\r': case '\n':
@@ -116,7 +116,7 @@ static void expect(FILE *file, char expected) {
     }
 }
 
-static void read_statement(FILE *file, Section *text, Section *data, List *lis) {
+static void read_statement(File *file, Section *text, Section *data, List *lis) {
     Token *fntok = read_token(file);
     List *argtoks = make_list();
     expect(file, '(');
@@ -151,7 +151,7 @@ static void read_statement(FILE *file, Section *text, Section *data, List *lis) 
     list_push(lis, make_func_call(fn, args));
 }
 
-static List *read_func(FILE *file, Section *text, Section *data) {
+static List *read_func(File *file, Section *text, Section *data) {
     List *r = make_list();
     Token *tok = read_token(file);
     if (tok->val != TOK_IDENT)
@@ -164,6 +164,6 @@ static List *read_func(FILE *file, Section *text, Section *data) {
     return r;
 }
 
-List *parse(FILE *file, Section *text, Section *data) {
+List *parse(File *file, Section *text, Section *data) {
     return read_func(file, text, data);
 }

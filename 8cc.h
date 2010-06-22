@@ -210,6 +210,24 @@ extern Var *make_extern(char *name, Section *text);
 extern Inst *make_func_call(Var *fn, Var **args);
 
 /*
+ * File
+ */
+
+typedef struct File {
+    FILE *stream;
+    int line;
+    String *filename;
+    int ungotten;
+} File;
+
+extern File *make_file(FILE *stream, char *filename);
+extern File *open_file(char *path);
+extern void unreadc(int c, File *file);
+extern int readc(File *file);
+extern int getfileline(File *file);
+extern char *getfilename(File *file);
+
+/*
  * Parser
  */
 
@@ -225,23 +243,6 @@ typedef struct Token {
     u64 num;
 } Token;
 
-extern List *parse(FILE *file, Section *text, Section *data);
-
-/*
- * File
- */
-
-typedef struct File {
-    FILE *stream;
-    int line;
-    String *filename;
-    int ungotten;
-} File;
-
-extern File *make_file(FILE *stream, char *filename);
-extern void unreadc(int c, File *file);
-extern int readc(File *file);
-extern int getfileline(File *file);
-extern char *getfilename(File *file);
+extern List *parse(File *file, Section *text, Section *data);
 
 #endif /* ECC_H */

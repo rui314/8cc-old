@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
         exit(-1);
     }
 
-    FILE *infile = strcmp(argv[1], "-") ? fopen(argv[1], "r") : stdin;
+    File *infile = open_file(argv[1]);
     FILE *outfile = fopen(argv[2], "w");
     Elf *elf = new_elf();
 
