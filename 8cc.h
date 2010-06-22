@@ -241,7 +241,7 @@ typedef struct Inst {
     char op;
     Var *arg0;
     Var *arg1;
-    Var **args;
+    List *args;
 } Inst;
 
 extern void assemble(Section *text, List *insts);
@@ -252,6 +252,6 @@ extern Var *make_imm(u64 val);
 extern Var *make_global(char *name, u64 val);
 extern int add_string(Section *data, char *str);
 extern Var *make_extern(char *name);
-extern Inst *make_func_call(Var *fn, Var **args);
+extern Inst *make_func_call(Var *fn, List *args);
 
 #endif /* ECC_H */

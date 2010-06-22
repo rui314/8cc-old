@@ -75,7 +75,7 @@ static Inst *make_inst(char op) {
     return r;
 }
 
-Inst *make_func_call(Var *fn, Var **args) {
+Inst *make_func_call(Var *fn, List *args) {
     Inst * r = make_inst('$');
     r->arg0 = fn;
     r->args = args;
@@ -112,6 +112,32 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
 static u32 PUSH_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
 static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
     
+static void gen_call(String *b, Section *text, Var *fn, List *args) {
+    for (int i = 0; i < LIST_LEN(args); i++) {
+        switch (LIST_ELEM(Var, args, i)->stype) {
+        case VAR_GLOBAL:
+            o2(b, PUSH_ABS[i]);
+            add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, LIST_ELEM(Var, args, i)->val.i);
+            o8(b, 0);
+            break;
+        case VAR_IMM:
+            o2(b, PUSH_ABS[i]);
+            o8(b, LIST_ELEM(Var, args, i)->val.i);
+            break;
+        default:
+            error("8cc: unsupported var type: %c\n", LIST_ELEM(Var, args, i)->stype);
+        }
+    }
+    if (!fn->sym) {
+        fn->sym = make_symbol(fn->name, 0, STB_GLOBAL, STT_NOTYPE, 0);
+        list_push(text->syms, fn->sym);
+    }
+    o2(b, 0xc031); // XOR eax, eax
+    o1(b, 0xe8); // CALL
+    add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, 0xfffffffffffffffc);
+    o4(b, 0);
+}
+
 void assemble(Section *text, List *insts) {
     String *b = text->body;
     o1(b, 0x55); // PUSH rbp
@@ -123,30 +149,8 @@ void assemble(Section *text, List *insts) {
         switch (inst->op) {
         case '$': {
             Var *fn = inst->arg0;
-            Var **args = inst->args;
-            for (int j = 0; args[j]; j++) {
-                switch (args[j]->stype) {
-                case VAR_GLOBAL:
-                    o2(b, PUSH_ABS[j]);
-                    add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, args[j]->val.i);
-                    o8(b, 0);
-                    break;
-                case VAR_IMM:
-                    o2(b, PUSH_ABS[j]);
-                    o8(b, args[j]->val.i);
-                    break;
-                default:
-                    error("8cc: unsupported var type: %c\n", args[j]->stype);
-                }
-            }
-            if (!fn->sym) {
-                fn->sym = make_symbol(fn->name, 0, STB_GLOBAL, STT_NOTYPE, 0);
-                list_push(text->syms, fn->sym);
-            }
-            o2(b, 0xc031); // XOR eax, eax
-            o1(b, 0xe8); // CALL
-            add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, 0xfffffffffffffffc);
-            o4(b, 0);
+            List *args = inst->args;
+            gen_call(b, text, fn, args);
             break;
         }
         default:
