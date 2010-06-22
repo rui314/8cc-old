@@ -42,6 +42,7 @@ static Var *make_var(int type) {
     r->type = type;
     r->val = 0;
     r->name = NULL;
+    r->sym = NULL;
     return r;
 }
 
@@ -58,11 +59,9 @@ Var *make_global(char *name, u64 val) {
     return r;
 }
 
-Var *make_extern(char *name, Section *text) {
+Var *make_extern(char *name) {
     Var *r = make_var(VAR_EXTERN);
     r->name = name;
-    Symbol *sym = make_symbol(name, 0, STB_GLOBAL, STT_NOTYPE, 0);
-    list_push(text->syms, sym);
     return r;
 }
 
@@ -138,6 +137,10 @@ void assemble(Section *text, List *insts) {
                 default:
                     error("8cc: unsupported var type: %c\n", args[j]->type);
                 }
+            }
+            if (!fn->sym) {
+                fn->sym = make_symbol(fn->name, 0, STB_GLOBAL, STT_NOTYPE, 0);
+                list_push(text->syms, fn->sym);
             }
             o2(b, 0xc031); // XOR eax, eax
             o1(b, 0xe8); // CALL

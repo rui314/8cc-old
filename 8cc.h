@@ -190,6 +190,7 @@ typedef struct Var {
     enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } type;
     char *name;
     u64 val;
+    Symbol *sym; // for external symbol
 } Var;
 
 typedef struct Inst {
@@ -206,7 +207,7 @@ extern Symbol *make_symbol(char *name, long value, int bind, int type, int defin
 extern Var *make_imm(u64 val);
 extern Var *make_global(char *name, u64 val);
 extern int add_string(Section *data, char *str);
-extern Var *make_extern(char *name, Section *text);
+extern Var *make_extern(char *name);
 extern Inst *make_func_call(Var *fn, Var **args);
 
 /*
@@ -242,6 +243,6 @@ typedef struct Token {
     int lineno;
 } Token;
 
-extern List *parse(File *file, Section *text, Section *data);
+extern List *parse(File *file, Section *data);
 
 #endif /* ECC_H */

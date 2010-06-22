@@ -222,7 +222,7 @@ int main(int argc, char **argv) {
 
     Section *text = make_section(".text", SHT_PROGBITS);
     text->flags = SHF_ALLOC | SHF_EXECINSTR;
-    List *insts = parse(infile, text, data);
+    List *insts = parse(infile, data);
     assemble(text, insts);
     text->align = 16;
     list_push(text->syms, make_symbol("main", 0, STB_GLOBAL, STT_NOTYPE, 1));
