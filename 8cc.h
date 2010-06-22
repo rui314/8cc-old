@@ -183,34 +183,6 @@ typedef struct Elf {
 } Elf;
 
 /*
- * Assembler
- */
-
-typedef struct Var {
-    enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } type;
-    char *name;
-    u64 val;
-    Symbol *sym; // for external symbol
-} Var;
-
-typedef struct Inst {
-    char op;
-    Var *arg0;
-    Var *arg1;
-    Var **args;
-} Inst;
-
-extern void assemble(Section *text, List *insts);
-extern Section *make_section(char *name, int type);
-extern Symbol *make_symbol(char *name, long value, int bind, int type, int defined);
-
-extern Var *make_imm(u64 val);
-extern Var *make_global(char *name, u64 val);
-extern int add_string(Section *data, char *str);
-extern Var *make_extern(char *name);
-extern Inst *make_func_call(Var *fn, Var **args);
-
-/*
  * File
  */
 
@@ -244,5 +216,33 @@ typedef struct Token {
 } Token;
 
 extern List *parse(File *file, Section *data);
+
+/*
+ * Assembler
+ */
+
+typedef struct Var {
+    enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } type;
+    char *name;
+    u64 val;
+    Symbol *sym; // for external symbol
+} Var;
+
+typedef struct Inst {
+    char op;
+    Var *arg0;
+    Var *arg1;
+    Var **args;
+} Inst;
+
+extern void assemble(Section *text, List *insts);
+extern Section *make_section(char *name, int type);
+extern Symbol *make_symbol(char *name, long value, int bind, int type, int defined);
+
+extern Var *make_imm(u64 val);
+extern Var *make_global(char *name, u64 val);
+extern int add_string(Section *data, char *str);
+extern Var *make_extern(char *name);
+extern Inst *make_func_call(Var *fn, Var **args);
 
 #endif /* ECC_H */
