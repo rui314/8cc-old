@@ -18,6 +18,6 @@ hello: 8cc
 	$(CC) -o hello hello.o
 
 test: hello tests
-	@./test.sh
+	@./runtest
 
 all: 8cc
