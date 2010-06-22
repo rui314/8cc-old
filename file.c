@@ -19,6 +19,18 @@ File *make_file(FILE *stream, char *filename) {
     return r;
 }
 
+File *open_file(char *path) {
+    if (!strcmp(path, "-")) {
+	return make_file(stdin, "-");
+    }
+    FILE *stream = fopen(path, "r");
+    if (stream == NULL) {
+	perror("fopen failed: ");
+	exit(-1);
+    }
+    return make_file(stream, path);
+}
+
 void unreadc(int c, File *file) {
     if (file->ungotten != EOF)
 	ungetc(file->ungotten, file->stream);
