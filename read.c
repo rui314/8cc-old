@@ -132,22 +132,21 @@ static void read_statement(File *file, Section *data, List *lis) {
     }
     expect(file, ';');
     
-    Var **args = malloc(sizeof(Var *) * (LIST_LEN(argtoks) + 1));
+    List *args = make_list();
     int i;
     for (i = 0; i < LIST_LEN(argtoks); i++) {
         Token *arg = LIST_ELEM(Token, argtoks, i);
         switch (arg->val) {
         case TOK_NUM:
-            args[i] = make_imm(arg->num);
+            list_push(args, make_imm(arg->num));
             break;
         case TOK_IDENT:
         case TOK_CHAR:
             error("identifier or char is not supported here");
         case TOK_STR:
-            args[i] = make_global("", add_string(data, arg->str));
+            list_push(args, make_global("", add_string(data, arg->str)));
         }
     }
-    args[i] = NULL;
     Var *fn = make_extern(fntok->str);
     list_push(lis, make_func_call(fn, args));
 }
