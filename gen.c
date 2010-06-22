@@ -121,32 +121,32 @@ void assemble(Section *text, List *insts) {
     for (int i = 0; i < LIST_LEN(insts); i++) {
         Inst *inst = LIST_ELEM(Inst, insts, i);
         switch (inst->op) {
-	case '$': {
-	    Var *fn = inst->arg0;
-	    Var **args = inst->args;
-	    for (int j = 0; args[j]; j++) {
-		switch (args[j]->type) {
-		case VAR_GLOBAL:
-		    o2(b, PUSH_ABS[j]);
-		    add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, args[j]->val);
-		    o8(b, 0);
-		    break;
-		case VAR_IMM:
-		    o2(b, PUSH_ABS[j]);
-		    o8(b, args[j]->val);
-		    break;
-		default:
-		    error("8cc: unsupported var type: %c\n", args[j]->type);
-		}
-	    }
-	    o2(b, 0xc031); // XOR eax, eax
-	    o1(b, 0xe8); // CALL
-	    add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, 0xfffffffffffffffc);
-	    o4(b, 0);
-	    break;
-	}
-	default:
-	    error("8cc: unknown op\n");
+        case '$': {
+            Var *fn = inst->arg0;
+            Var **args = inst->args;
+            for (int j = 0; args[j]; j++) {
+                switch (args[j]->type) {
+                case VAR_GLOBAL:
+                    o2(b, PUSH_ABS[j]);
+                    add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, args[j]->val);
+                    o8(b, 0);
+                    break;
+                case VAR_IMM:
+                    o2(b, PUSH_ABS[j]);
+                    o8(b, args[j]->val);
+                    break;
+                default:
+                    error("8cc: unsupported var type: %c\n", args[j]->type);
+                }
+            }
+            o2(b, 0xc031); // XOR eax, eax
+            o1(b, 0xe8); // CALL
+            add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, 0xfffffffffffffffc);
+            o4(b, 0);
+            break;
+        }
+        default:
+            error("8cc: unknown op\n");
         }
     }
     o2(b, 0xc031); // XOR eax, eax
