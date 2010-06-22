@@ -117,7 +117,7 @@ static void expect(File *file, char expected) {
     }
 }
 
-static void read_statement(File *file, Section *text, Section *data, List *lis) {
+static void read_statement(File *file, Section *data, List *lis) {
     Token *fntok = read_token(file);
     List *argtoks = make_list();
     expect(file, '(');
@@ -148,11 +148,11 @@ static void read_statement(File *file, Section *text, Section *data, List *lis) 
         }
     }
     args[i] = NULL;
-    Var *fn = make_extern(fntok->str, text);
+    Var *fn = make_extern(fntok->str);
     list_push(lis, make_func_call(fn, args));
 }
 
-static List *read_func(File *file, Section *text, Section *data) {
+static List *read_func(File *file, Section *data) {
     List *r = make_list();
     Token *tok = read_token(file);
     if (tok->val != TOK_IDENT)
@@ -160,11 +160,11 @@ static List *read_func(File *file, Section *text, Section *data) {
     expect(file, '(');
     expect(file, ')');
     expect(file, '{');
-    read_statement(file, text, data, r);
+    read_statement(file, data, r);
     expect(file, '}');
     return r;
 }
 
-List *parse(File *file, Section *text, Section *data) {
-    return read_func(file, text, data);
+List *parse(File *file, Section *data) {
+    return read_func(file, data);
 }
