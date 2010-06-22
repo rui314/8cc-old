@@ -5,15 +5,15 @@
 #define EQ_CHAR(x, y) do { eq_char(__LINE__, (x), (y)); } while (0)
 #define EQ_STR(x, y)  do { eq_str(__LINE__, (x), (y)); } while (0)
 
-void eq_str(int line, char *expected, char *got) {
+static void eq_str(int line, char *expected, char *got) {
     if (strcmp(expected, got)) {
 	error("line %d: \"%s\" expected, but got \"%s\"", line, expected, got);
     }
 }
 
-void eq_char(int line, int expected, int got) {
+static void eq_char(int line, int expected, int got) {
     if (expected != got) {
-	error("line %d: '%d' expected, but got '%d'", line, expected, got);
+	error("line %d: '%c' expected, but got '%c'", line, expected, got);
     }
 }
 
@@ -21,14 +21,14 @@ void eq_char(int line, int expected, int got) {
  * String
  */
 
-int64_t qword(char *str) {
+static int64_t qword(char *str) {
     int64_t r = 0;
     for (int i = strlen(str) - 1; i >= 0; i--)
 	r = (r << 8) | str[i];
     return r;
 }
 
-void test_string(void) {
+static void test_string(void) {
     String *b = make_string();
     NOT_NULL(b);
     EQ(STRING_LEN(b), 0);
@@ -55,27 +55,44 @@ static FILE *create_file(char *content) {
     return fdopen(fd, "r");
 }
 
-void test_file(void) {
+static void test_file_unreadc(void) {
+    FILE *stream = create_file("a\n");
+    File *file = make_file(stream, "foo");
+    EQ(1, file->lineno);
+    EQ_CHAR('a', readc(file));
+    EQ_CHAR('\n', readc(file));
+    EQ(2, file->lineno);
+    unreadc('\n', file);
+    EQ(1, file->lineno);
+    EQ_CHAR('\n', readc(file));
+    EQ(2, file->lineno);
+}
+
+static void test_file_simple(void) {
     char *data = "ab\nc\r\r\nd\r";
-
     FILE *stream = create_file(data);
-    File *file = make_file(stream, "pipe");
-    EQ_STR(getfilename(file), "pipe");
+    File *file = make_file(stream, "foo");
+    EQ_STR(STRING_BODY(file->filename), "foo");
 
-    EQ(1, getfileline(file));
+    EQ(1, file->lineno);
     EQ_CHAR('a', readc(file));
     EQ_CHAR('b', readc(file));
     EQ_CHAR('\n', readc(file));
-    EQ(2, getfileline(file));
+    EQ(2, file->lineno);
     EQ_CHAR('c', readc(file));
     EQ_CHAR('\n', readc(file));
-    EQ(3, getfileline(file));
+    EQ(3, file->lineno);
     EQ_CHAR('\n', readc(file));
-    EQ(4, getfileline(file));
+    EQ(4, file->lineno);
     EQ_CHAR('d', readc(file));
     EQ_CHAR('\n', readc(file));
-    EQ(5, getfileline(file));
+    EQ(5, file->lineno);
     EQ_CHAR(EOF, readc(file));
+}
+
+static void test_file(void) {
+    test_file_simple();
+    test_file_unreadc();
 }
 
 int main(int argc, char **argv) {
