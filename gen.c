@@ -37,10 +37,11 @@ Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend) {
     return rel;
 }
 
-static Var *make_var(int type) {
+static Var *make_var(int stype) {
     Var *r = malloc(sizeof(Var));
-    r->type = type;
-    r->val = 0;
+    r->stype = stype;
+    r->ctype = CTYPE_INT;
+    r->val.i = 0;
     r->name = NULL;
     r->sym = NULL;
     return r;
@@ -48,14 +49,14 @@ static Var *make_var(int type) {
 
 Var *make_imm(u64 val) {
     Var *r = make_var(VAR_IMM);
-    r->val = val;
+    r->val.i = val;
     return r;
 }
 
 Var *make_global(char *name, u64 val) {
     Var *r = make_var(VAR_GLOBAL);
     r->name = name;
-    r->val = val;
+    r->val.i = val;
     return r;
 }
 
@@ -124,18 +125,18 @@ void assemble(Section *text, List *insts) {
             Var *fn = inst->arg0;
             Var **args = inst->args;
             for (int j = 0; args[j]; j++) {
-                switch (args[j]->type) {
+                switch (args[j]->stype) {
                 case VAR_GLOBAL:
                     o2(b, PUSH_ABS[j]);
-                    add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, args[j]->val);
+                    add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, args[j]->val.i);
                     o8(b, 0);
                     break;
                 case VAR_IMM:
                     o2(b, PUSH_ABS[j]);
-                    o8(b, args[j]->val);
+                    o8(b, args[j]->val.i);
                     break;
                 default:
-                    error("8cc: unsupported var type: %c\n", args[j]->type);
+                    error("8cc: unsupported var type: %c\n", args[j]->stype);
                 }
             }
             if (!fn->sym) {
