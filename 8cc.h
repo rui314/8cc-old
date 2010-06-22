@@ -1,5 +1,8 @@
-#ifndef EIGHTCC_H
-#define EIGHTCC_H
+#ifndef ECC_H
+#define ECC_H
+
+#define _POSIX_SOURCE
+#define _BSD_SOURCE
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -8,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 /*
  * Fixed size data types
@@ -222,4 +227,21 @@ typedef struct Token {
 
 extern List *parse(FILE *file, Section *text, Section *data);
 
-#endif
+/*
+ * File
+ */
+
+typedef struct File {
+    FILE *stream;
+    int line;
+    String *filename;
+    int ungotten;
+} File;
+
+extern File *make_file(FILE *stream, char *filename);
+extern void unreadc(int c, File *file);
+extern int readc(File *file);
+extern int getfileline(File *file);
+extern char *getfilename(File *file);
+
+#endif /* ECC_H */
