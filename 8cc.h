@@ -215,6 +215,14 @@ typedef struct Token {
     int lineno;
 } Token;
 
+typedef union Cvalue {
+    int i;
+    float f;
+} Cvalue;
+
+#define CTYPE_INT    1
+#define CTYPE_FLOAT  2
+
 extern List *parse(File *file, Section *data);
 
 /*
@@ -222,9 +230,10 @@ extern List *parse(File *file, Section *data);
  */
 
 typedef struct Var {
-    enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } type;
+    enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } stype;
     char *name;
-    u64 val;
+    int ctype;
+    Cvalue val;
     Symbol *sym; // for external symbol
 } Var;
 
