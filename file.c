@@ -32,14 +32,13 @@ File *open_file(char *path) {
 }
 
 static void unreadc_int(int c, File *file) {
-    if (file->ungotten != EOF)
-        ungetc(file->ungotten, file->stream);
-    file->ungotten = c;
 }
 
 void unreadc(int c, File *file) {
-    if (c == '\r' || c == '\n') file->lineno--;
-    unreadc_int(c, file);
+    if (c == '\n') file->lineno--;
+    if (file->ungotten != EOF)
+        ungetc(file->ungotten, file->stream);
+    file->ungotten = c;
 }
 
 int readc(File *file) {
@@ -56,7 +55,7 @@ int readc(File *file) {
         file->lineno++;
         c = getc(file->stream);
         if (c == '\n') return '\n';
-        unreadc_int(c, file);
+        unreadc(c, file);
         return '\n';
     }
     if (c == '\n') file->lineno++;
