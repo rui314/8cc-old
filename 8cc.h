@@ -143,6 +143,21 @@ extern void list_push(List *list, void *e);
  * to on-disk ELF format)
  */
 
+typedef struct Section {
+    String *body;
+    char *name;
+    int shstrtab_off;
+    int type;
+    int flags;
+    int align;
+    List *syms;
+    int link;
+    List *rels;
+    int info;
+    int entsize;
+    int shndx;
+} Section;
+
 typedef struct Symbol {
     char *name;
     long value;
@@ -160,23 +175,8 @@ typedef struct Reloc {
     u64 addend;
 } Reloc;
 
-typedef struct Section {
-    String *body;
-    char *name;
-    int shstrtab_off;
-    int type;
-    int flags;
-    int align;
-    List *syms;
-    int link;
-    List *rels;
-    int info;
-    int entsize;
-} Section;
-
 typedef struct Elf {
-    Section *sections[20];
-    int size;
+    List *sections;
     int shnum;
     int symtabnum;
     List *syms;

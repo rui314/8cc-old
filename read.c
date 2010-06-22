@@ -41,7 +41,7 @@ static char *read_str(File *file) {
             break;
         }
         case EOF:
-            error("line %d: premature end of input file", file->lineno);
+            error("line %d: premature end of input file while reading a literal string", file->lineno);
         default:
             o1(b, c);
         }
