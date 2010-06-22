@@ -215,7 +215,7 @@ extern Inst *make_func_call(Var *fn, Var **args);
 
 typedef struct File {
     FILE *stream;
-    int line;
+    int lineno;
     String *filename;
     int ungotten;
 } File;
@@ -224,8 +224,6 @@ extern File *make_file(FILE *stream, char *filename);
 extern File *open_file(char *path);
 extern void unreadc(int c, File *file);
 extern int readc(File *file);
-extern int getfileline(File *file);
-extern char *getfilename(File *file);
 
 /*
  * Parser
@@ -241,6 +239,7 @@ typedef struct Token {
     char ch;
     char *str;
     u64 num;
+    int lineno;
 } Token;
 
 extern List *parse(File *file, Section *text, Section *data);

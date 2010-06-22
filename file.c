@@ -12,7 +12,7 @@ void error(char *format, ...) {
 File *make_file(FILE *stream, char *filename) {
     File *r = malloc(sizeof(File));
     r->stream = stream;
-    r->line = 1;
+    r->lineno = 1;
     r->filename = make_string();
     ostr(r->filename, filename);
     r->ungotten = EOF;
@@ -31,10 +31,15 @@ File *open_file(char *path) {
     return make_file(stream, path);
 }
 
-void unreadc(int c, File *file) {
+static void unreadc_int(int c, File *file) {
     if (file->ungotten != EOF)
 	ungetc(file->ungotten, file->stream);
     file->ungotten = c;
+}
+
+void unreadc(int c, File *file) {
+    if (c == '\r' || c == '\n') file->lineno--;
+    unreadc_int(c, file);
 }
 
 int readc(File *file) {
@@ -45,22 +50,15 @@ int readc(File *file) {
 	c = file->ungotten;
 	file->ungotten = EOF;
     }
-    if (c == EOF || c == '\0') return EOF;
+    if (c == EOF || c == '\0')
+	return EOF;
     if (c == '\r') {
-	file->line++;
+	file->lineno++;
 	c = getc(file->stream);
-	if (c == '\n') return c;
-	unreadc(c, file);
+	if (c == '\n') return '\n';
+	unreadc_int(c, file);
 	return '\n';
     }
-    if (c == '\n') file->line++;
+    if (c == '\n') file->lineno++;
     return c;
-}
-
-int getfileline(File *file) {
-    return file->line;
-}
-
-char *getfilename(File *file) {
-    return STRING_BODY(file->filename);
 }

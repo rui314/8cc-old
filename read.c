@@ -1,8 +1,9 @@
 #include "8cc.h"
 
-static Token *make_token(char c) {
+static Token *make_token(char c, int lineno) {
     Token *r = malloc(sizeof(Token));
     r->val = c;
+    r->lineno = lineno;
     return r;
 }
 
@@ -40,7 +41,7 @@ static char *read_str(File *file) {
 	    break;
 	}
 	case EOF:
-	    error("premature end of input file");
+	    error("line %d: premature end of input file", file->lineno);
 	default:
 	    o1(b, c);
 	}
@@ -72,11 +73,11 @@ static Token *read_token(File *file) {
 	    continue;
 	case '0': case '1': case '2': case '3': case '4': 
 	case '5': case '6': case '7': case '8': case '9': 
-	    r = make_token(TOK_NUM);
+	    r = make_token(TOK_NUM, file->lineno);
 	    r->num = read_num(file, c - '0');
 	    return r;
 	case '"':
-	    r = make_token(TOK_STR);
+	    r = make_token(TOK_STR, file->lineno);
 	    r->str = read_str(file);
 	    return r;
 	case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
@@ -87,18 +88,18 @@ static Token *read_token(File *file) {
 	case 'J': case 'K': case 'L': case 'M': case 'N': case 'O': case 'P':
 	case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W':
 	case 'X': case 'Y': case 'Z':
-	    r = make_token(TOK_IDENT);
+	    r = make_token(TOK_IDENT, file->lineno);
 	    r->str = read_ident(file, c);
 	    return r;
 	case '{': case '}': case '(': case ')': case ';': case ',':
-	    return make_token(c);
+	    return make_token(c, file->lineno);
 	case EOF:
 	    return NULL;
 	default:
-	    error("unimplemented '%c'", c);
+	    error("line %d: unimplemented '%c'", file->lineno, c);
 	}
     }
-    return make_token('(');
+    return make_token('(', file->lineno);
 }
 
 static void expect(File *file, char expected) {
@@ -109,9 +110,9 @@ static void expect(File *file, char expected) {
 	case ' ': case '\t': case '\r': case '\n':
 	    continue;
 	case EOF:
-	    error("'%c' expected, but got EOF", expected);
+	    error("line %d: '%c' expected, but got EOF", file->lineno, expected);
 	default:
-	    error("'%c' expected, but got '%c'", expected, c);
+	    error("line %d: '%c' expected, but got '%c'", file->lineno, expected, c);
 	}
     }
 }
@@ -127,7 +128,7 @@ static void read_statement(File *file, Section *text, Section *data, List *lis) 
 	if (sep->val == ')')
 	    break;
 	if (sep->val != ',')
-	    error("expected ',', but got '%c'", sep->val);
+	    error("line %d: expected ',', but got '%c'", sep->lineno, sep->val);
     }
     expect(file, ';');
     
@@ -155,7 +156,7 @@ static List *read_func(File *file, Section *text, Section *data) {
     List *r = make_list();
     Token *tok = read_token(file);
     if (tok->val != TOK_IDENT)
-	error("identifier expected");
+	error("line %d: identifier expected", tok->lineno);
     expect(file, '(');
     expect(file, ')');
     expect(file, '{');
