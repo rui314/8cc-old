@@ -111,7 +111,7 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
 }
 
 // rdi, rsi, rdx, rcx, r8, r9
-static u32 PUSH_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
+// static u32 PUSH_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
 static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
     
 static void gen_call(String *b, Elf *elf, Section *text, Var *fn, List *args) {
