@@ -7,18 +7,43 @@ static Token *make_token(char c, int lineno) {
     return r;
 }
 
-static int read_num(File *file, int num) {
+static Token *read_num(File *file, char first, int lineno) {
+    Token *tok;
+    String *buf = make_string();
+    o1(buf, first);
     for (;;) {
         int c = readc(file);
         if (c == EOF) {
-            return num;
+            goto ret_int;
         } else if ('0' <= c && c <= '9') {
-            num = num * 10 + (c - '0');
+            o1(buf, c);
+        } else if (c == '.') {
+            o1(buf, c);
+            break;
         } else {
             unreadc(c, file);
-            return num;
+            goto ret_int;
         }
     }
+    for (;;) {
+        int c = readc(file);
+        if (c == EOF) {
+            goto ret_float;
+        } else if ('0' <= c && c <= '9') {
+            o1(buf, c);
+        } else {
+            unreadc(c, file);
+            goto ret_float;
+        }
+    }    
+ ret_int:
+    tok = make_token(TOK_NUM, lineno);
+    tok->num = atoi(STRING_BODY(buf));
+    return tok;
+ ret_float:
+    tok = make_token(TOK_FLOAT, lineno);
+    tok->flo = atof(STRING_BODY(buf));
+    return tok;
 }
 
 static char *read_str(File *file) {
@@ -64,7 +89,7 @@ static char *read_ident(File *file, char c0) {
     }
 }
 
-static Token *read_token(File *file) {
+Token *read_token(File *file) {
     Token *r;
     for (;;) {
         int c = readc(file);
@@ -73,9 +98,7 @@ static Token *read_token(File *file) {
             continue;
         case '0': case '1': case '2': case '3': case '4': 
         case '5': case '6': case '7': case '8': case '9': 
-            r = make_token(TOK_NUM, file->lineno);
-            r->num = read_num(file, c - '0');
-            return r;
+            return read_num(file, c, file->lineno);
         case '"':
             r = make_token(TOK_STR, file->lineno);
             r->str = read_str(file);
@@ -117,8 +140,7 @@ static void expect(File *file, char expected) {
     }
 }
 
-static void read_statement(File *file, Section *data, List *lis) {
-    Token *fntok = read_token(file);
+static void read_statement(File *file, Section *data, Token *fntok, List *lis) {
     List *argtoks = make_list();
     expect(file, '(');
     for (;;) {
@@ -140,6 +162,9 @@ static void read_statement(File *file, Section *data, List *lis) {
         case TOK_NUM:
             list_push(args, make_imm(arg->num));
             break;
+        case TOK_FLOAT:
+            list_push(args, make_immf(arg->flo));
+            break;
         case TOK_IDENT:
         case TOK_CHAR:
             error("identifier or char is not supported here");
@@ -159,8 +184,14 @@ static List *read_func(File *file, Section *data) {
     expect(file, '(');
     expect(file, ')');
     expect(file, '{');
-    read_statement(file, data, r);
-    expect(file, '}');
+    for (;;) {
+        tok = read_token(file);
+        if (tok == NULL)
+            error("premature end of input");
+        if (tok->val == '}')
+            break;
+        read_statement(file, data, tok, r);
+    }
     return r;
 }
 

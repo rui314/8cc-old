@@ -95,7 +95,7 @@ static void test_dict_iter(void) {
 
 
 /*
- * Compiler
+ * File IO
  */
 static FILE *create_file(char *content) {
     char tmpl[] = "tmpXXXXXX";
@@ -145,12 +145,30 @@ static void test_file_simple(void) {
     EQ_CHAR(EOF, readc(file));
 }
 
+/*
+ * Parser
+ */
+
+static void test_read_float(void) {
+    FILE *stream = create_file("1 2.0");
+    File *file = make_file(stream, "-");
+    
+    Token *tok = read_token(file);
+    EQ(TOK_NUM, tok->val);
+    EQ(1, tok->num);
+
+    tok = read_token(file);
+    EQ(TOK_FLOAT, tok->val);
+    EQ(2.0, tok->flo);
+}
+
 int main(int argc, char **argv) {
     test_string();
     test_dict();
     test_dict_iter();
     test_file_simple();
     test_file_unreadc();
+    test_read_float();
     printf("OK\n");
     return 0;
 }
