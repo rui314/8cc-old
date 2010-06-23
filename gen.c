@@ -132,7 +132,7 @@ static void gen_call(String *b, Elf *elf, Section *text, Var *fn, List *args) {
     }
     if (!fn->sym) {
         fn->sym = make_symbol(fn->name, text, 0, STB_GLOBAL, STT_NOTYPE, 0);
-        list_push(elf->syms, fn->sym);
+        dict_put(elf->syms, to_string(fn->name), fn->sym);
     }
     o2(b, 0xc031); // XOR eax, eax
     o1(b, 0xe8); // CALL

@@ -7,7 +7,7 @@ static Elf *new_elf(void) {
     elf->sections = make_list();
     elf->shnum = 0;
     elf->symtabnum = 0;
-    elf->syms = make_list();
+    elf->syms = make_dict();
     return elf;
 }
 
@@ -36,8 +36,8 @@ static void write_one_symbol(Symbol *sym, int *index, String *symtab, String *st
 }
 
 static void write_sym_to_buf(Elf *elf, int *index, String *symtab, String *strtab, bool localonly) {
-    for (int i = 0; i < LIST_LEN(elf->syms); i++) {
-        Symbol *sym = LIST_ELEM(Symbol, elf->syms, i);
+    DictIter *iter = make_dict_iter(elf->syms);
+    for (Symbol *sym = dict_iter_next(iter); sym; sym = dict_iter_next(iter)) {
         if (localonly && sym->bind != STB_LOCAL)
             continue;
         if (!localonly && sym->bind == STB_LOCAL)
@@ -91,13 +91,10 @@ static void add_symtab(Elf *elf) {
 }
 
 static Symbol *find_symbol(Elf *elf, char *name) {
-    for (int i = 0; i < LIST_LEN(elf->syms); i++) {
-        Symbol *sym = LIST_ELEM(Symbol, elf->syms, i);
-        if (sym->name && strcmp(sym->name, name) == 0)
-            return sym;
-    }
-    error("cannot find symbol '%s'", name);
-    return NULL;
+    Symbol *sym = dict_get(elf->syms, to_string(name));
+    if (!sym)
+        error("cannot find symbol '%s'", name);
+    return sym;
 }
 
 static Section *find_section(Elf *elf, char *name) {
@@ -225,7 +222,7 @@ int main(int argc, char **argv) {
     List *insts = parse(infile, data);
     assemble(elf, text, insts);
     text->align = 16;
-    list_push(elf->syms, make_symbol("main", text, 0, STB_GLOBAL, STT_NOTYPE, 1));
+    dict_put(elf->syms, to_string("main"), make_symbol("main", text, 0, STB_GLOBAL, STT_NOTYPE, 1));
     add_section(elf, text);
 
     write_elf(outfile, elf);

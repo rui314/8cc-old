@@ -214,7 +214,7 @@ typedef struct Elf {
     List *sections;
     int shnum;
     int symtabnum;
-    List *syms;
+    Dict *syms;
 } Elf;
 
 /*
