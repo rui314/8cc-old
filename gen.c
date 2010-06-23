@@ -127,7 +127,7 @@ static void gen_call(String *b, Elf *elf, Section *text, Var *fn, List *args) {
             o8(b, LIST_ELEM(Var, args, i)->val.i);
             break;
         default:
-            error("8cc: unsupported var type: %c\n", LIST_ELEM(Var, args, i)->stype);
+            error("unsupported var type: %c\n", LIST_ELEM(Var, args, i)->stype);
         }
     }
     if (!fn->sym) {
@@ -156,7 +156,7 @@ void assemble(Elf *elf, Section *text, List *insts) {
             break;
         }
         default:
-            error("8cc: unknown op\n");
+            error("unknown op\n");
         }
     }
     o2(b, 0xc031); // XOR eax, eax
