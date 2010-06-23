@@ -31,9 +31,6 @@ File *open_file(char *path) {
     return make_file(stream, path);
 }
 
-static void unreadc_int(int c, File *file) {
-}
-
 void unreadc(int c, File *file) {
     if (c == '\n') file->lineno--;
     if (file->ungotten != EOF)
