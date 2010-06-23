@@ -63,7 +63,7 @@ static void add_symtab(Elf *elf) {
     for (int i = 0; i < 24; i++) o1(symtabb, 0);
     // File symbol
     o4(symtabb, STRING_LEN(strtabb)); // st_name
-    ostr(strtabb, "hello.asm");
+    ostr(strtabb, "noname");
     o1(symtabb, ELF64_ST_INFO(STB_LOCAL, STT_FILE)); // st_info
     o1(symtabb, 0); // other
     o2(symtabb, SHN_ABS); // st_shndx
@@ -72,7 +72,7 @@ static void add_symtab(Elf *elf) {
 
     int index = 2;
     write_sym_to_buf(elf, &index, symtabb, strtabb, true);
-    int localidx = LIST_LEN(elf->syms);
+    int localidx = index;
     write_section_sym(elf, &index, symtabb, strtabb);
     write_sym_to_buf(elf, &index, symtabb, strtabb, false);
     elf->symtabnum = LIST_LEN(elf->sections) + 1;
