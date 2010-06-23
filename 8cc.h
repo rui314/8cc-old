@@ -241,12 +241,14 @@ extern int readc(File *file);
 #define TOK_IDENT 2
 #define TOK_STR   3
 #define TOK_CHAR  4
+#define TOK_FLOAT 5
 
 typedef struct Token {
     int val;
     char ch;
     char *str;
     u64 num;
+    float flo;
     int lineno;
 } Token;
 
@@ -259,6 +261,7 @@ typedef union Cvalue {
 #define CTYPE_FLOAT  2
 
 extern List *parse(File *file, Section *data);
+extern Token *read_token(File *file);
 
 /*
  * Assembler
@@ -284,6 +287,7 @@ extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(char *name, Section *sect, long value, int bind, int type, int defined);
 
 extern Var *make_imm(u64 val);
+extern Var *make_immf(float val);
 extern Var *make_global(char *name, u64 val);
 extern int add_string(Section *data, char *str);
 extern Var *make_extern(char *name);

@@ -7,8 +7,8 @@ OBJS=8cc.o string.o list.o gen.o read.o file.o dict.o
 
 $(OBJS): 8cc.h
 
-tests: tests.o string.o list.o gen.o file.o dict.o 8cc.h
-	$(CC) $(CFLAGS) -o $@ string.o list.o gen.o tests.o file.o dict.o
+tests: tests.o string.o list.o gen.o file.o dict.o read.c 8cc.h
+	$(CC) $(CFLAGS) -o $@ string.o list.o gen.o tests.o file.o dict.o read.o
 
 clean:
 	-rm -f 8cc $(OBJS) *.o hello tests
