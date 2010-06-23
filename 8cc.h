@@ -150,21 +150,23 @@ typedef struct Section {
     int type;
     int flags;
     int align;
-    List *syms;
     int link;
     List *rels;
     int info;
     int entsize;
     int shndx;
+    int symindex;
 } Section;
 
 typedef struct Symbol {
     char *name;
+    Section *section;
     long value;
     int bind;
     int type;
     int sectidx;
     int defined;
+    int index;
 } Symbol;
 
 typedef struct Reloc {
@@ -244,9 +246,9 @@ typedef struct Inst {
     List *args;
 } Inst;
 
-extern void assemble(Section *text, List *insts);
+extern void assemble(Elf *elf, Section *text, List *insts);
 extern Section *make_section(char *name, int type);
-extern Symbol *make_symbol(char *name, long value, int bind, int type, int defined);
+extern Symbol *make_symbol(char *name, Section *sect, long value, int bind, int type, int defined);
 
 extern Var *make_imm(u64 val);
 extern Var *make_global(char *name, u64 val);

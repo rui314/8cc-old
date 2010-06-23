@@ -4,26 +4,28 @@ Section *make_section(char *name, int type) {
     Section *sect = malloc(sizeof(Section));
     sect->body = make_string();
     sect->name = malloc(strlen(name) + 1);
+    strcpy(sect->name, name);
     sect->shstrtab_off = 0;
     sect->type = type;
     sect->flags = 0;
     sect->align = 1;
-    sect->syms = make_list();
     sect->rels = make_list();
     sect->link = 0;
     sect->info = 0;
-    strcpy(sect->name, name);
     sect->entsize = 0;
+    sect->symindex = 0;
     return sect;
 }
 
-Symbol *make_symbol(char *name, long value, int bind, int type, int defined) {
+Symbol *make_symbol(char *name, Section *sect, long value, int bind, int type, int defined) {
     Symbol *sym = malloc(sizeof(Symbol));
     sym->name = name;
+    sym->section = sect;
     sym->value = value;
     sym->bind = bind;
     sym->type = type;
     sym->defined = defined;
+    sym->index = -1;
     return sym;
 }
 
@@ -112,7 +114,7 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
 static u32 PUSH_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
 static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
     
-static void gen_call(String *b, Section *text, Var *fn, List *args) {
+static void gen_call(String *b, Elf *elf, Section *text, Var *fn, List *args) {
     for (int i = 0; i < LIST_LEN(args); i++) {
         switch (LIST_ELEM(Var, args, i)->stype) {
         case VAR_GLOBAL:
@@ -129,8 +131,8 @@ static void gen_call(String *b, Section *text, Var *fn, List *args) {
         }
     }
     if (!fn->sym) {
-        fn->sym = make_symbol(fn->name, 0, STB_GLOBAL, STT_NOTYPE, 0);
-        list_push(text->syms, fn->sym);
+        fn->sym = make_symbol(fn->name, text, 0, STB_GLOBAL, STT_NOTYPE, 0);
+        list_push(elf->syms, fn->sym);
     }
     o2(b, 0xc031); // XOR eax, eax
     o1(b, 0xe8); // CALL
@@ -138,7 +140,7 @@ static void gen_call(String *b, Section *text, Var *fn, List *args) {
     o4(b, 0);
 }
 
-void assemble(Section *text, List *insts) {
+void assemble(Elf *elf, Section *text, List *insts) {
     String *b = text->body;
     o1(b, 0x55); // PUSH rbp
     o1(b, 0x48); // MOV rbp, rsp
@@ -150,7 +152,7 @@ void assemble(Section *text, List *insts) {
         case '$': {
             Var *fn = inst->arg0;
             List *args = inst->args;
-            gen_call(b, text, fn, args);
+            gen_call(b, elf, text, fn, args);
             break;
         }
         default:

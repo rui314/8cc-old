@@ -16,33 +16,42 @@ void add_section(Elf *elf, Section *sect) {
     sect->shndx = LIST_LEN(elf->sections);
 }
 
-static void write_sym_to_buf(Elf *elf, String *symtab, String *strtab, bool localonly) {
+static void write_one_symbol(Symbol *sym, int *index, String *symtab, String *strtab) {
+    if (sym->name) {
+        o4(symtab, STRING_LEN(strtab)); // st_name
+        ostr(strtab, sym->name);
+    } else {
+        o4(symtab, 0); // st_name
+    }
+    o1(symtab, ELF64_ST_INFO(sym->bind, sym->type)); // st_info;
+    o1(symtab, 0); // st_other;
+    if (sym->defined) {
+        o2(symtab, sym->section->shndx); // st_shndx
+    } else {
+        o2(symtab, 0); // st_shndx
+    }
+    o8(symtab, sym->value); // st_value
+    o8(symtab, 0); // st_size
+    sym->index = (*index)++;
+}
+
+static void write_sym_to_buf(Elf *elf, int *index, String *symtab, String *strtab, bool localonly) {
+    for (int i = 0; i < LIST_LEN(elf->syms); i++) {
+        Symbol *sym = LIST_ELEM(Symbol, elf->syms, i);
+        if (localonly && sym->bind != STB_LOCAL)
+            continue;
+        if (!localonly && sym->bind == STB_LOCAL)
+            continue;
+        write_one_symbol(sym, index, symtab, strtab);
+    }
+}
+
+static void write_section_sym(Elf *elf, int *index, String *symtab, String *strtab) {
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
         Section *sect = LIST_ELEM(Section, elf->sections, i);
-        for (int j = 0; j < LIST_LEN(sect->syms); j++) {
-            Symbol *sym = LIST_ELEM(Symbol, sect->syms, j);
-            if (localonly && sym->bind != STB_LOCAL)
-                continue;
-            if (!localonly && sym->bind == STB_LOCAL)
-                continue;
-            if (sym->name) {
-                o4(symtab, STRING_LEN(strtab)); // st_name
-                ostr(strtab, sym->name);
-            } else {
-                o4(symtab, 0); // st_name
-            }
-            o1(symtab, ELF64_ST_INFO(sym->bind, sym->type)); // st_info;
-            o1(symtab, 0); // st_other;
-            if (sym->defined) {
-                sym->sectidx = i + 1;
-                o2(symtab, sym->sectidx); // st_shndx
-            } else {
-                o2(symtab, 0); // st_shndx
-            }
-            o8(symtab, sym->value); // st_value
-            o8(symtab, 0); // st_size
-            list_push(elf->syms, sym);
-        }
+        Symbol *sym = make_symbol(NULL, sect, 0, STB_LOCAL, STT_SECTION, 1);
+        write_one_symbol(sym, index, symtab, strtab);
+        sect->symindex = sym->index;
     }
 }
 
@@ -61,9 +70,11 @@ static void add_symtab(Elf *elf) {
     o8(symtabb, 0); // st_value
     o8(symtabb, 0); // st_size
 
-    write_sym_to_buf(elf, symtabb, strtabb, true);
+    int index = 2;
+    write_sym_to_buf(elf, &index, symtabb, strtabb, true);
     int localidx = LIST_LEN(elf->syms);
-    write_sym_to_buf(elf, symtabb, strtabb, false);
+    write_section_sym(elf, &index, symtabb, strtabb);
+    write_sym_to_buf(elf, &index, symtabb, strtabb, false);
     elf->symtabnum = LIST_LEN(elf->sections) + 1;
 
     Section *symtab = make_section(".symtab", SHT_SYMTAB);
@@ -79,35 +90,24 @@ static void add_symtab(Elf *elf) {
     add_section(elf, strtab);
 }
 
-static int find_symbol(Elf *elf, char *sym) {
+static Symbol *find_symbol(Elf *elf, char *name) {
     for (int i = 0; i < LIST_LEN(elf->syms); i++) {
-        char *name = LIST_ELEM(Symbol, elf->syms, i)->name;
-        if (name && strcmp(name, sym) == 0)
-            return i + 2;
+        Symbol *sym = LIST_ELEM(Symbol, elf->syms, i);
+        if (sym->name && strcmp(sym->name, name) == 0)
+            return sym;
     }
-    fprintf(stderr, "cannot find symbol '%s'", sym);
-    exit(-1);
+    error("cannot find symbol '%s'", name);
+    return NULL;
 }
 
-static int find_section(Elf *elf, char *name) {
+static Section *find_section(Elf *elf, char *name) {
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        if (strcmp(LIST_ELEM(Section, elf->sections, i)->name, name) == 0)
-            return i + 1;
+        Section *sect = LIST_ELEM(Section, elf->sections, i);
+        if (!strcmp(sect->name, name))
+            return sect;
     }
-    fprintf(stderr, "cannot find section '%s'", name);
-    exit(-1);
-}
-
-static int find_symbol_section(Elf *elf, char *name) {
-    int sectidx = find_section(elf, name);
-    for (int i = 0; i < LIST_LEN(elf->syms); i++) {
-        if (LIST_ELEM(Symbol, elf->syms, i)->sectidx == sectidx
-            && !LIST_ELEM(Symbol, elf->syms, i)->name) {
-            return i + 2;
-        }
-    }
-    fprintf(stderr, "cannot find symbol section '%s'", name);
-    exit(-1);
+    error("cannot find section '%s'", name);
+    return NULL;
 }
 
 static void add_reloc(Elf *elf) {
@@ -121,9 +121,9 @@ static void add_reloc(Elf *elf) {
             Reloc *rel = LIST_ELEM(Reloc, sect->rels, j);
             o8(b, rel->off);
             if (rel->sym) {
-                o8(b, ELF64_R_INFO(find_symbol(elf, rel->sym), rel->type));
+                o8(b, ELF64_R_INFO(find_symbol(elf, rel->sym)->index, rel->type));
             } else {
-                o8(b, ELF64_R_INFO(find_symbol_section(elf, rel->section), rel->type));
+                o8(b, ELF64_R_INFO(find_section(elf, rel->section)->symindex, rel->type));
             }
             o8(b, rel->addend);
         }
@@ -169,17 +169,13 @@ static void write_section(String *header, String *content, Section *sect, int of
     align(content, 16);
 }
 
-static int num_sections(Elf *elf) {
-    return LIST_LEN(elf->sections) + 1;
-}
-
 static void write_elf(FILE *outfile, Elf *elf) {
     add_symtab(elf);
     add_reloc(elf);
     add_shstrtab(elf);
 
     String *header = make_string();
-    int numsect = num_sections(elf);
+    int numsect = LIST_LEN(elf->sections) + 1;
     out(header, elf_ident, sizeof(elf_ident));
     o2(header, 2);  // e_type = ET_EXEC
     o2(header, 62); // e_machine = EM_X86_64
@@ -222,16 +218,14 @@ int main(int argc, char **argv) {
     Section *data = make_section(".data", SHT_PROGBITS);
     data->flags = SHF_ALLOC | SHF_WRITE;
     data->align = 4;
-    list_push(data->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
     add_section(elf, data);
 
     Section *text = make_section(".text", SHT_PROGBITS);
     text->flags = SHF_ALLOC | SHF_EXECINSTR;
     List *insts = parse(infile, data);
-    assemble(text, insts);
+    assemble(elf, text, insts);
     text->align = 16;
-    list_push(text->syms, make_symbol("main", 0, STB_GLOBAL, STT_NOTYPE, 1));
-    list_push(text->syms, make_symbol(NULL, 0, STB_LOCAL, STT_SECTION, 1));
+    list_push(elf->syms, make_symbol("main", text, 0, STB_GLOBAL, STT_NOTYPE, 1));
     add_section(elf, text);
 
     write_elf(outfile, elf);
