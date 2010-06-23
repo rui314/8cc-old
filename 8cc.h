@@ -112,6 +112,8 @@ typedef struct String {
 #define STRING_BODY(b) ((b)->buf)
 
 extern String *make_string(void);
+extern String *to_string(char *str);
+extern bool string_equal(String *a, String *b);
 extern void o1(String *b, int byte);
 extern void out(String *b, void *data, size_t size);
 extern void ostr(String *b, char *str);
@@ -137,6 +139,29 @@ typedef struct List {
 
 extern List *make_list(void);
 extern void list_push(List *list, void *e);
+
+/*
+ * Dictionary (Hash table)
+ */
+
+#define DICT_INITIAL_SIZE 16
+
+typedef struct Bucket {
+    u32 hashval;
+    String *key;
+    void *elem;
+} Bucket;
+
+typedef struct Dict {
+    Bucket *buckets;
+    int nalloc;
+    int nelem;
+} Dict;
+
+extern Dict *make_dict(void);
+extern void dict_put(Dict *dict, String *key, void *obj);
+extern void *dict_get(Dict *dict, String *key);
+extern bool dict_delete(Dict *dict, String *key);
 
 /*
  * ELF headers (internal representation; not necessarily correspondent

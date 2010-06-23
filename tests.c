@@ -42,6 +42,49 @@ static void test_string(void) {
     EQ(strcmp(STRING_BODY(b), "abcdefghi"), 0);
 }
 
+/*
+ * Dictionary
+ */
+
+static void test_dict(void) {
+    Dict *dict = make_dict();
+    EQ(0, dict->nelem);
+    String *k = to_string("abc");
+    dict_put(dict, k, (void *)-1);
+    EQ(1, dict->nelem);
+    EQ(-1, (long) dict_get(dict, k));
+    EQ(NULL, dict_get(dict, to_string("nonexistent")));
+
+    // test rehashing
+    for (int i = 0; i < DICT_INITIAL_SIZE * 2; i++) {
+        char buf[] = "0123456789";
+        sprintf(buf, "key%d", i);
+        dict_put(dict, to_string(buf), (void *)(long)i);
+    }
+    EQ(1 + DICT_INITIAL_SIZE * 2, dict->nelem);
+    for (int i = 0; i < DICT_INITIAL_SIZE * 2; i++) {
+        char buf[] = "0123456789";
+        sprintf(buf, "key%d", i);
+        EQ(i, (int)(long)dict_get(dict, to_string(buf)));
+    }
+
+    // Store duplicate key
+    dict_put(dict, k, (void *)-2);
+    EQ(-2, (long) dict_get(dict, k));
+    EQ(1 + DICT_INITIAL_SIZE * 2, dict->nelem);
+
+    // Removal
+    bool existed = dict_delete(dict, k);
+    EQ(DICT_INITIAL_SIZE * 2, dict->nelem);
+    EQ(NULL, dict_get(dict, k));
+    EQ(true, existed);
+    existed = dict_delete(dict, k);
+    EQ(false, existed);
+}
+
+/*
+ * Compiler
+ */
 static FILE *create_file(char *content) {
     char tmpl[] = "tmpXXXXXX";
     int fd = mkstemp(tmpl);
@@ -97,6 +140,7 @@ static void test_file(void) {
 
 int main(int argc, char **argv) {
     test_string();
+    test_dict();
     test_file();
     printf("OK\n");
     return 0;
