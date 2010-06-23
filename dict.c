@@ -23,7 +23,7 @@ static inline u32 string_hash(String *str) {
     return hv == 0 ? 1 : hv;
 }
 
-Bucket *find_bucket(Dict *dict, String *key, u32 hv) {
+static Bucket *find_bucket(Dict *dict, String *key, u32 hv) {
     int start = hv % dict->nalloc;
     Bucket *ent;
     for (int i = start; i < dict->nalloc; i++) {
