@@ -163,6 +163,14 @@ extern void dict_put(Dict *dict, String *key, void *obj);
 extern void *dict_get(Dict *dict, String *key);
 extern bool dict_delete(Dict *dict, String *key);
 
+typedef struct DictIter {
+    Dict *dict;
+    int idx;
+} DictIter;
+
+extern DictIter *make_dict_iter(Dict* dict);
+extern void *dict_iter_next(DictIter* dict);
+
 /*
  * ELF headers (internal representation; not necessarily correspondent
  * to on-disk ELF format)

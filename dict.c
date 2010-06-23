@@ -91,3 +91,23 @@ void *dict_get(Dict *dict, String *key) {
     if (!ent->hashval) return NULL;
     return ent->elem;
 }
+
+/*
+ * Iterator
+ */
+DictIter *make_dict_iter(Dict* dict) {
+    DictIter *r = malloc(sizeof(DictIter));
+    r->dict = dict;
+    r->idx = 0;
+    return r;
+}
+
+void *dict_iter_next(DictIter* iter) {
+    while (iter->idx < iter->dict->nalloc) {
+        Bucket *ent = &iter->dict->buckets[iter->idx];
+        iter->idx++;
+        if (ent->hashval)
+            return ent->elem;
+    }
+    return NULL;
+}
