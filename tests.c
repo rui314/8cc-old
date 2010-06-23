@@ -82,6 +82,18 @@ static void test_dict(void) {
     EQ(false, existed);
 }
 
+static void test_dict_iter(void) {
+    Dict *dict = make_dict();
+    DictIter *iter = make_dict_iter(dict);
+    EQ(NULL, dict_iter_next(iter));
+
+    dict_put(dict, to_string("key"), (void *)-1);
+    iter = make_dict_iter(dict);
+    EQ(-1, (long)dict_iter_next(iter));
+    EQ(NULL, dict_iter_next(iter));
+}
+
+
 /*
  * Compiler
  */
@@ -133,15 +145,12 @@ static void test_file_simple(void) {
     EQ_CHAR(EOF, readc(file));
 }
 
-static void test_file(void) {
-    test_file_simple();
-    test_file_unreadc();
-}
-
 int main(int argc, char **argv) {
     test_string();
     test_dict();
-    test_file();
+    test_dict_iter();
+    test_file_simple();
+    test_file_unreadc();
     printf("OK\n");
     return 0;
 }
