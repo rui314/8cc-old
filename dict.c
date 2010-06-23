@@ -23,26 +23,28 @@ static inline u32 string_hash(String *str) {
     return hv == 0 ? 1 : hv;
 }
 
-static bool store(Dict *dict, String *key, u32 hv, void *obj) {
+Bucket *find_bucket(Dict *dict, String *key, u32 hv) {
     int start = hv % dict->nalloc;
     Bucket *ent;
-    int r = false;
     for (int i = start; i < dict->nalloc; i++) {
         ent = &dict->buckets[i];
-        if (!ent->hashval) goto found1;
+        if (!ent->hashval) return ent;
         if (ent->hashval == hv && string_equal(ent->key, key))
-            goto found;
+            return ent;
     }
     for (int i = 0; i < start; i++) {
         ent = &dict->buckets[i];
-        if (!ent->hashval) goto found1;
+        if (!ent->hashval) return ent;
         if (ent->hashval == hv && string_equal(ent->key, key))
-            goto found;
+            return ent;
     }
     error("[internal errror] no space found in dictionary");
- found:
-    r = true;
- found1:
+    return NULL;
+}
+
+static bool store(Dict *dict, String *key, u32 hv, void *obj) {
+    Bucket *ent = find_bucket(dict, key, hv);
+    bool r = !!ent->hashval;
     ent->hashval = hv;
     ent->key = key;
     ent->elem = obj;
@@ -74,27 +76,9 @@ void dict_put(Dict *dict, String *key, void *obj) {
     if (!overwrite) dict->nelem++;
 }
 
-static Bucket *dict_get_int(Dict *dict, String *key) {
-    u32 hv = string_hash(key);
-    int start = hv % dict->nalloc;
-    Bucket *ent;
-    for (int i = start; i < dict->nalloc; i++) {
-        ent = &dict->buckets[i];
-        if (!ent->hashval) return NULL;
-        if (string_equal(ent->key, key)) return ent;
-    }
-    for (int i = 0; i < start; i++) {
-        ent = &dict->buckets[i];
-        if (!ent->hashval) return NULL;
-        if (string_equal(ent->key, key)) return ent;
-    }
-    error("[internal errror] dict is full.  Should not happen.");
-    return NULL;
-}
-
 bool dict_delete(Dict *dict, String *key) {
-    Bucket *ent = dict_get_int(dict, key);
-    if (!ent) return false;
+    Bucket *ent = find_bucket(dict, key, string_hash(key));
+    if (!ent->hashval) return false;
     ent->hashval = 0;
     ent->key = NULL;
     ent->elem = NULL;
@@ -103,7 +87,7 @@ bool dict_delete(Dict *dict, String *key) {
 }
 
 void *dict_get(Dict *dict, String *key) {
-    Bucket *ent = dict_get_int(dict, key);
-    if (!ent) return NULL;
+    Bucket *ent = find_bucket(dict, key, string_hash(key));
+    if (!ent->hashval) return NULL;
     return ent->elem;
 }
