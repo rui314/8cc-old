@@ -1,11 +1,29 @@
 #include "8cc.h"
 
-String *make_string(void) {
+static String *make_string_int(int size) {
     String *obj = malloc(sizeof(String));
-    obj->buf = malloc(STRING_INITIAL_SIZE);
-    obj->nalloc = STRING_INITIAL_SIZE;
+    obj->buf = malloc(size);
+    obj->nalloc = size;
     obj->len = 0;
     return obj;
+}
+
+String *make_string(void) {
+    return make_string_int(STRING_INITIAL_SIZE);
+}
+
+String *to_string(char *str) {
+    int size = STRING_INITIAL_SIZE;
+    int needed = strlen(str) + 1;
+    if (size < needed) size <<= 1;
+    String *r = make_string_int(size);
+    out(r, str, needed);
+    return r;
+}
+
+bool string_equal(String *a, String *b) {
+    return STRING_LEN(a) == STRING_LEN(b)
+        && !memcmp(STRING_BODY(a), STRING_BODY(b), STRING_LEN(a));
 }
 
 static void ensure_room(String *b, long room) {
