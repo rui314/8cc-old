@@ -1,5 +1,15 @@
 #!/bin/sh
 echo
 ./tests
-[ "`./hello`" = 'Hello, world!' ] || (echo NG; exit)
+
+echo 'main() {printf("Hello, world!\n");}' | ./8cc - tmp$$.o
+gcc -o tmp$$ tmp$$.o
+[ "`./tmp$$`" = 'Hello, world!' ] || (echo NG; exit)
+
+echo 'main() {printf("%2.2f %2.2f %d\n", 12.34, 56.78, 42);}' | ./8cc - tmp$$.o
+gcc -o tmp$$ tmp$$.o
+[ "`./tmp$$`" = '12.34 56.78 42' ] || (echo NG; exit)
+
+rm -f tmp$$ tmp$$.o
+
 echo OK

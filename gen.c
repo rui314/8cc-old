@@ -143,13 +143,12 @@ static void gen_call(String *b, Elf *elf, Section *text, Section *data, Var *fn,
                 o8(b, var->val.i);
                 break;
             case CTYPE_FLOAT:
-                o4(b, PUSH_XMM_ABS[xmm++]);
-                fprintf(stderr, "  %x\n", STRING_LEN(data->body));
                 align(data->body, 8);
-                fprintf(stderr, "  %x\n", STRING_LEN(data->body));
-                add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_PC32, STRING_LEN(data->body) - 8);
-                o4(data->body, *(u32 *)&var->val.f);
+                o4(b, PUSH_XMM_ABS[xmm++]);
+                add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_PC32, STRING_LEN(data->body) - 4);
                 o4(b, 0);
+                double tmp = var->val.f;
+                o8(data->body, *(u64 *)&tmp);
                 break;
             }
             break;

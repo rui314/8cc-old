@@ -7,7 +7,7 @@ OBJS=8cc.o string.o list.o gen.o read.o file.o dict.o
 
 $(OBJS): 8cc.h
 
-tests: tests.o string.o list.o gen.o file.o dict.o read.c 8cc.h
+tests: tests.o string.o list.o gen.o file.o dict.o read.o 8cc.h
 	$(CC) $(CFLAGS) -o $@ string.o list.o gen.o tests.o file.o dict.o read.o
 
 clean:
@@ -17,7 +17,7 @@ hello: 8cc
 	echo 'main() {printf("Hello, world!\n");}' | ./8cc - hello.o
 	$(CC) -o hello hello.o
 
-test: hello tests
+test: tests 8cc
 	@./runtest
 
 all: 8cc
