@@ -169,7 +169,7 @@ static void read_statement(File *file, Section *data, Token *fntok, List *lis) {
         case TOK_CHAR:
             error("identifier or char is not supported here");
         case TOK_STR:
-            list_push(args, make_global("", add_string(data, arg->str)));
+            list_push(args, make_global("", add_string(data, to_string(arg->str))));
         }
     }
     Var *fn = make_extern(fntok->str);

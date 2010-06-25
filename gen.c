@@ -116,9 +116,9 @@ struct Var **make_list2(Var *arg0, Var *arg1) {
     return r;
 }
 
-int add_string(Section *data, char *str) {
+int add_string(Section *data, String *str) {
     int r = STRING_LEN(data->body);
-    out(data->body, str, strlen(str));
+    out(data->body, STRING_BODY(str), STRING_LEN(str));
     return r;
 }
 
@@ -175,7 +175,7 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args) {
     o1(b, 0xb8); // MOV eax
     o4(b, xmm);
     o1(b, 0xe8); // CALL
-    add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, 0xfffffffffffffffc);
+    add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, -4);
     o4(b, 0);
 }
 

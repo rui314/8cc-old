@@ -291,7 +291,7 @@ extern Symbol *make_symbol(char *name, Section *sect, long value, int bind, int 
 extern Var *make_imm(u64 val);
 extern Var *make_immf(float val);
 extern Var *make_global(char *name, u64 val);
-extern int add_string(Section *data, char *str);
+extern int add_string(Section *data, String *str);
 extern Var *make_extern(char *name);
 extern Inst *make_func_call(Var *fn, List *args);
 
