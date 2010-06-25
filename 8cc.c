@@ -214,7 +214,6 @@ int main(int argc, char **argv) {
 
     List *insts = parse(infile, elf);
     assemble(elf, insts);
-    dict_put(elf->syms, to_string("main"), make_symbol("main", text, 0, STB_GLOBAL, STT_NOTYPE, 1));
 
     write_elf(outfile, elf);
 }
