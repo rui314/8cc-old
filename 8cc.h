@@ -217,6 +217,8 @@ typedef struct Elf {
     Dict *syms;
 } Elf;
 
+extern Section *find_section(Elf *elf, char *name);
+
 /*
  * File
  */
@@ -260,7 +262,7 @@ typedef union Cvalue {
 #define CTYPE_INT    1
 #define CTYPE_FLOAT  2
 
-extern List *parse(File *file, Section *data);
+extern List *parse(File *file, Elf *elf);
 extern Token *read_token(File *file);
 
 /*
@@ -282,7 +284,7 @@ typedef struct Inst {
     List *args;
 } Inst;
 
-extern void assemble(Elf *elf, Section *text, Section *data, List *insts);
+extern void assemble(Elf *elf, List *insts);
 extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(char *name, Section *sect, long value, int bind, int type, int defined);
 

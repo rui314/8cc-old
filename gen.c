@@ -17,6 +17,16 @@ Section *make_section(char *name, int type) {
     return sect;
 }
 
+Section *find_section(Elf *elf, char *name) {
+    for (int i = 0; i < LIST_LEN(elf->sections); i++) {
+        Section *sect = LIST_ELEM(Section, elf->sections, i);
+        if (!strcmp(sect->name, name))
+            return sect;
+    }
+    error("cannot find section '%s'", name);
+    return NULL;
+}
+
 Symbol *make_symbol(char *name, Section *sect, long value, int bind, int type, int defined) {
     Symbol *sym = malloc(sizeof(Symbol));
     sym->name = name;
@@ -125,7 +135,9 @@ static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
 static u32 PUSH_XMM_ABS[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
                               0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
 
-static void gen_call(String *b, Elf *elf, Section *text, Section *data, Var *fn, List *args) {
+static void gen_call(String *b, Elf *elf, Var *fn, List *args) {
+    Section *text = find_section(elf, ".text");
+    Section *data = find_section(elf, ".data");
     int gpr = 0;
     int xmm = 0;
     for (int i = 0; i < LIST_LEN(args); i++) {
@@ -167,8 +179,8 @@ static void gen_call(String *b, Elf *elf, Section *text, Section *data, Var *fn,
     o4(b, 0);
 }
 
-void assemble(Elf *elf, Section *text, Section *data, List *insts) {
-    String *b = text->body;
+void assemble(Elf *elf, List *insts) {
+    String *b = find_section(elf, ".text")->body;
     o1(b, 0x55); // PUSH rbp
     o1(b, 0x48); // MOV rbp, rsp
     o1(b, 0x89);
@@ -179,7 +191,7 @@ void assemble(Elf *elf, Section *text, Section *data, List *insts) {
         case '$': {
             Var *fn = inst->arg0;
             List *args = inst->args;
-            gen_call(b, elf, text, data, fn, args);
+            gen_call(b, elf, fn, args);
             break;
         }
         default:
