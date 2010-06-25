@@ -97,16 +97,6 @@ static Symbol *find_symbol(Elf *elf, char *name) {
     return sym;
 }
 
-static Section *find_section(Elf *elf, char *name) {
-    for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        Section *sect = LIST_ELEM(Section, elf->sections, i);
-        if (!strcmp(sect->name, name))
-            return sect;
-    }
-    error("cannot find section '%s'", name);
-    return NULL;
-}
-
 static void add_reloc(Elf *elf) {
     char name[100];
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
@@ -219,11 +209,12 @@ int main(int argc, char **argv) {
 
     Section *text = make_section(".text", SHT_PROGBITS);
     text->flags = SHF_ALLOC | SHF_EXECINSTR;
-    List *insts = parse(infile, data);
-    assemble(elf, text, data, insts);
     text->align = 16;
-    dict_put(elf->syms, to_string("main"), make_symbol("main", text, 0, STB_GLOBAL, STT_NOTYPE, 1));
     add_section(elf, text);
+
+    List *insts = parse(infile, elf);
+    assemble(elf, insts);
+    dict_put(elf->syms, to_string("main"), make_symbol("main", text, 0, STB_GLOBAL, STT_NOTYPE, 1));
 
     write_elf(outfile, elf);
 }

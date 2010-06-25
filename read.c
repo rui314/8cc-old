@@ -176,25 +176,28 @@ static void read_statement(File *file, Section *data, Token *fntok, List *lis) {
     list_push(lis, make_func_call(fn, args));
 }
 
-static List *read_func(File *file, Section *data) {
+static List *read_func(File *file, Elf *elf) {
+    Section *text = find_section(elf, ".text");
+    Section *data = find_section(elf, ".data");
     List *r = make_list();
-    Token *tok = read_token(file);
-    if (tok->val != TOK_IDENT)
-        error("line %d: identifier expected", tok->lineno);
+    Token *fname = read_token(file);
+    if (fname->val != TOK_IDENT)
+        error("line %d: identifier expected", fname->lineno);
     expect(file, '(');
     expect(file, ')');
     expect(file, '{');
     for (;;) {
-        tok = read_token(file);
+        Token *tok = read_token(file);
         if (tok == NULL)
             error("premature end of input");
         if (tok->val == '}')
             break;
         read_statement(file, data, tok, r);
     }
+    dict_put(elf->syms, to_string(fname->str), make_symbol(fname->str, text, 0, STB_GLOBAL, STT_NOTYPE, 1));
     return r;
 }
 
-List *parse(File *file, Section *data) {
-    return read_func(file, data);
+List *parse(File *file, Elf *elf) {
+    return read_func(file, elf);
 }
