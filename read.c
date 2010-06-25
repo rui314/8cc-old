@@ -140,8 +140,7 @@ static void expect(File *file, char expected) {
     }
 }
 
-static void read_statement(File *file, Section *data, List *lis) {
-    Token *fntok = read_token(file);
+static void read_statement(File *file, Section *data, Token *fntok, List *lis) {
     List *argtoks = make_list();
     expect(file, '(');
     for (;;) {
@@ -185,8 +184,14 @@ static List *read_func(File *file, Section *data) {
     expect(file, '(');
     expect(file, ')');
     expect(file, '{');
-    read_statement(file, data, r);
-    expect(file, '}');
+    for (;;) {
+        tok = read_token(file);
+        if (tok == NULL)
+            error("premature end of input");
+        if (tok->val == '}')
+            break;
+        read_statement(file, data, tok, r);
+    }
     return r;
 }
 

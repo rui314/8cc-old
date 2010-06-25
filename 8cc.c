@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
     Section *text = make_section(".text", SHT_PROGBITS);
     text->flags = SHF_ALLOC | SHF_EXECINSTR;
     List *insts = parse(infile, data);
-    assemble(elf, text, insts);
+    assemble(elf, text, data, insts);
     text->align = 16;
     dict_put(elf->syms, to_string("main"), make_symbol("main", text, 0, STB_GLOBAL, STT_NOTYPE, 1));
     add_section(elf, text);

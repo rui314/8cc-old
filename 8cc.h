@@ -282,7 +282,7 @@ typedef struct Inst {
     List *args;
 } Inst;
 
-extern void assemble(Elf *elf, Section *text, List *insts);
+extern void assemble(Elf *elf, Section *text, Section *data, List *insts);
 extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(char *name, Section *sect, long value, int bind, int type, int defined);
 

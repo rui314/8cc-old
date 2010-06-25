@@ -125,27 +125,31 @@ static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
 static u32 PUSH_XMM_ABS[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
                               0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
 
-static void gen_call(String *b, Elf *elf, Section *text, Var *fn, List *args) {
-    int nxmm = 0;
+static void gen_call(String *b, Elf *elf, Section *text, Section *data, Var *fn, List *args) {
+    int gpr = 0;
+    int xmm = 0;
     for (int i = 0; i < LIST_LEN(args); i++) {
         Var *var = LIST_ELEM(Var, args, i);
         switch (var->stype) {
         case VAR_GLOBAL:
-            o2(b, PUSH_ABS[i]);
+            o2(b, PUSH_ABS[gpr++]);
             add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, var->val.i);
             o8(b, 0);
             break;
         case VAR_IMM:
             switch (var->ctype) {
             case CTYPE_INT:
-                o2(b, PUSH_ABS[i]);
+                o2(b, PUSH_ABS[gpr++]);
                 o8(b, var->val.i);
                 break;
             case CTYPE_FLOAT:
-                o4(b, PUSH_XMM_ABS[i]);
-                add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_32, (u32)var->val.f);
+                o4(b, PUSH_XMM_ABS[xmm++]);
+                fprintf(stderr, "  %x\n", STRING_LEN(data->body));
+                align(data->body, 8);
+                fprintf(stderr, "  %x\n", STRING_LEN(data->body));
+                add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_PC32, STRING_LEN(data->body) - 8);
+                o4(data->body, *(u32 *)&var->val.f);
                 o4(b, 0);
-                nxmm++;
                 break;
             }
             break;
@@ -158,13 +162,13 @@ static void gen_call(String *b, Elf *elf, Section *text, Var *fn, List *args) {
         dict_put(elf->syms, to_string(fn->name), fn->sym);
     }
     o1(b, 0xb8); // MOV eax
-    o4(b, nxmm);
+    o4(b, xmm);
     o1(b, 0xe8); // CALL
     add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, 0xfffffffffffffffc);
     o4(b, 0);
 }
 
-void assemble(Elf *elf, Section *text, List *insts) {
+void assemble(Elf *elf, Section *text, Section *data, List *insts) {
     String *b = text->body;
     o1(b, 0x55); // PUSH rbp
     o1(b, 0x48); // MOV rbp, rsp
@@ -176,7 +180,7 @@ void assemble(Elf *elf, Section *text, List *insts) {
         case '$': {
             Var *fn = inst->arg0;
             List *args = inst->args;
-            gen_call(b, elf, text, fn, args);
+            gen_call(b, elf, text, data, fn, args);
             break;
         }
         default:
