@@ -7,7 +7,7 @@ static Elf *new_elf(void) {
     elf->sections = make_list();
     elf->shnum = 0;
     elf->symtabnum = 0;
-    elf->syms = make_dict();
+    elf->syms = make_string_dict();
     return elf;
 }
 

@@ -46,7 +46,6 @@ static ReaderVar *find_var(ReadContext *ctx, String *ident) {
         }
     }
     error("variable '%s' not found", STRING_BODY(ident));
-    return NULL;
 }
 
 static Token *read_num(File *file, char first, int lineno) {

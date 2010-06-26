@@ -94,7 +94,7 @@
 /*
  * Common
  */
-extern void error(char *format, ...);
+extern __attribute__((noreturn)) void error(char *format, ...);
 
 /*
  * Byte String
@@ -151,20 +151,25 @@ extern void list_pop(List *list);
 
 typedef struct Bucket {
     u32 hashval;
-    String *key;
+    void *key;
     void *elem;
 } Bucket;
 
+#define DICT_TYPE_STRING  0
+#define DICT_TYPE_ADDRESS 1
+
 typedef struct Dict {
+    int type;
     Bucket *buckets;
     int nalloc;
     int nelem;
 } Dict;
 
-extern Dict *make_dict(void);
-extern void dict_put(Dict *dict, String *key, void *obj);
-extern void *dict_get(Dict *dict, String *key);
-extern bool dict_delete(Dict *dict, String *key);
+extern Dict *make_string_dict(void);
+extern Dict *make_address_dict(void);
+extern void dict_put(Dict *dict, void *key, void *obj);
+extern void *dict_get(Dict *dict, void *key);
+extern bool dict_delete(Dict *dict, void *key);
 
 typedef struct DictIter {
     Dict *dict;
