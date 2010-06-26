@@ -47,7 +47,7 @@ static void test_string(void) {
  */
 
 static void test_dict(void) {
-    Dict *dict = make_dict();
+    Dict *dict = make_string_dict();
     EQ(0, dict->nelem);
     String *k = to_string("abc");
     dict_put(dict, k, (void *)-1);
@@ -80,10 +80,17 @@ static void test_dict(void) {
     EQ(true, existed);
     existed = dict_delete(dict, k);
     EQ(false, existed);
+
+    // Address dictionary
+    dict = make_address_dict();
+    k = to_string("abc");
+    dict_put(dict, k, (void *)-1);
+    EQ(-1, (long) dict_get(dict, k));
+    EQ(NULL, dict_get(dict, to_string("abc")));
 }
 
 static void test_dict_iter(void) {
-    Dict *dict = make_dict();
+    Dict *dict = make_string_dict();
     DictIter *iter = make_dict_iter(dict);
     EQ(NULL, dict_iter_next(iter));
 

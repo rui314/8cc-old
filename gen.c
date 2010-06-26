@@ -228,7 +228,7 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args, Dict *scope) {
 
 void assemble(Elf *elf, List *insts) {
     String *b = find_section(elf, ".text")->body;
-    Dict *dict = make_dict();
+    Dict *dict = make_string_dict();
     int offset = 1;
     o1(b, 0x55); // PUSH rbp
     o1(b, 0x48); o1(b, 0x89); o1(b, 0xe5); // MOV rbp, rsp

@@ -1,7 +1,8 @@
 #include "8cc.h"
 
-static Dict *make_dict_int(int size) {
+static Dict *make_dict_int(int type, int size) {
     Dict *r = malloc(sizeof(Dict));
+    r->type = type;
     r->buckets = malloc(sizeof(Bucket) * size);
     r->nalloc = size;
     r->nelem = 0;
@@ -10,8 +11,12 @@ static Dict *make_dict_int(int size) {
     return r;
 }
 
-Dict *make_dict(void) {
-    return make_dict_int(DICT_INITIAL_SIZE);
+Dict *make_string_dict(void) {
+    return make_dict_int(DICT_TYPE_STRING, DICT_INITIAL_SIZE);
+}
+
+Dict *make_address_dict(void) {
+    return make_dict_int(DICT_TYPE_ADDRESS, DICT_INITIAL_SIZE);
 }
 
 static inline u32 string_hash(String *str) {
@@ -23,26 +28,37 @@ static inline u32 string_hash(String *str) {
     return hv == 0 ? 1 : hv;
 }
 
-static Bucket *find_bucket(Dict *dict, String *key, u32 hv) {
+static inline u32 address_hash(void *ptr) {
+    return ((u32)(intptr_t)ptr) * 2654435761UL;
+}
+
+static inline u32 calculate_hash(Dict *dict, void *obj) {
+    switch (dict->type) {
+    case DICT_TYPE_STRING:
+        return string_hash(obj);
+    case DICT_TYPE_ADDRESS:
+        return address_hash(obj);
+    }
+    error("[internal error] unknown dictionary type: %d", dict->type);
+}
+
+static Bucket *find_bucket(Dict *dict, void *key, u32 hv) {
     int start = hv % dict->nalloc;
     Bucket *ent;
-    for (int i = start; i < dict->nalloc; i++) {
-        ent = &dict->buckets[i];
+    for (int i = start; i < start + dict->nalloc; i++) {
+        ent = &dict->buckets[i % dict->nalloc];
         if (!ent->hashval) return ent;
-        if (ent->hashval == hv && string_equal(ent->key, key))
+        if (ent->hashval != hv)
+            continue;
+        if (dict->type == DICT_TYPE_STRING && string_equal(ent->key, key))
             return ent;
-    }
-    for (int i = 0; i < start; i++) {
-        ent = &dict->buckets[i];
-        if (!ent->hashval) return ent;
-        if (ent->hashval == hv && string_equal(ent->key, key))
+        if (dict->type == DICT_TYPE_ADDRESS && ent->key == key)
             return ent;
     }
     error("[internal errror] no space found in dictionary");
-    return NULL;
 }
 
-static bool store(Dict *dict, String *key, u32 hv, void *obj) {
+static bool store(Dict *dict, void *key, u32 hv, void *obj) {
     Bucket *ent = find_bucket(dict, key, hv);
     bool r = !!ent->hashval;
     ent->hashval = hv;
@@ -52,7 +68,7 @@ static bool store(Dict *dict, String *key, u32 hv, void *obj) {
 }
 
 static void rehash(Dict *dict) {
-    Dict *newdict = make_dict_int(dict->nalloc * 2);
+    Dict *newdict = make_dict_int(dict->type, dict->nalloc * 2);
     for (int i = 0; i < dict->nalloc; i++) {
         Bucket *ent = &dict->buckets[i];
         if (!ent->hashval)
@@ -69,15 +85,15 @@ static void ensure_room(Dict *dict) {
     rehash(dict);
 }
 
-void dict_put(Dict *dict, String *key, void *obj) {
+void dict_put(Dict *dict, void *key, void *obj) {
     ensure_room(dict);
-    u32 hv = string_hash(key);
+    u32 hv = calculate_hash(dict, key);
     bool overwrite = store(dict, key, hv, obj);
     if (!overwrite) dict->nelem++;
 }
 
-bool dict_delete(Dict *dict, String *key) {
-    Bucket *ent = find_bucket(dict, key, string_hash(key));
+bool dict_delete(Dict *dict, void *key) {
+    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
     if (!ent->hashval) return false;
     ent->hashval = 0;
     ent->key = NULL;
@@ -86,8 +102,8 @@ bool dict_delete(Dict *dict, String *key) {
     return true;
 }
 
-void *dict_get(Dict *dict, String *key) {
-    Bucket *ent = find_bucket(dict, key, string_hash(key));
+void *dict_get(Dict *dict, void *key) {
+    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
     if (!ent->hashval) return NULL;
     return ent->elem;
 }
