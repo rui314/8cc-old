@@ -35,7 +35,7 @@ static Token *read_num(File *file, char first, int lineno) {
             unreadc(c, file);
             goto ret_float;
         }
-    }    
+    }
  ret_int:
     tok = make_token(TOKTYPE_INT, lineno);
     tok->val.i = atoi(STRING_BODY(buf));
@@ -46,6 +46,22 @@ static Token *read_num(File *file, char first, int lineno) {
     return tok;
 }
 
+static char read_escaped(File *file) {
+    int c = readc(file);
+    switch (c) {
+    case EOF:
+        error("line %d: premature end of input file while reading a literal string or a character", file->lineno);
+    case 'a': return '\a';
+    case 'b': return '\b';
+    case 't': return '\t';
+    case 'n': return '\n';
+    case 'v': return '\v';
+    case 'f': return '\f';
+    case 'r': return '\r';
+    default: return (char)c;
+    }
+}
+
 static char *read_str(File *file) {
     String *b = make_string();
     for (;;) {
@@ -53,23 +69,24 @@ static char *read_str(File *file) {
         switch (c) {
         case '"':
             return STRING_BODY(b);
-        case '\\': {
-            int c2 = readc(file);
-            switch (c2) {
-            case 'n':
-                o1(b, '\n');
-                break;
-            default:
-                o1(b, c2);
-                break;
-            }
+        case '\\':
+            o1(b, read_escaped(file));
             break;
-        }
         case EOF:
             error("line %d: premature end of input file while reading a literal string", file->lineno);
         default:
             o1(b, c);
         }
+    }
+}
+
+static char read_char(File *file) {
+    int c = readc(file);
+    switch (c) {
+    case EOF:
+        error("line %d: premature end of input file while reading a literal character", file->lineno);
+    case '\\': return read_escaped(file);
+    default: return (char)c;
     }
 }
 
@@ -96,12 +113,16 @@ Token *read_token(File *file) {
         switch (c) {
         case ' ': case '\t': case '\r': case '\n':
             continue;
-        case '0': case '1': case '2': case '3': case '4': 
-        case '5': case '6': case '7': case '8': case '9': 
+        case '0': case '1': case '2': case '3': case '4':
+        case '5': case '6': case '7': case '8': case '9':
             return read_num(file, c, file->lineno);
         case '"':
             r = make_token(TOKTYPE_STRING, file->lineno);
             r->val.str = read_str(file);
+            return r;
+        case '\'':
+            r = make_token(TOKTYPE_CHAR, file->lineno);
+            r->val.c = read_char(file);
             return r;
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
         case 'h': case 'i': case 'j': case 'k': case 'l': case 'm': case 'n':
@@ -117,7 +138,7 @@ Token *read_token(File *file) {
         case '{': case '}': case '(': case ')': case ';': case ',':
             r = make_token(TOKTYPE_KEYWORD, file->lineno);
             r->val.c = c;
-            return r;            
+            return r;
         case EOF:
             return NULL;
         default:
@@ -157,7 +178,7 @@ static void read_statement(File *file, Section *data, Token *fntok, List *lis) {
             error("line %d: expected ',', but got '%c'", sep->lineno, sep->val.c);
     }
     expect(file, ';');
-    
+
     List *args = make_list();
     int i;
     for (i = 0; i < LIST_LEN(argtoks); i++) {
