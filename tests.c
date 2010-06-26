@@ -162,13 +162,31 @@ static void test_read_float(void) {
     EQ(2.0, tok->val.f);
 }
 
+static void test_read_char(void) {
+    FILE *stream = create_file("'a'");
+    File *file = make_file(stream, "-");
+    
+    Token *tok = read_token(file);
+    EQ(TOKTYPE_CHAR, tok->toktype);
+    EQ('a', tok->val.c);
+}
+
+/*
+ * Entry point
+ */
+
 int main(int argc, char **argv) {
     test_string();
+
     test_dict();
     test_dict_iter();
+
     test_file_simple();
     test_file_unreadc();
+
     test_read_float();
+    test_read_char();
+
     printf("OK\n");
     return 0;
 }
