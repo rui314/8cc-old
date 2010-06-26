@@ -17,6 +17,20 @@ Section *make_section(char *name, int type) {
     return sect;
 }
 
+Ctype *make_ctype(int type) {
+    Ctype *r = malloc(sizeof(Ctype));
+    r->type = type;
+    r->ptr = NULL;
+    return r;
+}
+
+Ctype *make_ctype_ptr(Ctype *type) {
+    Ctype *r = malloc(sizeof(Ctype));
+    r->type = CTYPE_PTR;
+    r->ptr = type;
+    return r;
+}
+
 Section *find_section(Elf *elf, char *name) {
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
         Section *sect = LIST_ELEM(Section, elf->sections, i);
@@ -52,7 +66,7 @@ Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend) {
 static Var *make_var(int stype) {
     Var *r = malloc(sizeof(Var));
     r->stype = stype;
-    r->ctype = CTYPE_INT;
+    r->ctype = make_ctype(CTYPE_INT);
     r->val.i = 0;
     r->name = NULL;
     r->sym = NULL;
@@ -67,7 +81,7 @@ Var *make_imm(u64 val) {
 
 Var *make_immf(float val) {
     Var *r = make_var(VAR_IMM);
-    r->ctype = CTYPE_FLOAT;
+    r->ctype = make_ctype(CTYPE_FLOAT);
     r->val.f = val;
     return r;
 }
@@ -149,7 +163,7 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args) {
             o8(b, 0);
             break;
         case VAR_IMM:
-            switch (var->ctype) {
+            switch (var->ctype->type) {
             case CTYPE_INT:
                 o2(b, PUSH_ABS[gpr++]);
                 o8(b, var->val.i);

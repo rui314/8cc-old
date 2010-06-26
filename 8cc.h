@@ -254,9 +254,10 @@ typedef struct Token {
     int lineno;
 } Token;
 
-#define CTYPE_INT    0
-#define CTYPE_CHAR   1
-#define CTYPE_FLOAT  2
+#define CTYPE_PTR   0
+#define CTYPE_INT   1
+#define CTYPE_CHAR  2
+#define CTYPE_FLOAT 3
 
 typedef struct Ctype {
     int type;
@@ -278,7 +279,7 @@ extern Token *read_token(File *file);
 typedef struct Var {
     enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } stype;
     char *name;
-    int ctype;
+    Ctype *ctype;
     Cvalue val;
     Symbol *sym; // for external symbol
 } Var;
