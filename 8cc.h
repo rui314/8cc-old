@@ -239,20 +239,10 @@ extern int readc(File *file);
  * Parser
  */
 
-#define TOK_NUM   1
-#define TOK_IDENT 2
-#define TOK_STR   3
-#define TOK_CHAR  4
-#define TOK_FLOAT 5
-
-typedef struct Token {
-    int val;
-    char ch;
-    char *str;
-    u64 num;
-    float flo;
-    int lineno;
-} Token;
+typedef union Cvalue {
+    int i;
+    float f;
+} Cvalue;
 
 #define CTYPE_PTR   0
 #define CTYPE_INT   1
@@ -264,10 +254,29 @@ typedef struct Ctype {
     struct Ctype *ptr;
 } Ctype;
 
-typedef union Cvalue {
+#define KEYWORD_INT   256
+#define KEYWORD_FLOAT 257
+
+typedef union TokenValue {
+    char c;
     int i;
     float f;
-} Cvalue;
+    char *str;
+    int k;  // keyword value
+} TokenValue;
+
+#define TOKTYPE_KEYWORD 0
+#define TOKTYPE_CHAR    1
+#define TOKTYPE_STRING  2
+#define TOKTYPE_INT     3
+#define TOKTYPE_FLOAT   4
+#define TOKTYPE_IDENT   5
+
+typedef struct Token {
+    int toktype;
+    TokenValue val;
+    int lineno;
+} Token;
 
 extern List *parse(File *file, Elf *elf);
 extern Token *read_token(File *file);

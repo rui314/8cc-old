@@ -154,12 +154,12 @@ static void test_read_float(void) {
     File *file = make_file(stream, "-");
     
     Token *tok = read_token(file);
-    EQ(TOK_NUM, tok->val);
-    EQ(1, tok->num);
+    EQ(TOKTYPE_INT, tok->toktype);
+    EQ(1, tok->val.i);
 
     tok = read_token(file);
-    EQ(TOK_FLOAT, tok->val);
-    EQ(2.0, tok->flo);
+    EQ(TOKTYPE_FLOAT, tok->toktype);
+    EQ(2.0, tok->val.f);
 }
 
 int main(int argc, char **argv) {
