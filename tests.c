@@ -152,7 +152,7 @@ static void test_file_simple(void) {
 static void test_read_float(void) {
     FILE *stream = create_file("1 2.0");
     File *file = make_file(stream, "-");
-    
+
     Token *tok = read_token(file);
     EQ(TOKTYPE_INT, tok->toktype);
     EQ(1, tok->val.i);
@@ -165,10 +165,28 @@ static void test_read_float(void) {
 static void test_read_char(void) {
     FILE *stream = create_file("'a'");
     File *file = make_file(stream, "-");
-    
+
     Token *tok = read_token(file);
     EQ(TOKTYPE_CHAR, tok->toktype);
     EQ('a', tok->val.c);
+}
+
+static void test_read_keywords_int(File *file, int type) {
+    Token *tok = read_token(file);
+    EQ(TOKTYPE_KEYWORD, tok->toktype);
+    EQ(tok->val.k, type);
+}
+
+static void test_read_keywords(void) {
+    FILE *stream = create_file("int float ( ) { }");
+    File *file = make_file(stream, "-");
+
+    test_read_keywords_int(file, KEYWORD_INT);
+    test_read_keywords_int(file, KEYWORD_FLOAT);
+    test_read_keywords_int(file, '(');
+    test_read_keywords_int(file, ')');
+    test_read_keywords_int(file, '{');
+    test_read_keywords_int(file, '}');
 }
 
 /*
@@ -186,6 +204,7 @@ int main(int argc, char **argv) {
 
     test_read_float();
     test_read_char();
+    test_read_keywords();
 
     printf("OK\n");
     return 0;
