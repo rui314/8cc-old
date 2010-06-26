@@ -19,7 +19,7 @@ void add_section(Elf *elf, Section *sect) {
 static void write_one_symbol(Symbol *sym, int *index, String *symtab, String *strtab) {
     if (sym->name) {
         o4(symtab, STRING_LEN(strtab)); // st_name
-        ostr(strtab, sym->name);
+        ostr(strtab, STRING_BODY(sym->name));
     } else {
         o4(symtab, 0); // st_name
     }
@@ -48,7 +48,7 @@ static void write_sym_to_buf(Elf *elf, int *index, String *symtab, String *strta
 
 static void write_section_sym(Elf *elf, int *index, String *symtab, String *strtab) {
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        Section *sect = LIST_ELEM(Section, elf->sections, i);
+        Section *sect = LIST_ELEM(elf->sections, i);
         Symbol *sym = make_symbol(NULL, sect, 0, STB_LOCAL, STT_SECTION, 1);
         write_one_symbol(sym, index, symtab, strtab);
         sect->symindex = sym->index;
@@ -100,12 +100,12 @@ static Symbol *find_symbol(Elf *elf, char *name) {
 static void add_reloc(Elf *elf) {
     char name[100];
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        Section *sect = LIST_ELEM(Section, elf->sections, i);
+        Section *sect = LIST_ELEM(elf->sections, i);
         if (LIST_LEN(sect->rels) == 0)
             continue;
         String *b = make_string();
         for (int j = 0; j < LIST_LEN(sect->rels); j++) {
-            Reloc *rel = LIST_ELEM(Reloc, sect->rels, j);
+            Reloc *rel = LIST_ELEM(sect->rels, j);
             o8(b, rel->off);
             if (rel->sym) {
                 o8(b, ELF64_R_INFO(find_symbol(elf, rel->sym)->index, rel->type));
@@ -134,9 +134,9 @@ static void add_shstrtab(Elf *elf) {
     String *b = make_string();
     o1(b, 0);
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        LIST_ELEM(Section, elf->sections, i)->shstrtab_off = STRING_LEN(b);
-        char *name = LIST_ELEM(Section, elf->sections, i)->name;
-        ostr(b, name);
+        Section *sect = LIST_ELEM(elf->sections, i);
+        sect->shstrtab_off = STRING_LEN(b);
+        ostr(b, sect->name);
     }
     shstr->body = b;
 }
@@ -184,7 +184,7 @@ static void write_elf(FILE *outfile, Elf *elf) {
 
     String *content = make_string();
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        write_section(header, content, LIST_ELEM(Section, elf->sections, i), (numsect + 1) * 64);
+        write_section(header, content, LIST_ELEM(elf->sections, i), (numsect + 1) * 64);
     }
 
     fwrite(STRING_BODY(header), STRING_LEN(header), 1, outfile);

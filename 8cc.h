@@ -15,7 +15,7 @@
 #include <unistd.h>
 
 /*
- * Fixed size data types
+ * Primitive data types
  */
 
 #define s8  int8_t
@@ -26,6 +26,7 @@
 #define u32 uint32_t
 #define s64 int64_t
 #define u64 uint64_t
+#define intptr intptr_t
 
 /*
  * ELF file format constants
@@ -95,6 +96,7 @@
  * Common
  */
 extern __attribute__((noreturn)) void error(char *format, ...);
+extern void warn(char *format, ...);
 
 /*
  * Byte String
@@ -134,9 +136,9 @@ typedef struct List {
     int len;
 } List;
 
-#define LIST_ELEM(type, lis, i) (((type**)(lis)->elems)[i])
+#define LIST_ELEM(lis, i) (((lis)->elems)[i])
 #define LIST_LEN(lis) ((lis)->len)
-#define LIST_TOP(type, lis) LIST_ELEM(type, lis, 0)
+#define LIST_TOP(lis) LIST_ELEM((lis), 0)
 
 extern List *make_list(void);
 extern void list_push(List *list, void *e);
@@ -200,7 +202,7 @@ typedef struct Section {
 } Section;
 
 typedef struct Symbol {
-    char *name;
+    String *name;
     Section *section;
     long value;
     int bind;
@@ -248,14 +250,15 @@ extern int readc(File *file);
  */
 
 typedef union Cvalue {
+    char c;
     int i;
     float f;
 } Cvalue;
 
-#define CTYPE_PTR   0
-#define CTYPE_INT   1
-#define CTYPE_CHAR  2
-#define CTYPE_FLOAT 3
+#define CTYPE_PTR    0
+#define CTYPE_INT    1
+#define CTYPE_CHAR   2
+#define CTYPE_FLOAT  3
 
 typedef struct Ctype {
     int type;
@@ -292,55 +295,52 @@ typedef struct Token {
     int lineno;
 } Token;
 
-extern List *parse(File *file, Elf *elf);
-extern Token *read_token(File *file);
-
 typedef struct ReadContext {
     File *file;
     Elf *elf;
     List *scope;
     List *code;
+    Token *lasttok;
 } ReadContext;
 
+extern List *parse(File *file, Elf *elf);
+extern Token *read_token(ReadContext *ctx);
 extern ReadContext *make_read_context(File *file, Elf *elf);
-
-typedef struct ReaderVar {
-    Ctype *ctype;
-    String *name;
-} ReaderVar;
 
 /*
  * Assembler
  */
 
+#define VAR_IMM    0
+#define VAR_EXTERN 1
+#define VAR_GLOBAL 2
+
 typedef struct Var {
-    enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL, VAR_REF } stype;
-    char *name;
+    int stype;
     Ctype *ctype;
-    Cvalue val;
-    Symbol *sym; // for external symbol
-    ReaderVar *rvar;
+    String *name;
+    Cvalue val;  // Immediate value.  Only valid when stype == VAR_IMM
+    bool is_lvalue;
 } Var;
 
 typedef struct Inst {
     char op;
     void *arg0;
-    Var *arg1;
+    void *arg1;
     List *args;
     Cvalue val;
 } Inst;
 
 extern void assemble(Elf *elf, List *insts);
 extern Section *make_section(char *name, int type);
-extern Symbol *make_symbol(char *name, Section *sect, long value, int bind, int type, int defined);
+extern Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined);
 
-extern Var *make_imm(u64 val);
-extern Var *make_immf(float val);
-extern Var *make_var_ref(ReaderVar *var);
-extern Var *make_global(char *name, u64 val);
+extern Var *make_imm(int type, Cvalue val);
+extern Var *make_var(int stype, String *name);
+extern Var *make_global_var(String *name, u64 val);
 extern int add_string(Section *data, String *str);
-extern Inst *make_var_set(ReaderVar *var, Cvalue val);
-extern Var *make_extern(char *name);
+extern Inst *make_var_set(Var *var, Var *val);
+extern Var *make_extern(String *name);
 extern Inst *make_func_call(Var *fn, List *args);
 
 #endif /* ECC_H */

@@ -43,7 +43,7 @@ Ctype *make_ctype_ptr(Ctype *type) {
 
 Section *find_section(Elf *elf, char *name) {
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        Section *sect = LIST_ELEM(Section, elf->sections, i);
+        Section *sect = LIST_ELEM(elf->sections, i);
         if (!strcmp(sect->name, name))
             return sect;
     }
@@ -51,7 +51,7 @@ Section *find_section(Elf *elf, char *name) {
     return NULL;
 }
 
-Symbol *make_symbol(char *name, Section *sect, long value, int bind, int type, int defined) {
+Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined) {
     Symbol *sym = malloc(sizeof(Symbol));
     sym->name = name;
     sym->section = sect;
@@ -73,45 +73,32 @@ Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend) {
     return rel;
 }
 
-static Var *make_var(int stype) {
+Var *make_var(int ctype, String *name) {
     Var *r = malloc(sizeof(Var));
-    r->stype = stype;
-    r->ctype = make_ctype(CTYPE_INT);
+    r->stype = VAR_GLOBAL;
+    r->ctype = make_ctype(ctype);
     r->val.i = 0;
-    r->name = NULL;
-    r->sym = NULL;
+    r->name = name;
+    r->is_lvalue = false;
     return r;
 }
 
-Var *make_imm(u64 val) {
-    Var *r = make_var(VAR_IMM);
+Var *make_imm(int ctype, Cvalue val) {
+    Var *r = make_var(ctype, NULL);
+    r->stype = VAR_IMM;
+    r->val = val;
+    return r;
+}
+
+Var *make_global_var(String *name, u64 val) {
+    Var *r = make_var(CTYPE_INT, name);
     r->val.i = val;
     return r;
 }
 
-Var *make_immf(float val) {
-    Var *r = make_var(VAR_IMM);
-    r->ctype = make_ctype(CTYPE_FLOAT);
-    r->val.f = val;
-    return r;
-}
-
-Var *make_var_ref(ReaderVar *var) {
-    Var *r = make_var(VAR_REF);
-    r->rvar = var;
-    return r;
-}
-
-Var *make_global(char *name, u64 val) {
-    Var *r = make_var(VAR_GLOBAL);
-    r->name = name;
-    r->val.i = val;
-    return r;
-}
-
-Var *make_extern(char *name) {
-    Var *r = make_var(VAR_EXTERN);
-    r->name = name;
+Var *make_extern(String *name) {
+    Var *r = make_var(CTYPE_INT, name);
+    r->stype = VAR_EXTERN;
     return r;
 }
 
@@ -124,10 +111,10 @@ static Inst *make_inst(char op) {
     return r;
 }
 
-Inst *make_var_set(ReaderVar *var, Cvalue val) {
+Inst *make_var_set(Var *var, Var *val) {
     Inst *r = make_inst('=');
     r->arg0 = var;
-    r->val = val;
+    r->arg1 = val;
     return r;
 }
 
@@ -181,15 +168,24 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args, Dict *scope) {
     int gpr = 0;
     int xmm = 0;
     for (int i = 0; i < LIST_LEN(args); i++) {
-        Var *var = LIST_ELEM(Var, args, i);
+        Var *var = LIST_ELEM(args, i);
         switch (var->stype) {
         case VAR_GLOBAL:
-            o2(b, PUSH_ABS[gpr++]);
-            add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, var->val.i);
-            o8(b, 0);
-            break;
+            if (var->ctype->type == CTYPE_INT) {
+                CompiledVar *cvar = dict_get(scope, var);
+                if (cvar == NULL)
+                    error("undefined variable: '%s'", var->name);
+                o4(b, MOV_STACK[gpr++] | (cvar->sp * 8) << 24);
+                break;
+            }
+            error("unsupported type: %d", var->ctype->type);
         case VAR_IMM:
             switch (var->ctype->type) {
+            case CTYPE_PTR:
+                o2(b, PUSH_ABS[gpr++]);
+                add_reloc(text, STRING_LEN(b), NULL, ".data", R_X86_64_64, var->val.i);
+                o8(b, 0);
+                break;
             case CTYPE_INT:
                 o2(b, PUSH_ABS[gpr++]);
                 o8(b, var->val.i);
@@ -204,37 +200,39 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args, Dict *scope) {
                 break;
             }
             break;
-        case VAR_REF: {
-            CompiledVar *cvar = dict_get(scope, var->rvar->name);
-            if (cvar == NULL)
-                error("undefined variable: '%s'", var->rvar->name);
-            o4(b, MOV_STACK[gpr++] | ((-cvar->sp * 8) << 24));
-            break;
-        }
         default:
             error("unsupported var type: %c\n", var->stype);
         }
     }
-    if (!fn->sym) {
-        fn->sym = make_symbol(fn->name, text, 0, STB_GLOBAL, STT_NOTYPE, 0);
-        dict_put(elf->syms, to_string(fn->name), fn->sym);
+    if (!dict_get(elf->syms, fn->name)) {
+        Symbol *sym = make_symbol(fn->name, text, 0, STB_GLOBAL, STT_NOTYPE, 0);
+        dict_put(elf->syms, fn->name, sym);
     }
     o1(b, 0xb8); // MOV eax
     o4(b, xmm);
     o1(b, 0xe8); // CALL
-    add_reloc(text, STRING_LEN(b), fn->name, NULL, R_X86_64_PC32, -4);
+    add_reloc(text, STRING_LEN(b), STRING_BODY(fn->name), NULL, R_X86_64_PC32, -4);
     o4(b, 0);
+}
+
+int var_off(Dict *dict, Var *var, int *offset) {
+    CompiledVar *cvar = dict_get(dict, var);
+    if (cvar == NULL) {
+        cvar = make_compiled_var((*offset)--);
+        dict_put(dict, var, cvar);
+    }
+    return cvar->sp;
 }
 
 void assemble(Elf *elf, List *insts) {
     String *b = find_section(elf, ".text")->body;
-    Dict *dict = make_string_dict();
-    int offset = 1;
+    Dict *dict = make_address_dict();
+    int offset = -1;
     o1(b, 0x55); // PUSH rbp
     o1(b, 0x48); o1(b, 0x89); o1(b, 0xe5); // MOV rbp, rsp
-    o1(b, 0x48); o1(b, 0x81); o1(b, 0xec); o4(b, 32); // SUB rsp, 32
+    o1(b, 0x48); o1(b, 0x81); o1(b, 0xec); o4(b, 80); // SUB rsp, 80
     for (int i = 0; i < LIST_LEN(insts); i++) {
-        Inst *inst = LIST_ELEM(Inst, insts, i);
+        Inst *inst = LIST_ELEM(insts, i);
         switch (inst->op) {
         case '$': {
             Var *fn = inst->arg0;
@@ -243,18 +241,23 @@ void assemble(Elf *elf, List *insts) {
             break;
         }
         case '=': {
-            ReaderVar *var = inst->arg0;
-            CompiledVar *cvar = dict_get(dict, var->name);
-            if (cvar == NULL) {
-                cvar = make_compiled_var(offset++);
-                dict_put(dict, var->name, cvar);
+            Var *var = inst->arg0;
+            Var *val = inst->arg1;
+            int off = var_off(dict, var, &offset);
+            if (val->stype == VAR_IMM) {
+                // MOV [rbp-off*8], inst->val.i
+                o1(b, 0x48);
+                o1(b, 0xc7);
+                o1(b, 0x45);
+                o1(b, off * 8);
+                o4(b, val->val.i);
+            } else if (val->stype == VAR_GLOBAL) {
+                int off1 = var_off(dict, val, &offset);
+                o4(b, 0x458b48 | ((off1 * 8) << 24)); // MOV rax, [rbp-val]
+                o4(b, 0x458948 | ((off * 8) << 24));  // MOV [rbp-var], rax
+            } else {
+                error("not supported");
             }
-            // MOV [rbp-offset*8], inst->val.i
-            o1(b, 0x48);
-            o1(b, 0xc7);
-            o1(b, 0x45);
-            o1(b, -(cvar->sp * 8));
-            o4(b, inst->val.i);
             break;
         }
         default:
