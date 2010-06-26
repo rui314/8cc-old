@@ -219,9 +219,9 @@ static void read_statement(File *file, Section *data, Token *fntok, List *lis) {
     list_push(lis, make_func_call(fn, args));
 }
 
-static List *read_func(File *file, Elf *elf) {
-    Section *text = find_section(elf, ".text");
-    Section *data = find_section(elf, ".data");
+static List *read_func(File *file, ReadContext *ctx) {
+    Section *text = find_section(ctx->elf, ".text");
+    Section *data = find_section(ctx->elf, ".data");
     List *r = make_list();
     Token *fname = read_token(file);
     if (fname->toktype != TOKTYPE_IDENT)
@@ -237,10 +237,11 @@ static List *read_func(File *file, Elf *elf) {
             break;
         read_statement(file, data, tok, r);
     }
-    dict_put(elf->syms, to_string(fname->val.str), make_symbol(fname->val.str, text, 0, STB_GLOBAL, STT_NOTYPE, 1));
+    dict_put(ctx->elf->syms, to_string(fname->val.str), make_symbol(fname->val.str, text, 0, STB_GLOBAL, STT_NOTYPE, 1));
     return r;
 }
 
 List *parse(File *file, Elf *elf) {
-    return read_func(file, elf);
+    ReadContext *ctx = make_read_context(elf);
+    return read_func(file, ctx);
 }
