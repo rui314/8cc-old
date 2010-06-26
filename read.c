@@ -108,6 +108,7 @@ static char *read_ident(File *file, char c0) {
 
 Token *read_token(File *file) {
     Token *r;
+    char *str;
     for (;;) {
         int c = readc(file);
         switch (c) {
@@ -132,8 +133,18 @@ Token *read_token(File *file) {
         case 'J': case 'K': case 'L': case 'M': case 'N': case 'O': case 'P':
         case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W':
         case 'X': case 'Y': case 'Z':
+            str = read_ident(file, c);
+#define KEYWORD(type_, val_)                                    \
+            if (!strcmp(str, (type_))) {                        \
+                r = make_token(TOKTYPE_KEYWORD, file->lineno);  \
+                r->val.k = (val_);                              \
+                return r;                                       \
+            }
+            KEYWORD("int", KEYWORD_INT);
+            KEYWORD("float", KEYWORD_FLOAT);
+#undef KEYWORD
             r = make_token(TOKTYPE_IDENT, file->lineno);
-            r->val.str = read_ident(file, c);
+            r->val.str = str;
             return r;
         case '{': case '}': case '(': case ')': case ';': case ',':
             r = make_token(TOKTYPE_KEYWORD, file->lineno);
