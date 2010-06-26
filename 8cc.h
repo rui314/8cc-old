@@ -136,6 +136,7 @@ typedef struct List {
 
 #define LIST_ELEM(type, lis, i) (((type**)(lis)->elems)[i])
 #define LIST_LEN(lis) ((lis)->len)
+#define LIST_TOP(type, lis) LIST_ELEM(type, lis, 0)
 
 extern List *make_list(void);
 extern void list_push(List *list, void *e);
@@ -281,10 +282,6 @@ typedef struct Token {
 extern List *parse(File *file, Elf *elf);
 extern Token *read_token(File *file);
 
-/*
- * Assembler
- */
-
 typedef struct Var {
     enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } stype;
     char *name;
@@ -292,6 +289,17 @@ typedef struct Var {
     Cvalue val;
     Symbol *sym; // for external symbol
 } Var;
+
+typedef struct ReadContext {
+    Elf *elf;
+    List *scope;
+} ReadContext;
+
+extern ReadContext *make_read_context(Elf *elf);
+
+/*
+ * Assembler
+ */
 
 typedef struct Inst {
     char op;

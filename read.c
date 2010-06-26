@@ -7,6 +7,13 @@ static Token *make_token(int toktype, int lineno) {
     return r;
 }
 
+ReadContext *make_read_context(Elf *elf) {
+    ReadContext *r = malloc(sizeof(ReadContext));
+    r->elf = elf;
+    r->scope = make_list();
+    return r;
+}
+
 static Token *read_num(File *file, char first, int lineno) {
     Token *tok;
     String *buf = make_string();
