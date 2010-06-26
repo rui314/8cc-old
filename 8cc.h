@@ -254,13 +254,19 @@ typedef struct Token {
     int lineno;
 } Token;
 
+#define CTYPE_INT    0
+#define CTYPE_CHAR   1
+#define CTYPE_FLOAT  2
+
+typedef struct Ctype {
+    int type;
+    struct Ctype *ptr;
+} Ctype;
+
 typedef union Cvalue {
     int i;
     float f;
 } Cvalue;
-
-#define CTYPE_INT    1
-#define CTYPE_FLOAT  2
 
 extern List *parse(File *file, Elf *elf);
 extern Token *read_token(File *file);
