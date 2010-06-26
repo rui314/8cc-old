@@ -17,6 +17,16 @@ Section *make_section(char *name, int type) {
     return sect;
 }
 
+typedef struct CompiledVar {
+    int sp;
+} CompiledVar;
+
+CompiledVar *make_compiled_var(int sp) {
+    CompiledVar *r = malloc(sizeof(CompiledVar));
+    r->sp = sp;
+    return r;
+}
+
 Ctype *make_ctype(int type) {
     Ctype *r = malloc(sizeof(Ctype));
     r->type = type;
@@ -86,6 +96,12 @@ Var *make_immf(float val) {
     return r;
 }
 
+Var *make_var_ref(ReaderVar *var) {
+    Var *r = make_var(VAR_REF);
+    r->rvar = var;
+    return r;
+}
+
 Var *make_global(char *name, u64 val) {
     Var *r = make_var(VAR_GLOBAL);
     r->name = name;
@@ -108,8 +124,15 @@ static Inst *make_inst(char op) {
     return r;
 }
 
+Inst *make_var_set(ReaderVar *var, Cvalue val) {
+    Inst *r = make_inst('=');
+    r->arg0 = var;
+    r->val = val;
+    return r;
+}
+
 Inst *make_func_call(Var *fn, List *args) {
-    Inst * r = make_inst('$');
+    Inst *r = make_inst('$');
     r->arg0 = fn;
     r->args = args;
     return r;
@@ -144,12 +167,15 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
 // MOV to rdi, rsi, rdx, rcx, r8, or r9
 // static u32 PUSH_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
 static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
-    
+
 // MOVSD to xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, or xmm7
 static u32 PUSH_XMM_ABS[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
                               0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
 
-static void gen_call(String *b, Elf *elf, Var *fn, List *args) {
+// MOV rdi/rsi/rdx/rcx/r8/r9, [rbp+x]
+static u32 MOV_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
+
+static void gen_call(String *b, Elf *elf, Var *fn, List *args, Dict *scope) {
     Section *text = find_section(elf, ".text");
     Section *data = find_section(elf, ".data");
     int gpr = 0;
@@ -178,6 +204,13 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args) {
                 break;
             }
             break;
+        case VAR_REF: {
+            CompiledVar *cvar = dict_get(scope, var->rvar->name);
+            if (cvar == NULL)
+                error("undefined variable: '%s'", var->rvar->name);
+            o4(b, MOV_STACK[gpr++] | ((-cvar->sp * 8) << 24));
+            break;
+        }
         default:
             error("unsupported var type: %c\n", var->stype);
         }
@@ -195,17 +228,33 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args) {
 
 void assemble(Elf *elf, List *insts) {
     String *b = find_section(elf, ".text")->body;
+    Dict *dict = make_dict();
+    int offset = 1;
     o1(b, 0x55); // PUSH rbp
-    o1(b, 0x48); // MOV rbp, rsp
-    o1(b, 0x89);
-    o1(b, 0xe5);
+    o1(b, 0x48); o1(b, 0x89); o1(b, 0xe5); // MOV rbp, rsp
+    o1(b, 0x48); o1(b, 0x81); o1(b, 0xec); o4(b, 32); // SUB rsp, 32
     for (int i = 0; i < LIST_LEN(insts); i++) {
         Inst *inst = LIST_ELEM(Inst, insts, i);
         switch (inst->op) {
         case '$': {
             Var *fn = inst->arg0;
             List *args = inst->args;
-            gen_call(b, elf, fn, args);
+            gen_call(b, elf, fn, args, dict);
+            break;
+        }
+        case '=': {
+            ReaderVar *var = inst->arg0;
+            CompiledVar *cvar = dict_get(dict, var->name);
+            if (cvar == NULL) {
+                cvar = make_compiled_var(offset++);
+                dict_put(dict, var->name, cvar);
+            }
+            // MOV [rbp-offset*8], inst->val.i
+            o1(b, 0x48);
+            o1(b, 0xc7);
+            o1(b, 0x45);
+            o1(b, -(cvar->sp * 8));
+            o4(b, inst->val.i);
             break;
         }
         default:

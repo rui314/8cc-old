@@ -214,6 +214,5 @@ int main(int argc, char **argv) {
 
     List *insts = parse(infile, elf);
     assemble(elf, insts);
-
     write_elf(outfile, elf);
 }

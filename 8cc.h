@@ -140,6 +140,8 @@ typedef struct List {
 
 extern List *make_list(void);
 extern void list_push(List *list, void *e);
+extern void list_push(List *list, void *e);
+extern void list_pop(List *list);
 
 /*
  * Dictionary (Hash table)
@@ -255,8 +257,14 @@ typedef struct Ctype {
     struct Ctype *ptr;
 } Ctype;
 
-#define KEYWORD_INT   256
-#define KEYWORD_FLOAT 257
+extern Ctype *make_ctype(int type);
+extern Ctype *make_ctype_ptr(Ctype *type);
+
+#define KEYWORD_TYPE_BEGIN  256
+#define KEYWORD_INT         257
+#define KEYWORD_FLOAT       258
+#define KEYWORD_TYPE_END    259
+#define IS_TYPE_KEYWORD(k) (KEYWORD_TYPE_BEGIN < (k) && (k) < KEYWORD_TYPE_END)
 
 typedef union TokenValue {
     char c;
@@ -282,30 +290,39 @@ typedef struct Token {
 extern List *parse(File *file, Elf *elf);
 extern Token *read_token(File *file);
 
-typedef struct Var {
-    enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL } stype;
-    char *name;
-    Ctype *ctype;
-    Cvalue val;
-    Symbol *sym; // for external symbol
-} Var;
-
 typedef struct ReadContext {
+    File *file;
     Elf *elf;
     List *scope;
+    List *code;
 } ReadContext;
 
-extern ReadContext *make_read_context(Elf *elf);
+extern ReadContext *make_read_context(File *file, Elf *elf);
+
+typedef struct ReaderVar {
+    Ctype *ctype;
+    String *name;
+} ReaderVar;
 
 /*
  * Assembler
  */
 
+typedef struct Var {
+    enum { VAR_IMM, VAR_LOCAL, VAR_EXTERN, VAR_GLOBAL, VAR_REF } stype;
+    char *name;
+    Ctype *ctype;
+    Cvalue val;
+    Symbol *sym; // for external symbol
+    ReaderVar *rvar;
+} Var;
+
 typedef struct Inst {
     char op;
-    Var *arg0;
+    void *arg0;
     Var *arg1;
     List *args;
+    Cvalue val;
 } Inst;
 
 extern void assemble(Elf *elf, List *insts);
@@ -314,8 +331,10 @@ extern Symbol *make_symbol(char *name, Section *sect, long value, int bind, int 
 
 extern Var *make_imm(u64 val);
 extern Var *make_immf(float val);
+extern Var *make_var_ref(ReaderVar *var);
 extern Var *make_global(char *name, u64 val);
 extern int add_string(Section *data, String *str);
+extern Inst *make_var_set(ReaderVar *var, Cvalue val);
 extern Var *make_extern(char *name);
 extern Inst *make_func_call(Var *fn, List *args);
 
