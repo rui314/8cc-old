@@ -159,12 +159,13 @@ static void test_file_simple(void) {
 static void test_read_float(void) {
     FILE *stream = create_file("1 2.0");
     File *file = make_file(stream, "-");
+    ReadContext *ctx = make_read_context(file, NULL);
 
-    Token *tok = read_token(file);
+    Token *tok = read_token(ctx);
     EQ(TOKTYPE_INT, tok->toktype);
     EQ(1, tok->val.i);
 
-    tok = read_token(file);
+    tok = read_token(ctx);
     EQ(TOKTYPE_FLOAT, tok->toktype);
     EQ(2.0, tok->val.f);
 }
@@ -172,14 +173,15 @@ static void test_read_float(void) {
 static void test_read_char(void) {
     FILE *stream = create_file("'a'");
     File *file = make_file(stream, "-");
+    ReadContext *ctx = make_read_context(file, NULL);
 
-    Token *tok = read_token(file);
+    Token *tok = read_token(ctx);
     EQ(TOKTYPE_CHAR, tok->toktype);
     EQ('a', tok->val.c);
 }
 
-static void test_read_keywords_int(File *file, int type) {
-    Token *tok = read_token(file);
+static void test_read_keywords_int(ReadContext *ctx, int type) {
+    Token *tok = read_token(ctx);
     EQ(TOKTYPE_KEYWORD, tok->toktype);
     EQ(tok->val.k, type);
 }
@@ -187,13 +189,14 @@ static void test_read_keywords_int(File *file, int type) {
 static void test_read_keywords(void) {
     FILE *stream = create_file("int float ( ) { }");
     File *file = make_file(stream, "-");
+    ReadContext *ctx = make_read_context(file, NULL);
 
-    test_read_keywords_int(file, KEYWORD_INT);
-    test_read_keywords_int(file, KEYWORD_FLOAT);
-    test_read_keywords_int(file, '(');
-    test_read_keywords_int(file, ')');
-    test_read_keywords_int(file, '{');
-    test_read_keywords_int(file, '}');
+    test_read_keywords_int(ctx, KEYWORD_INT);
+    test_read_keywords_int(ctx, KEYWORD_FLOAT);
+    test_read_keywords_int(ctx, '(');
+    test_read_keywords_int(ctx, ')');
+    test_read_keywords_int(ctx, '{');
+    test_read_keywords_int(ctx, '}');
 }
 
 /*

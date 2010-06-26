@@ -1,5 +1,8 @@
 #include "8cc.h"
 
+#define NOT_SUPPORTED() \
+    do { error("line %d: not supported yet", __LINE__); } while (0)
+
 static Token *make_token(int toktype, int lineno) {
     Token *r = malloc(sizeof(Token));
     r->toktype = toktype;
@@ -13,13 +16,7 @@ ReadContext *make_read_context(File *file, Elf *elf) {
     r->elf = elf;
     r->scope = make_list();
     r->code = make_list();
-    return r;
-}
-
-ReaderVar *make_reader_var(Ctype *ctype, String *name) {
-    ReaderVar *r = malloc(sizeof(ReaderVar));
-    r->ctype = ctype;
-    r->name = name;
+    r->lasttok = NULL;
     return r;
 }
 
@@ -31,21 +28,22 @@ static void pop_scope(ReadContext *ctx) {
     list_pop(ctx->scope);
 }
 
-static void add_local_var(ReadContext *ctx, ReaderVar *var) {
-    List *current_scope = LIST_TOP(List, ctx->scope);
+static void add_local_var(ReadContext *ctx, String *name, Var *var) {
+    List *current_scope = LIST_TOP(ctx->scope);
+    list_push(current_scope, name);
     list_push(current_scope, var);
 }
 
-static ReaderVar *find_var(ReadContext *ctx, String *ident) {
+static Var *find_var(ReadContext *ctx, String *name) {
     for (int i = LIST_LEN(ctx->scope) - 1; i >= 0; i--) {
-        List *scope = LIST_ELEM(List, ctx->scope, i);
-        for (int j = 0; j < LIST_LEN(scope); j++) {
-            ReaderVar *var1 = LIST_ELEM(ReaderVar, scope, j);
-            if (!strcmp(STRING_BODY(var1->name), STRING_BODY(ident)))
-                return var1;
+        List *scope = LIST_ELEM(ctx->scope, i);
+        for (int j = 0; j < LIST_LEN(scope); j += 2) {
+            String *str = LIST_ELEM(scope, j);
+            if (string_equal(str, name))
+                return LIST_ELEM(scope, j + 1);
         }
     }
-    error("variable '%s' not found", STRING_BODY(ident));
+    return NULL;
 }
 
 static Token *read_num(File *file, char first, int lineno) {
@@ -147,8 +145,21 @@ static char *read_word(File *file, char c0) {
     }
 }
 
-Token *read_token(File *file) {
+static void unget_token(ReadContext *ctx, Token *tok) {
+    if (ctx->lasttok)
+        error("[internal error] token buffer full");
+    ctx->lasttok = tok;
+}
+
+Token *read_token(ReadContext *ctx) {
     Token *r;
+    if (ctx->lasttok) {
+        r = ctx->lasttok;
+        ctx->lasttok = NULL;
+        return r;
+    }
+
+    File *file = ctx->file;
     char *str;
     for (;;) {
         int c = readc(file);
@@ -200,28 +211,47 @@ Token *read_token(File *file) {
     return NULL;
 }
 
-static void expect(ReadContext *ctx, char expected) {
-    for (;;) {
-        int c = readc(ctx->file);
-        if (c == expected) return;
-        switch (c) {
-        case ' ': case '\t': case '\r': case '\n':
-            continue;
-        case EOF:
-            error("line %d: '%c' expected, but got EOF", ctx->file->lineno, expected);
-        default:
-            error("line %d: '%c' expected, but got '%c'", ctx->file->lineno, expected, c);
-        }
+String *token_to_string(Token *tok) {
+    char buf[20];
+    String *r = make_string();
+    switch (tok->toktype) {
+    case TOKTYPE_KEYWORD:
+        o1(r, tok->val.k);
+        o1(r, '\0');
+        break;
+    case TOKTYPE_IDENT:
+        ostr(r, tok->val.str);
+        break;
+    case TOKTYPE_STRING:
+        ostr(r, tok->val.str);
+        break;
+    case TOKTYPE_INT:
+        sprintf(buf, "%d", tok->val.i);
+        ostr(r, buf);
+        break;
+    case TOKTYPE_FLOAT:
+        sprintf(buf, "%f", tok->val.f);
+        ostr(r, buf);
+        break;
     }
+    return r;
 }
 
-static void read_func_call(ReadContext *ctx, Token *fntok) {
+static void expect(ReadContext *ctx, char expected) {
+    Token *tok = read_token(ctx);
+    if (tok->toktype != TOKTYPE_KEYWORD)
+        error("line %d: keyword expected, but got %s", ctx->file->lineno, STRING_BODY(token_to_string(tok)));
+    if (tok->val.k != expected)
+        error("line %d: '%c' expected, but got '%c'", ctx->file->lineno, expected, tok->val.k);
+}
+
+static Var *read_func_call(ReadContext *ctx, Token *fntok) {
     Section *data = find_section(ctx->elf, ".data");
     List *argtoks = make_list();
     for (;;) {
-        Token *arg = read_token(ctx->file);
+        Token *arg = read_token(ctx);
         list_push(argtoks, arg);
-        Token *sep = read_token(ctx->file);
+        Token *sep = read_token(ctx);
         if (sep->toktype != TOKTYPE_KEYWORD)
             error("line %d: expected ',', or ')', but got '%c'", sep->lineno, sep->val.c);
         if (sep->val.c == ')')
@@ -233,93 +263,150 @@ static void read_func_call(ReadContext *ctx, Token *fntok) {
     List *args = make_list();
     int i;
     for (i = 0; i < LIST_LEN(argtoks); i++) {
-        Token *arg = LIST_ELEM(Token, argtoks, i);
+        Token *arg = LIST_ELEM(argtoks, i);
         switch (arg->toktype) {
         case TOKTYPE_INT:
-            list_push(args, make_imm(arg->val.i));
+            list_push(args, make_imm(CTYPE_INT, (Cvalue)arg->val.i));
             break;
         case TOKTYPE_FLOAT:
-            list_push(args, make_immf(arg->val.f));
+            list_push(args, make_imm(CTYPE_FLOAT, (Cvalue)arg->val.f));
             break;
         case TOKTYPE_IDENT: {
-            ReaderVar *var = find_var(ctx, to_string(arg->val.str));
-            list_push(args, make_var_ref(var));
+            Var *var = find_var(ctx, to_string(arg->val.str));
+            list_push(args, var);
+            break;
+        }
+        case TOKTYPE_STRING: {
+            int off = add_string(data, to_string(arg->val.str));
+            Var *var = make_imm(CTYPE_PTR, (Cvalue)off);
+            list_push(args, var);
             break;
         }
         case TOKTYPE_CHAR:
-            error("identifier or char is not supported here");
-        case TOKTYPE_STRING:
-            list_push(args, make_global("", add_string(data, to_string(arg->val.str))));
-            break;
+            NOT_SUPPORTED();
+        default:
+            error("unknown token type: %d", arg->toktype);
         }
     }
-    Var *fn = make_extern(fntok->val.str);
+    Var *fn = make_extern(to_string(fntok->val.str));
     list_push(ctx->code, make_func_call(fn, args));
+    return make_imm(CTYPE_INT, (Cvalue)0);
 }
 
 static Token *read_ident(ReadContext *ctx) {
-    Token *r = read_token(ctx->file);
+    Token *r = read_token(ctx);
     if (r->toktype != TOKTYPE_IDENT)
         error("identifier expected");
     return r;
 }
 
-static void read_decl(ReadContext *ctx, Token *type) {
+static Var *read_unary_expr(ReadContext *ctx) {
+    Token *tok = read_token(ctx);
+    switch (tok->toktype) {
+    case TOKTYPE_CHAR:
+        return make_imm(CTYPE_CHAR, (Cvalue)tok->val.c);
+    case TOKTYPE_INT:
+        return make_imm(CTYPE_INT, (Cvalue)tok->val.i);
+    case TOKTYPE_FLOAT:
+        return make_imm(CTYPE_FLOAT, (Cvalue)tok->val.f);
+    case TOKTYPE_STRING: {
+        Section *data = find_section(ctx->elf, ".data");
+        int off = add_string(data, to_string(tok->val.str));
+        return make_imm(CTYPE_PTR, (Cvalue)off);
+    }
+    case TOKTYPE_KEYWORD:
+        error("expected unary, but got '%s'", tok->val.str);
+    case TOKTYPE_IDENT: {
+        Token *tok1 = read_token(ctx);
+        if (tok1->toktype == TOKTYPE_KEYWORD && tok1->val.k == '(')
+            return read_func_call(ctx, tok);
+        unget_token(ctx, tok1);
+        Var *var = find_var(ctx, to_string(tok->val.str));
+        if (!var) {
+            warn("'%s' is not defined", tok->val.str);
+            var = make_var(CTYPE_INT, to_string(tok->val.str));
+            add_local_var(ctx, to_string(tok->val.str), var);
+        }
+        var->is_lvalue = true;
+        return var;
+    }
+    default:
+        NOT_SUPPORTED();
+    }
+}
+
+static void read_decl(ReadContext *ctx, Ctype *ctype) {
     Token *ident = read_ident(ctx);
     if (ident->toktype != TOKTYPE_IDENT)
         error("identifier expected");
     expect(ctx, '=');
-    Token *val = read_token(ctx->file);
-    if (type->val.k != KEYWORD_INT || val->toktype != TOKTYPE_INT)
-        error("integer expected");
+    Var *val = read_unary_expr(ctx);
     expect(ctx, ';');
-
-    ReaderVar *var = make_reader_var(make_ctype(CTYPE_INT), to_string(ident->val.str));
-    add_local_var(ctx, var);
-    Cvalue cval;
-    cval.i = val->val.i;
-    list_push(ctx->code, make_var_set(var, cval));
+    String *name = to_string(ident->val.str);
+    Var *var = make_var(CTYPE_INT, name);
+    add_local_var(ctx, name, var);
+    list_push(ctx->code, make_var_set(var, val));
 }
 
-static void read_stmt_or_decl(ReadContext *ctx, Token *tok) {
-    if (tok->toktype == TOKTYPE_KEYWORD) {
-        if (IS_TYPE_KEYWORD(tok->val.k)) {
-            read_decl(ctx, tok);
-            return;
-        }
-        error("not supported yet");
+static Ctype *read_type(ReadContext *ctx) {
+    Token *tok = read_token(ctx);
+    if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == KEYWORD_INT) {
+        return make_ctype(CTYPE_INT);
     }
-    if (tok->toktype == TOKTYPE_IDENT) {
-        Token *tok1 = read_token(ctx->file);
-        if (tok1->toktype == TOKTYPE_KEYWORD) {
-            if (tok1->val.k == '(') {
-                read_func_call(ctx, tok);
-                expect(ctx, ';');
-                return;
-            }
-            error("not supported yet");
-        }
+    unget_token(ctx, tok);
+    return NULL;
+}
+
+static void ensure_lvalue(Var *var) {
+    if (!var->is_lvalue)
+        error("must be lvalue: '%s'", STRING_BODY(var->name));
+}
+
+static Var *read_stmt(ReadContext *ctx) {
+    Var *var = read_unary_expr(ctx);
+    Token *tok = read_token(ctx);
+    if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '=') {
+        ensure_lvalue(var);
+        Var *val = read_stmt(ctx);
+        list_push(ctx->code, make_var_set(var, val));
+    } else if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == ';') {
+        return var;
     }
-    error("not supported yet");
+    NOT_SUPPORTED();
+}
+
+static void read_stmt_or_decl(ReadContext *ctx) {
+    Ctype *type = read_type(ctx);
+    if (type == NULL) {
+        read_stmt(ctx);
+    } else {
+        read_decl(ctx, type);
+    }
+}
+
+static void read_compound_stmt(ReadContext *ctx) {
+    push_scope(ctx);
+    for (;;) {
+        Token *tok = read_token(ctx);
+        if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '}')
+            break;
+        unget_token(ctx, tok);
+        read_stmt_or_decl(ctx);
+    }
+    pop_scope(ctx);
 }
 
 static void read_func_def(ReadContext *ctx) {
     Section *text = find_section(ctx->elf, ".text");
-    Token *fname = read_token(ctx->file);
+    Token *fname = read_token(ctx);
     if (fname->toktype != TOKTYPE_IDENT)
         error("line %d: identifier expected", fname->lineno);
     expect(ctx, '(');
     expect(ctx, ')');
     expect(ctx, '{');
-    push_scope(ctx);
-    for (;;) {
-        Token *tok = read_token(ctx->file);
-        if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '}')
-            break;
-        read_stmt_or_decl(ctx, tok);
-    }
-    pop_scope(ctx);
-    dict_put(ctx->elf->syms, to_string(fname->val.str), make_symbol(fname->val.str, text, 0, STB_GLOBAL, STT_NOTYPE, 1));
+    read_compound_stmt(ctx);
+    Symbol *fsym = make_symbol(to_string(fname->val.str), text, 0, STB_GLOBAL, STT_NOTYPE, 1);
+    dict_put(ctx->elf->syms, to_string(fname->val.str), fsym);
 }
 
 List *parse(File *file, Elf *elf) {
