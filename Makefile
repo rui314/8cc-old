@@ -1,14 +1,15 @@
 CC=gcc
 CFLAGS=-std=c99 -Wall -g
-OBJS=8cc.o string.o list.o gen.o read.o file.o dict.o
+OBJS1=string.o list.o gen.o read.o file.o dict.o error.o elf.o
+OBJS=8cc.o $(OBJS1)
 
 8cc: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS)
 
 $(OBJS): 8cc.h
 
-tests: tests.o string.o list.o gen.o file.o dict.o read.o 8cc.h
-	$(CC) $(CFLAGS) -o $@ string.o list.o gen.o tests.o file.o dict.o read.o
+tests: $(OBJS1) tests.o 8cc.h
+	$(CC) $(CFLAGS) -o $@ tests.o $(OBJS1)
 
 clean:
 	-rm -f 8cc $(OBJS) *.o hello tests

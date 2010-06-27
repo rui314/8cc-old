@@ -227,6 +227,9 @@ typedef struct Elf {
     Dict *syms;
 } Elf;
 
+extern Elf *new_elf(void);
+extern void write_elf(FILE *outfile, Elf *elf);
+extern void add_section(Elf *elf, Section *sect);
 extern Section *find_section(Elf *elf, char *name);
 
 /*
