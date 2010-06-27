@@ -341,6 +341,6 @@ extern Var *make_global_var(String *name, u64 val);
 extern int add_string(Section *data, String *str);
 extern Inst *make_var_set(Var *var, Var *val);
 extern Var *make_extern(String *name);
-extern Inst *make_func_call(Var *fn, List *args);
+extern Inst *make_func_call(Var *fn, Var *rval, List *args);
 
 #endif /* ECC_H */
