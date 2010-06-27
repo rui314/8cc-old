@@ -286,42 +286,46 @@ typedef union Cvalue {
     float f;
 } Cvalue;
 
-#define CTYPE_PTR    0
-#define CTYPE_INT    1
-#define CTYPE_CHAR   2
-#define CTYPE_FLOAT  3
+typedef enum CtypeEnum {
+    CTYPE_PTR, CTYPE_INT, CTYPE_CHAR, CTYPE_FLOAT,
+} CtypeEnum;
 
 typedef struct Ctype {
-    int type;
+    CtypeEnum type;
     struct Ctype *ptr;
 } Ctype;
 
 extern Ctype *make_ctype(int type);
 extern Ctype *make_ctype_ptr(Ctype *type);
 
-#define KEYWORD_TYPE_BEGIN  256
-#define KEYWORD_INT         257
-#define KEYWORD_FLOAT       258
-#define KEYWORD_TYPE_END    259
+typedef enum KeywordType {
+    KEYWORD_TYPE_BEGIN = 256,
+    KEYWORD_INT,
+    KEYWORD_FLOAT,
+    KEYWORD_TYPE_END,
+} KeywordType;
+
 #define IS_TYPE_KEYWORD(k) (KEYWORD_TYPE_BEGIN < (k) && (k) < KEYWORD_TYPE_END)
 
 typedef union TokenValue {
     char c;
     int i;
     float f;
-    char *str;
-    int k;  // keyword value
+    String *str;
+    KeywordType k;
 } TokenValue;
 
-#define TOKTYPE_KEYWORD 0
-#define TOKTYPE_CHAR    1
-#define TOKTYPE_STRING  2
-#define TOKTYPE_INT     3
-#define TOKTYPE_FLOAT   4
-#define TOKTYPE_IDENT   5
+typedef enum TokType {
+    TOKTYPE_KEYWORD,
+    TOKTYPE_CHAR,
+    TOKTYPE_STRING ,
+    TOKTYPE_INT,
+    TOKTYPE_FLOAT,
+    TOKTYPE_IDENT,
+} TokType;
 
 typedef struct Token {
-    int toktype;
+    TokType toktype;
     TokenValue val;
     int lineno;
 } Token;

@@ -50,8 +50,7 @@ String *to_string(char *str) {
 }
 
 bool string_equal(String *a, String *b) {
-    return STRING_LEN(a) == STRING_LEN(b)
-        && !memcmp(STRING_BODY(a), STRING_BODY(b), STRING_LEN(a));
+    return !strcmp(STRING_BODY(a), STRING_BODY(b));
 }
 
 static void ensure_room(String *b, long room) {

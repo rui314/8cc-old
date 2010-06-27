@@ -153,13 +153,13 @@ static char read_escaped(File *file) {
     }
 }
 
-static char *read_str(File *file) {
+static String *read_str(File *file) {
     String *b = make_string();
     for (;;) {
         int c = readc(file);
         switch (c) {
         case '"':
-            return STRING_BODY(b);
+            return b;
         case '\\':
             o1(b, read_escaped(file));
             break;
@@ -181,7 +181,7 @@ static char read_char(File *file) {
     }
 }
 
-static char *read_word(File *file, char c0) {
+static String *read_word(File *file, char c0) {
     String *b = make_string();
     o1(b, c0);
     for (;;) {
@@ -190,9 +190,9 @@ static char *read_word(File *file, char c0) {
             o1(b, c);
         } else if (c != EOF) {
             unreadc(c, file);
-            return STRING_BODY(b);
+            return b;
         } else {
-            return STRING_BODY(b);
+            return b;
         }
     }
 }
@@ -212,7 +212,7 @@ Token *read_token(ReadContext *ctx) {
     }
 
     File *file = ctx->file;
-    char *str;
+    String *str;
     for (;;) {
         int c = readc(file);
         switch (c) {
@@ -239,7 +239,7 @@ Token *read_token(ReadContext *ctx) {
         case 'X': case 'Y': case 'Z':
             str = read_word(file, c);
 #define KEYWORD(type_, val_)                                    \
-            if (!strcmp(str, (type_))) {                        \
+            if (!strcmp(STRING_BODY(str), (type_))) {           \
                 r = make_token(TOKTYPE_KEYWORD, file->lineno);  \
                 r->val.k = (val_);                              \
                 return r;                                       \
@@ -271,11 +271,15 @@ String *token_to_string(Token *tok) {
         o1(r, tok->val.k);
         o1(r, '\0');
         break;
+    case TOKTYPE_CHAR:
+        sprintf(buf, "'%c'", tok->val.c);
+        ostr(r, buf);
+        break;
     case TOKTYPE_IDENT:
-        ostr(r, tok->val.str);
+        ostr(r, STRING_BODY(tok->val.str));
         break;
     case TOKTYPE_STRING:
-        ostr(r, tok->val.str);
+        ostr(r, STRING_BODY(tok->val.str));
         break;
     case TOKTYPE_INT:
         sprintf(buf, "%d", tok->val.i);
@@ -324,12 +328,12 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
             list_push(args, make_imm(CTYPE_FLOAT, (Cvalue)arg->val.f));
             break;
         case TOKTYPE_IDENT: {
-            Var *var = find_var(ctx, to_string(arg->val.str));
+            Var *var = find_var(ctx, arg->val.str);
             list_push(args, var);
             break;
         }
         case TOKTYPE_STRING: {
-            int off = add_string(data, to_string(arg->val.str));
+            int off = add_string(data, arg->val.str);
             Var *var = make_imm(CTYPE_PTR, (Cvalue)off);
             list_push(args, var);
             break;
@@ -340,7 +344,7 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
             error("unknown token type: %d", arg->toktype);
         }
     }
-    Var *fn = make_extern(to_string(fntok->val.str));
+    Var *fn = make_extern(fntok->val.str);
     Var *val = make_var(CTYPE_INT, NULL);
     emit(ctx, make_func_call(fn, val, args));
     return val;
@@ -364,21 +368,21 @@ static Var *read_unary_expr(ReadContext *ctx) {
         return make_imm(CTYPE_FLOAT, (Cvalue)tok->val.f);
     case TOKTYPE_STRING: {
         Section *data = find_section(ctx->elf, ".data");
-        int off = add_string(data, to_string(tok->val.str));
+        int off = add_string(data, tok->val.str);
         return make_imm(CTYPE_PTR, (Cvalue)off);
     }
     case TOKTYPE_KEYWORD:
-        error("expected unary, but got '%s'", tok->val.str);
+        error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
     case TOKTYPE_IDENT: {
         Token *tok1 = read_token(ctx);
         if (tok1->toktype == TOKTYPE_KEYWORD && tok1->val.k == '(')
             return read_func_call(ctx, tok);
         unget_token(ctx, tok1);
-        Var *var = find_var(ctx, to_string(tok->val.str));
+        Var *var = find_var(ctx, tok->val.str);
         if (!var) {
-            warn("'%s' is not defined", tok->val.str);
-            var = make_var(CTYPE_INT, to_string(tok->val.str));
-            add_local_var(ctx, to_string(tok->val.str), var);
+            warn("'%s' is not defined", STRING_BODY(tok->val.str));
+            var = make_var(CTYPE_INT, tok->val.str);
+            add_local_var(ctx, tok->val.str, var);
         }
         var->is_lvalue = true;
         return var;
@@ -395,9 +399,8 @@ static void read_decl(ReadContext *ctx, Ctype *ctype) {
     expect(ctx, '=');
     Var *val = read_unary_expr(ctx);
     expect(ctx, ';');
-    String *name = to_string(ident->val.str);
-    Var *var = make_var(CTYPE_INT, name);
-    add_local_var(ctx, name, var);
+    Var *var = make_var(CTYPE_INT, ident->val.str);
+    add_local_var(ctx, ident->val.str, var);
     emit(ctx, make_var_set(var, val));
 }
 
@@ -458,8 +461,8 @@ static void read_func_def(ReadContext *ctx) {
     expect(ctx, ')');
     expect(ctx, '{');
     read_compound_stmt(ctx);
-    Symbol *fsym = make_symbol(to_string(fname->val.str), text, 0, STB_GLOBAL, STT_NOTYPE, 1);
-    dict_put(ctx->elf->syms, to_string(fname->val.str), fsym);
+    Symbol *fsym = make_symbol(fname->val.str, text, 0, STB_GLOBAL, STT_NOTYPE, 1);
+    dict_put(ctx->elf->syms, fname->val.str, fsym);
 }
 
 List *parse(File *file, Elf *elf) {
