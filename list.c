@@ -59,3 +59,11 @@ void list_pop(List *list) {
         error("list empty");
     list->elems[--list->len] = NULL;
 }
+
+List *sublist(List *orig, int off) {
+    List *r = malloc(sizeof(List));
+    r->elems = orig->elems + off;
+    r->nalloc = orig->nalloc - off;
+    r->len = orig->len - off;
+    return r;
+}

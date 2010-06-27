@@ -82,6 +82,10 @@ void o2(String *b, u16 data) {
     out(b, &data, 2);
 }
 
+void o3(String *b, u32 data) {
+    out(b, &data, 3);
+}
+
 void o4(String *b, u32 data) {
     out(b, &data, 4);
 }
