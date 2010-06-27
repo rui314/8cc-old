@@ -148,6 +148,7 @@ extern void o1(String *b, int byte);
 extern void out(String *b, void *data, size_t size);
 extern void ostr(String *b, char *str);
 extern void o2(String *b, u16 data);
+extern void o3(String *b, u32 data);
 extern void o4(String *b, u32 data);
 extern void o8(String *b, u64 data);
 extern void align(String *b, int n);
@@ -172,6 +173,7 @@ extern List *make_list(void);
 extern void list_push(List *list, void *e);
 extern void list_push(List *list, void *e);
 extern void list_pop(List *list);
+extern List *sublist(List *orig, int off);
 
 /*
  * Dictionary (Hash table)
@@ -359,9 +361,7 @@ typedef struct Var {
 } Var;
 
 typedef struct Inst {
-    char op;
-    void *arg0;
-    void *arg1;
+    int op;
     List *args;
     Cvalue val;
 } Inst;
@@ -370,12 +370,16 @@ extern void assemble(Elf *elf, List *insts);
 extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined);
 
+extern Inst *make_inst0(int op);
+extern Inst *make_inst1(int op, void *v0);
+extern Inst *make_inst2(int op, void *v0, void *v1);
+extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);
+extern Inst *make_instn(int op, List *args);
+
 extern Var *make_imm(int type, Cvalue val);
 extern Var *make_var(int stype, String *name);
 extern Var *make_global_var(String *name, u64 val);
 extern int add_string(Section *data, String *str);
-extern Inst *make_var_set(Var *var, Var *val);
 extern Var *make_extern(String *name);
-extern Inst *make_func_call(Var *fn, Var *rval, List *args);
 
 #endif /* ECC_H */

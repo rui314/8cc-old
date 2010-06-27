@@ -104,6 +104,18 @@ static Var *find_var(ReadContext *ctx, String *name) {
     return NULL;
 }
 
+void skip_comment(File *file) {
+    int prev = '\0';
+    for (;;) {
+        int c = readc(file);
+        if (c == EOF)
+            error("premature end of input file in comment");
+        if (c == '/' && prev == '*')
+            return;
+        prev = c;
+    }
+}
+
 static Token *read_num(File *file, char first, int lineno) {
     Token *tok;
     String *buf = make_string();
@@ -256,7 +268,9 @@ Token *read_token(ReadContext *ctx) {
             r = make_token(TOKTYPE_IDENT, file->lineno);
             r->val.str = str;
             return r;
-        case '{': case '}': case '(': case ')': case ';': case ',': case '=':
+        case '!': case '%': case '&': case '(': case ')': case '*': case '+':
+        case ',': case '-': case '/': case ';': case '=': case '[': case ']':
+        case '^': case '{': case '|': case '}': case '~':
             r = make_token(TOKTYPE_KEYWORD, file->lineno);
             r->val.c = c;
             return r;
@@ -323,6 +337,9 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
     }
 
     List *args = make_list();
+    list_push(args, make_extern(fntok->val.str));
+    Var *val = make_var(CTYPE_INT, NULL);
+    list_push(args, val);
     int i;
     for (i = 0; i < LIST_LEN(argtoks); i++) {
         Token *arg = LIST_ELEM(argtoks, i);
@@ -350,9 +367,7 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
             error("unknown token type: %d", arg->toktype);
         }
     }
-    Var *fn = make_extern(fntok->val.str);
-    Var *val = make_var(CTYPE_INT, NULL);
-    emit(ctx, make_func_call(fn, val, args));
+    emit(ctx, make_instn('$', args));
     return val;
 }
 
@@ -398,16 +413,52 @@ static Var *read_unary_expr(ReadContext *ctx) {
     }
 }
 
+static Var *read_mul_expr(ReadContext *ctx) {
+    Var *v0 = read_unary_expr(ctx);
+    for (;;) {
+        Token *tok = read_token(ctx);
+        if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '*') {
+            Var *v1 = read_unary_expr(ctx);
+            Var *r = make_var(CTYPE_INT, NULL);
+            emit(ctx, make_inst3('*', r, v0, v1));
+            v0 = r;
+            continue;
+        }
+        unget_token(ctx, tok);
+        return v0;
+    }
+}
+
+static Var *read_add_expr(ReadContext *ctx) {
+    Var *v0 = read_mul_expr(ctx);
+    for (;;) {
+        Token *tok = read_token(ctx);
+        if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '+') {
+            Var *v1 = read_mul_expr(ctx);
+            Var *r = make_var(CTYPE_INT, NULL);
+            emit(ctx, make_inst3('+', r, v0, v1));
+            v0 = r;
+            continue;
+        }
+        unget_token(ctx, tok);
+        return v0;
+    }
+}
+
+static Var *read_expr(ReadContext *ctx) {
+    return read_add_expr(ctx);
+}
+
 static void read_decl(ReadContext *ctx, Ctype *ctype) {
     Token *ident = read_ident(ctx);
     if (ident->toktype != TOKTYPE_IDENT)
         error("identifier expected");
     expect(ctx, '=');
-    Var *val = read_unary_expr(ctx);
+    Var *val = read_expr(ctx);
     expect(ctx, ';');
     Var *var = make_var(CTYPE_INT, ident->val.str);
     add_local_var(ctx, ident->val.str, var);
-    emit(ctx, make_var_set(var, val));
+    emit(ctx, make_inst2('=', var, val));
 }
 
 static Ctype *read_type(ReadContext *ctx) {
@@ -430,7 +481,7 @@ static Var *read_stmt(ReadContext *ctx) {
     if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '=') {
         ensure_lvalue(var);
         Var *val = read_stmt(ctx);
-        emit(ctx, make_var_set(var, val));
+        emit(ctx, make_inst2('=', var, val));
     } else if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == ';') {
         return var;
     }
