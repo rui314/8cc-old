@@ -28,6 +28,10 @@ static void pop_scope(ReadContext *ctx) {
     list_pop(ctx->scope);
 }
 
+static void emit(ReadContext *ctx, Inst *inst) {
+    list_push(ctx->code, inst);
+}
+
 static void add_local_var(ReadContext *ctx, String *name, Var *var) {
     List *current_scope = LIST_TOP(ctx->scope);
     list_push(current_scope, name);
@@ -290,7 +294,7 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
     }
     Var *fn = make_extern(to_string(fntok->val.str));
     Var *val = make_var(CTYPE_INT, NULL);
-    list_push(ctx->code, make_func_call(fn, val, args));
+    emit(ctx, make_func_call(fn, val, args));
     return val;
 }
 
@@ -346,7 +350,7 @@ static void read_decl(ReadContext *ctx, Ctype *ctype) {
     String *name = to_string(ident->val.str);
     Var *var = make_var(CTYPE_INT, name);
     add_local_var(ctx, name, var);
-    list_push(ctx->code, make_var_set(var, val));
+    emit(ctx, make_var_set(var, val));
 }
 
 static Ctype *read_type(ReadContext *ctx) {
@@ -369,7 +373,7 @@ static Var *read_stmt(ReadContext *ctx) {
     if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '=') {
         ensure_lvalue(var);
         Var *val = read_stmt(ctx);
-        list_push(ctx->code, make_var_set(var, val));
+        emit(ctx, make_var_set(var, val));
     } else if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == ';') {
         return var;
     }
