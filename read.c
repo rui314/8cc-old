@@ -289,8 +289,9 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
         }
     }
     Var *fn = make_extern(to_string(fntok->val.str));
-    list_push(ctx->code, make_func_call(fn, args));
-    return make_imm(CTYPE_INT, (Cvalue)0);
+    Var *val = make_var(CTYPE_INT, NULL);
+    list_push(ctx->code, make_func_call(fn, val, args));
+    return val;
 }
 
 static Token *read_ident(ReadContext *ctx) {

@@ -118,9 +118,10 @@ Inst *make_var_set(Var *var, Var *val) {
     return r;
 }
 
-Inst *make_func_call(Var *fn, List *args) {
+Inst *make_func_call(Var *fn, Var *rval, List *args) {
     Inst *r = make_inst('$');
     r->arg0 = fn;
+    r->arg1 = rval;
     r->args = args;
     return r;
 }
@@ -162,7 +163,7 @@ static u32 PUSH_XMM_ABS[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
 // MOV rdi/rsi/rdx/rcx/r8/r9, [rbp+x]
 static u32 MOV_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
 
-static void gen_call(String *b, Elf *elf, Var *fn, List *args, Dict *scope) {
+static void gen_call(String *b, Elf *elf, Var *fn, int off, List *args, Dict *scope) {
     Section *text = find_section(elf, ".text");
     Section *data = find_section(elf, ".data");
     int gpr = 0;
@@ -178,6 +179,7 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args, Dict *scope) {
                 o4(b, MOV_STACK[gpr++] | (cvar->sp * 8) << 24);
                 break;
             }
+
             error("unsupported type: %d", var->ctype->type);
         case VAR_IMM:
             switch (var->ctype->type) {
@@ -213,6 +215,9 @@ static void gen_call(String *b, Elf *elf, Var *fn, List *args, Dict *scope) {
     o1(b, 0xe8); // CALL
     add_reloc(text, STRING_LEN(b), STRING_BODY(fn->name), NULL, R_X86_64_PC32, -4);
     o4(b, 0);
+
+    // Save function return value to the stack;
+    o4(b, 0x458948 | ((off * 8) << 24)); // MOV [rbp+off], rax
 }
 
 int var_off(Dict *dict, Var *var, int *offset) {
@@ -236,8 +241,9 @@ void assemble(Elf *elf, List *insts) {
         switch (inst->op) {
         case '$': {
             Var *fn = inst->arg0;
+            int off = var_off(dict, inst->arg1, &offset);
             List *args = inst->args;
-            gen_call(b, elf, fn, args, dict);
+            gen_call(b, elf, fn, off, args, dict);
             break;
         }
         case '=': {
