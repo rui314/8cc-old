@@ -28,6 +28,20 @@
 
 #include "8cc.h"
 
+static bool store(Dict *dict, void *key, u32 hv, void *obj);
+
+/*
+ * This is an implementation of open-addressing hash table.
+ *
+ * There are two types of dictionaries in 8cc.  One is string dictionary whose
+ * key is string, and keys are compared by string_equal().  Another is address
+ * dictionary, whose keys are compared just by pointer comparison.  Two strings
+ * having the identical content but are different objects shares the same bucket
+ * in string dictionary, while they are distinguished in address dictionary.
+ *
+ * Buckets having NULL in 'key' field are considered as vacant buckets.
+ */
+
 static Dict *make_dict_int(int type, int size) {
     Dict *r = malloc(sizeof(Dict));
     r->type = type;
@@ -35,7 +49,7 @@ static Dict *make_dict_int(int type, int size) {
     r->nalloc = size;
     r->nelem = 0;
     for (int i = 0; i < size; i++)
-        r->buckets[i].hashval = 0;
+        r->buckets[i].key = NULL;
     return r;
 }
 
@@ -47,17 +61,22 @@ Dict *make_address_dict(void) {
     return make_dict_int(DICT_TYPE_ADDRESS, DICT_INITIAL_SIZE);
 }
 
+/*============================================================
+ * Hash functions
+ */
+
 static inline u32 string_hash(String *str) {
     u32 hv = 0;
     char *ptr = STRING_BODY(str);
     for (int i = 0; i < STRING_LEN(str); i++) {
         hv = (hv << 5) - hv + (unsigned char)*ptr++;
     }
-    return hv == 0 ? 1 : hv;
+    return hv;
 }
 
 static inline u32 address_hash(void *ptr) {
-    return ((u32)(intptr_t)ptr) * 2654435761UL;
+    u32 hv = ((u32)(intptr_t)ptr) * 2654435761UL;
+    return hv;
 }
 
 static inline u32 calculate_hash(Dict *dict, void *obj) {
@@ -70,12 +89,35 @@ static inline u32 calculate_hash(Dict *dict, void *obj) {
     error("[internal error] unknown dictionary type: %d", dict->type);
 }
 
+/*============================================================
+ * Rehashing
+ */
+
+static void rehash(Dict *dict) {
+    Dict *newdict = make_dict_int(dict->type, dict->nalloc * 2);
+    for (int i = 0; i < dict->nalloc; i++) {
+        Bucket *ent = &dict->buckets[i];
+        if (!ent->key)
+            continue;
+        store(newdict, ent->key, ent->hashval, ent->elem);
+    }
+    dict->buckets = newdict->buckets;
+    dict->nalloc = newdict->nalloc;
+}
+
+/*============================================================
+ * Accessors
+ */
+
+/*
+ * Returns a pointer to a bucket to which a given key would be stored.
+ */
 static Bucket *find_bucket(Dict *dict, void *key, u32 hv) {
     int start = hv % dict->nalloc;
     Bucket *ent;
     for (int i = start; i < start + dict->nalloc; i++) {
         ent = &dict->buckets[i % dict->nalloc];
-        if (!ent->hashval) return ent;
+        if (!ent->key) return ent;
         if (ent->hashval != hv)
             continue;
         if (dict->type == DICT_TYPE_STRING && string_equal(ent->key, key))
@@ -86,27 +128,23 @@ static Bucket *find_bucket(Dict *dict, void *key, u32 hv) {
     error("[internal errror] no space found in dictionary");
 }
 
+/*
+ * Puts a given object to a dictionary.  Returns true iff the given key was
+ * already associated with a value.
+ */
 static bool store(Dict *dict, void *key, u32 hv, void *obj) {
     Bucket *ent = find_bucket(dict, key, hv);
-    bool r = !!ent->hashval;
+    bool r = !!ent->key;
     ent->hashval = hv;
     ent->key = key;
     ent->elem = obj;
     return r;
 }
 
-static void rehash(Dict *dict) {
-    Dict *newdict = make_dict_int(dict->type, dict->nalloc * 2);
-    for (int i = 0; i < dict->nalloc; i++) {
-        Bucket *ent = &dict->buckets[i];
-        if (!ent->hashval)
-            continue;
-        store(newdict, ent->key, ent->hashval, ent->elem);
-    }
-    dict->buckets = newdict->buckets;
-    dict->nalloc = newdict->nalloc;
-}
-
+/*
+ * Call rehash() if 3/4 buckets are already in use.  Otherwise, do
+ * nothing.
+ */
 static void ensure_room(Dict *dict) {
     if (dict->nelem < (dict->nalloc * 3 / 4))
         return;
@@ -122,7 +160,7 @@ void dict_put(Dict *dict, void *key, void *obj) {
 
 bool dict_delete(Dict *dict, void *key) {
     Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
-    if (!ent->hashval) return false;
+    if (!ent->key) return false;
     ent->hashval = 0;
     ent->key = NULL;
     ent->elem = NULL;
@@ -132,13 +170,14 @@ bool dict_delete(Dict *dict, void *key) {
 
 void *dict_get(Dict *dict, void *key) {
     Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
-    if (!ent->hashval) return NULL;
+    if (!ent->key) return NULL;
     return ent->elem;
 }
 
-/*
+/*============================================================
  * Iterator
  */
+
 DictIter *make_dict_iter(Dict* dict) {
     DictIter *r = malloc(sizeof(DictIter));
     r->dict = dict;
@@ -150,7 +189,7 @@ void *dict_iter_next(DictIter* iter) {
     while (iter->idx < iter->dict->nalloc) {
         Bucket *ent = &iter->dict->buckets[iter->idx];
         iter->idx++;
-        if (ent->hashval)
+        if (ent->key)
             return ent->elem;
     }
     return NULL;

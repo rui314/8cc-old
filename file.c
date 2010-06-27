@@ -28,6 +28,10 @@
 
 #include "8cc.h"
 
+/*
+ * A wrapper object for stdio's FILE.
+ */
+
 File *make_file(FILE *stream, char *filename) {
     File *r = malloc(sizeof(File));
     r->stream = stream;
@@ -57,6 +61,10 @@ void unreadc(int c, File *file) {
     file->ungotten = c;
 }
 
+/*
+ * Abstracts end-of-line differences.  All sequences of "\r\n", "\n"
+ * and "\r" are converted to '\n'.
+ */
 int readc(File *file) {
     int c;
     if (file->ungotten == EOF) {
