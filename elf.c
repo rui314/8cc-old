@@ -28,6 +28,36 @@
 
 #include "8cc.h"
 
+/*
+ * Functions to create an ELF format object file that you can link to create an
+ * executable.
+ *
+ * ELF object file consists with the file header and one or more "sections".
+ * Some sections contains data used by executable itself, such as data section
+ * (contains initialized data), text section (code), or bss (uninitialized
+ * data).  Other sections are used by linkers and loaders.  These includes
+ * relocation information and symbol tables.
+ *
+ * In order to understand what the functions in this file actually do, you may
+ * want to read documents regarding ELF format first.  Here is list of documents
+ * I found useful for the purpose.
+ *
+ *   Linkers and Loaders by John R. Levine, published by Morgan-Kauffman in
+ *   October 1999, ISBN 1-55860-496-0.
+ *   http://linker.iecc.com/
+ *
+ *   Tool Interface Standard (TIS) Executable and Linking Format (ELF)
+ *   Specification - Version 1.2 (May 1995)
+ *   http://refspecs.freestandards.org/elf/elf.pdf
+ *
+ *   ELF-64 Object File Format - Version 1.5 Draft 2 (May 27, 1998)
+ *   http://downloads.openwatcom.org/ftp/devel/docs/elf-64-gen.pdf
+ *
+ *   Ulrich Drepper (August 20, 2006). How To Write Shared Libraries. 4.0.
+ *   http://people.redhat.com/drepper/dsohowto.pdf
+ */
+
+/* First 16 bytes of ELF file on x86-64. */
 static u8 elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 Elf *new_elf(void) {
@@ -39,10 +69,31 @@ Elf *new_elf(void) {
     return elf;
 }
 
+Section *make_section(char *name, int type) {
+    Section *sect = malloc(sizeof(Section));
+    sect->body = make_string();
+    sect->name = malloc(strlen(name) + 1);
+    strcpy(sect->name, name);
+    sect->shstrtab_off = 0;
+    sect->type = type;
+    sect->flags = 0;
+    sect->align = 1;
+    sect->rels = make_list();
+    sect->link = 0;
+    sect->info = 0;
+    sect->entsize = 0;
+    sect->symindex = 0;
+    return sect;
+}
+
 void add_section(Elf *elf, Section *sect) {
     list_push(elf->sections, sect);
     sect->shndx = LIST_LEN(elf->sections);
 }
+
+/*============================================================
+ * Symbol table
+ */
 
 static void write_one_symbol(Symbol *sym, int *index, String *symtab, String *strtab) {
     if (sym->name) {
@@ -63,6 +114,12 @@ static void write_one_symbol(Symbol *sym, int *index, String *symtab, String *st
     sym->index = (*index)++;
 }
 
+/*
+ * Symbols whose attribute is LOCAL must come before other symbols in symbol
+ * table.  This function is called twice.  In the first pass, localonly is false
+ * so this outputs local symbols.  In the second pass, this outputs non-local
+ * ones.
+ */
 static void write_sym_to_buf(Elf *elf, int *index, String *symtab, String *strtab, bool localonly) {
     DictIter *iter = make_dict_iter(elf->syms);
     for (Symbol *sym = dict_iter_next(iter); sym; sym = dict_iter_next(iter)) {
@@ -118,6 +175,10 @@ static void add_symtab(Elf *elf) {
     add_section(elf, strtab);
 }
 
+/*============================================================
+ * Relocations
+ */
+
 static Symbol *find_symbol(Elf *elf, char *name) {
     Symbol *sym = dict_get(elf->syms, to_string(name));
     if (!sym)
@@ -155,6 +216,10 @@ static void add_reloc(Elf *elf) {
     }
 }
 
+/*============================================================
+ * ".shstrtab" section
+ */
+
 static void add_shstrtab(Elf *elf) {
     Section *shstr = make_section(".shstrtab", SHT_STRTAB);
     elf->shnum = LIST_LEN(elf->sections) + 1;
@@ -168,6 +233,10 @@ static void add_shstrtab(Elf *elf) {
     }
     shstr->body = b;
 }
+
+/*============================================================
+ * Outputs ELF file
+ */
 
 static void write_section(String *header, String *content, Section *sect, int offset) {
     o4(header, sect->shstrtab_off); // sh_name

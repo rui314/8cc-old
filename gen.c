@@ -28,22 +28,9 @@
 
 #include "8cc.h"
 
-Section *make_section(char *name, int type) {
-    Section *sect = malloc(sizeof(Section));
-    sect->body = make_string();
-    sect->name = malloc(strlen(name) + 1);
-    strcpy(sect->name, name);
-    sect->shstrtab_off = 0;
-    sect->type = type;
-    sect->flags = 0;
-    sect->align = 1;
-    sect->rels = make_list();
-    sect->link = 0;
-    sect->info = 0;
-    sect->entsize = 0;
-    sect->symindex = 0;
-    return sect;
-}
+/*
+ * Code generator for x86-64.
+ */
 
 typedef struct CompiledVar {
     int sp;

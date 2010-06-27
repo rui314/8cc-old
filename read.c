@@ -28,6 +28,26 @@
 
 #include "8cc.h"
 
+/*
+ * Recursive-descent parser for C.  This emits flat intermediate code
+ * during parsing input file.  For example, the following fragment of
+ * code
+ *
+ *   i = func(3 + 4 * j, k++)
+ *
+ * would be compiled to the following code.
+ *
+ *   tmp0 = 4 * i
+ *   tmp1 = 3 + tmp0
+ *   tmp2 = k
+ *   k = k + 1
+ *   tmp3 = call(func, tmp1, tmp2)
+ *   i = tmp3
+ *
+ * Note that actual arithmetic operators have not been implemented
+ * yet.
+ */
+
 #define NOT_SUPPORTED() \
     do { error("line %d: not supported yet", __LINE__); } while (0)
 
