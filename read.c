@@ -46,6 +46,12 @@
  *
  * Note that actual arithmetic operators have not been implemented
  * yet.
+ *
+ * The following book contains a BNF grammer for C.
+ *
+ *   C: A Reference Manual, Fifth Edition by Samuel P. Harbison and Guy
+ *   L. Steele, published by Prentice Hall in February 2002, ISBN 0-13-089592X.
+ *   http://www.amazon.com/dp/013089592X/
  */
 
 #define NOT_SUPPORTED() \
