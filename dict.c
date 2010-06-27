@@ -28,6 +28,9 @@
 
 #include "8cc.h"
 
+#define DELETED ((void *)-1)
+#define BUCKET_EMPTY(ent) ((ent)->key == NULL || (ent)->key == DELETED)
+
 static bool store(Dict *dict, void *key, u32 hv, void *obj);
 
 /*
@@ -68,7 +71,7 @@ Dict *make_address_dict(void) {
 static inline u32 string_hash(String *str) {
     u32 hv = 0;
     char *ptr = STRING_BODY(str);
-    for (int i = 0; i < STRING_LEN(str); i++) {
+    for (int i = 0; i < STRING_LEN(str) && ptr[i]; i++) {
         hv = (hv << 5) - hv + (unsigned char)*ptr++;
     }
     return hv;
@@ -97,7 +100,7 @@ static void rehash(Dict *dict) {
     Dict *newdict = make_dict_int(dict->type, dict->nalloc * 2);
     for (int i = 0; i < dict->nalloc; i++) {
         Bucket *ent = &dict->buckets[i];
-        if (!ent->key)
+        if (BUCKET_EMPTY(ent))
             continue;
         store(newdict, ent->key, ent->hashval, ent->elem);
     }
@@ -117,7 +120,7 @@ static Bucket *find_bucket(Dict *dict, void *key, u32 hv) {
     Bucket *ent;
     for (int i = start; i < start + dict->nalloc; i++) {
         ent = &dict->buckets[i % dict->nalloc];
-        if (!ent->key) return ent;
+        if (BUCKET_EMPTY(ent)) return ent;
         if (ent->hashval != hv)
             continue;
         if (dict->type == DICT_TYPE_STRING && string_equal(ent->key, key))
@@ -160,9 +163,9 @@ void dict_put(Dict *dict, void *key, void *obj) {
 
 bool dict_delete(Dict *dict, void *key) {
     Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
-    if (!ent->key) return false;
+    if (BUCKET_EMPTY(ent)) return false;
     ent->hashval = 0;
-    ent->key = NULL;
+    ent->key = DELETED;
     ent->elem = NULL;
     dict->nelem--;
     return true;

@@ -204,6 +204,7 @@ static void gen_call(String *b, Elf *elf, Var *fn, int off, List *args, Dict *sc
                 o8(b, 0);
                 break;
             case CTYPE_INT:
+            case CTYPE_CHAR:
                 o2(b, PUSH_ABS[gpr++]);
                 o8(b, var->val.i);
                 break;
