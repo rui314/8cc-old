@@ -181,6 +181,7 @@ static Token *read_num(File *file, char first, int lineno) {
 
 static char read_escaped(File *file) {
     int c = readc(file);
+    int r;
     switch (c) {
     case EOF:
         error("line %d: premature end of input file while reading a literal string or a character", file->lineno);
@@ -191,7 +192,22 @@ static char read_escaped(File *file) {
     case 'v': return '\v';
     case 'f': return '\f';
     case 'r': return '\r';
-    case '0': return '\0';
+    case '0': case '1': case '2': case '3': case '4':
+    case '5': case '6': case '7': case '8': case '9':
+        r = c - '0';
+        c = readc(file);
+        if (isdigit(c)) {
+            r = r * 8 + (c - '0');
+            c = readc(file);
+            if (isdigit(c)) {
+                r = r * 8 + (c - '0');
+            } else {
+                unreadc(c, file);
+            }
+        } else {
+            unreadc(c, file);
+        }
+        return r;
     default: return (char)c;
     }
 }
@@ -270,10 +286,14 @@ Token *read_token(ReadContext *ctx) {
             r = make_token(TOKTYPE_STRING, file->lineno);
             r->val.str = read_str(file);
             return r;
-        case '\'':
+        case '\'': {
             r = make_token(TOKTYPE_CHAR, file->lineno);
             r->val.c = read_char(file);
+            int c1 = read_char(file);
+            if (c1 != '\'')
+                error("single quote expected, but got %c", c1);
             return r;
+        }
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
         case 'h': case 'i': case 'j': case 'k': case 'l': case 'm': case 'n':
         case 'o': case 'p': case 'q': case 'r': case 's': case 't': case 'u':
