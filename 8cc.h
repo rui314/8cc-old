@@ -136,6 +136,7 @@ typedef struct String {
     char *buf;
     int nalloc;
     int len;
+    int pos;
 } String;
 
 #define STRING_LEN(b) ((b)->len)
@@ -152,6 +153,7 @@ extern void o3(String *b, u32 data);
 extern void o4(String *b, u32 data);
 extern void o8(String *b, u64 data);
 extern void align(String *b, int n);
+extern void string_seek(String *b, int pos);
 
 /*
  * List
@@ -167,12 +169,13 @@ typedef struct List {
 
 #define LIST_ELEM(lis, i) (((lis)->elems)[i])
 #define LIST_LEN(lis) ((lis)->len)
-#define LIST_TOP(lis) LIST_ELEM((lis), 0)
+#define LIST_TOP(lis) (LIST_ELEM((lis), 0))
+#define LIST_BOTTOM(lis) (LIST_ELEM((lis), LIST_LEN(lis) - 1))
 
 extern List *make_list(void);
 extern void list_push(List *list, void *e);
 extern void list_push(List *list, void *e);
-extern void list_pop(List *list);
+extern void *list_pop(List *list);
 extern List *sublist(List *orig, int off);
 
 /*
@@ -305,8 +308,11 @@ typedef enum KeywordType {
     KEYWORD_INT,
     KEYWORD_FLOAT,
     KEYWORD_TYPE_END,
+    KEYWORD_IF,
+    KEYWORD_ELSE,
 } KeywordType;
 
+#define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
 #define IS_TYPE_KEYWORD(k) (KEYWORD_TYPE_BEGIN < (k) && (k) < KEYWORD_TYPE_END)
 
 typedef union TokenValue {
@@ -332,15 +338,21 @@ typedef struct Token {
     int lineno;
 } Token;
 
+typedef struct ControlBlock {
+    int pos;
+    List *code;
+} ControlBlock;
+
 typedef struct ReadContext {
     File *file;
     Elf *elf;
     List *scope;
-    List *code;
+    ControlBlock *entry;
+    List *blockstack;
     Token *lasttok;
 } ReadContext;
 
-extern List *parse(File *file, Elf *elf);
+extern ControlBlock *parse(File *file, Elf *elf);
 extern Token *read_token(ReadContext *ctx);
 extern ReadContext *make_read_context(File *file, Elf *elf);
 
@@ -360,13 +372,19 @@ typedef struct Var {
     bool is_lvalue;
 } Var;
 
+enum {
+    OP_FUNC_CALL = 256,
+    OP_IF,
+    OP_JMP,
+};
+
 typedef struct Inst {
     int op;
     List *args;
     Cvalue val;
 } Inst;
 
-extern void assemble(Elf *elf, List *insts);
+extern void assemble(Elf *elf, ControlBlock *entry);
 extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined);
 
@@ -374,6 +392,7 @@ extern Inst *make_inst0(int op);
 extern Inst *make_inst1(int op, void *v0);
 extern Inst *make_inst2(int op, void *v0, void *v1);
 extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);
+extern Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v4);
 extern Inst *make_instn(int op, List *args);
 
 extern Var *make_imm(int type, Cvalue val);

@@ -51,8 +51,11 @@
  *   http://www.amazon.com/dp/013089592X/
  */
 
-#define NOT_SUPPORTED() \
+#define NOT_SUPPORTED()                                                 \
     do { error("line %d: not supported yet", __LINE__); } while (0)
+
+static void read_compound_stmt(ReadContext *ctx);
+static void read_stmt(ReadContext *ctx);
 
 static Token *make_token(int toktype, int lineno) {
     Token *r = malloc(sizeof(Token));
@@ -61,12 +64,21 @@ static Token *make_token(int toktype, int lineno) {
     return r;
 }
 
+ControlBlock *make_control_block() {
+    ControlBlock *r = malloc(sizeof(ControlBlock));
+    r->pos = -1;
+    r->code = make_list();
+    return r;
+}
+
 ReadContext *make_read_context(File *file, Elf *elf) {
     ReadContext *r = malloc(sizeof(ReadContext));
     r->file = file;
     r->elf = elf;
     r->scope = make_list();
-    r->code = make_list();
+    r->entry = make_control_block();
+    r->blockstack = make_list();
+    list_push(r->blockstack, r->entry);
     r->lasttok = NULL;
     return r;
 }
@@ -79,8 +91,23 @@ static void pop_scope(ReadContext *ctx) {
     list_pop(ctx->scope);
 }
 
+static void push_control_block(ReadContext *ctx) {
+    list_push(ctx->blockstack, make_control_block());
+}
+
+static ControlBlock *pop_control_block(ReadContext *ctx) {
+    return list_pop(ctx->blockstack);
+}
+
+static void replace_control_block(ReadContext *ctx, ControlBlock *block) {
+    LIST_BOTTOM(ctx->blockstack) = block;
+}
+
 static void emit(ReadContext *ctx, Inst *inst) {
-    list_push(ctx->code, inst);
+    if (LIST_LEN(ctx->blockstack) == 0)
+        error("[internal error] control block stack is empty");
+    ControlBlock *block = LIST_BOTTOM(ctx->blockstack);
+    list_push(block->code, inst);
 }
 
 static void add_local_var(ReadContext *ctx, String *name, Var *var) {
@@ -164,9 +191,11 @@ static char read_escaped(File *file) {
     case 'v': return '\v';
     case 'f': return '\f';
     case 'r': return '\r';
+    case '0': return '\0';
     default: return (char)c;
     }
 }
+
 
 static String *read_str(File *file) {
     String *b = make_string();
@@ -174,6 +203,7 @@ static String *read_str(File *file) {
         int c = readc(file);
         switch (c) {
         case '"':
+            o1(b, '\0');
             return b;
         case '\\':
             o1(b, read_escaped(file));
@@ -259,8 +289,10 @@ Token *read_token(ReadContext *ctx) {
                 r->val.k = (val_);                              \
                 return r;                                       \
             }
-            KEYWORD("int", KEYWORD_INT);
+            KEYWORD("int",   KEYWORD_INT);
             KEYWORD("float", KEYWORD_FLOAT);
+            KEYWORD("if",    KEYWORD_IF);
+            KEYWORD("else",  KEYWORD_ELSE);
 #undef KEYWORD
             r = make_token(TOKTYPE_IDENT, file->lineno);
             r->val.str = str;
@@ -364,7 +396,7 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
             error("unknown token type: %d", arg->toktype);
         }
     }
-    emit(ctx, make_instn('$', args));
+    emit(ctx, make_instn(OP_FUNC_CALL, args));
     return val;
 }
 
@@ -472,17 +504,52 @@ static void ensure_lvalue(Var *var) {
         error("must be lvalue: '%s'", STRING_BODY(var->name));
 }
 
-static Var *read_stmt(ReadContext *ctx) {
+static void read_if_stmt(ReadContext *ctx) {
+    ControlBlock *then, *els = NULL;
+    expect(ctx, '(');
+    Var *cond = read_expr(ctx);
+    expect(ctx, ')');
+
+    ControlBlock *cont = make_control_block();
+    push_control_block(ctx);
+    expect(ctx, '{');
+    read_compound_stmt(ctx);
+    then = pop_control_block(ctx);
+
+    Token *tok = read_token(ctx);
+    if (IS_KEYWORD(tok, KEYWORD_ELSE)) {
+        expect(ctx, '{');
+        push_control_block(ctx);
+        read_compound_stmt(ctx);
+        els = pop_control_block(ctx);
+    } else {
+        unget_token(ctx, tok);
+    }
+    emit(ctx, make_inst4(OP_IF, cond, then, els, cont));
+    replace_control_block(ctx, cont);
+}
+
+static Var *read_assignment_expr(ReadContext *ctx) {
     Var *var = read_unary_expr(ctx);
     Token *tok = read_token(ctx);
     if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '=') {
         ensure_lvalue(var);
-        Var *val = read_stmt(ctx);
+        Var *val = read_expr(ctx);
         emit(ctx, make_inst2('=', var, val));
     } else if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == ';') {
         return var;
     }
     NOT_SUPPORTED();
+}
+
+static void read_stmt(ReadContext *ctx) {
+    Token *tok = read_token(ctx);
+    if (IS_KEYWORD(tok, KEYWORD_IF)) {
+        read_if_stmt(ctx);
+        return;
+    }
+    unget_token(ctx, tok);
+    read_assignment_expr(ctx);
 }
 
 static void read_stmt_or_decl(ReadContext *ctx) {
@@ -519,8 +586,8 @@ static void read_func_def(ReadContext *ctx) {
     dict_put(ctx->elf->syms, fname->val.str, fsym);
 }
 
-List *parse(File *file, Elf *elf) {
+ControlBlock *parse(File *file, Elf *elf) {
     ReadContext *ctx = make_read_context(file, elf);
     read_func_def(ctx);
-    return ctx->code;
+    return ctx->entry;
 }

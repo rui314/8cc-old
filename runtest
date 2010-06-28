@@ -7,7 +7,7 @@ echo
 
 runtest() {
     /bin/echo -En "$2 ... "
-    echo "main() {$2;}" | ./8cc - tmp$$.o
+    echo "main() {$2}" | ./8cc - tmp$$.o
     gcc -o tmp$$ tmp$$.o
     local result="`./tmp$$`"
     if [ "$result" = "$1" ]; then
@@ -18,15 +18,17 @@ runtest() {
     fi
 }
 
-runtest 'Hello, world!' 'printf("Hello, world!\n")'
-runtest '12.34 56.78 42' 'printf("%2.2f %2.2f %d\n", 12.34, 56.78, 42)'
-runtest '3' 'int i=3; printf("%d", i)'
-runtest '3' 'int i=3; int j=i; printf("%d", j)'
-runtest '50' 'int i=atoi("50"); int j = i; printf("%d", j)'
-runtest '15' 'int i=3; int j=i+5+7; printf("%d", j)'
-runtest '-5' 'int i=3; int j=5-i-7; printf("%d", j)'
-runtest '10' 'int i=3; int j=1+i*3; printf("%d", j)'
-runtest '5' 'int i=9; int j=1+i/3+9/i; printf("%d", j)'
+runtest 'Hello, world!' 'printf("Hello, world!");'
+runtest '12.34 56.78 42' 'printf("%2.2f %2.2f %d", 12.34, 56.78, 42);'
+runtest '3' 'int i=3; printf("%d", i);'
+runtest '3' 'int i=3; int j=i; printf("%d", j);'
+runtest '50' 'int i=atoi("50"); int j = i; printf("%d", j);'
+runtest '15' 'int i=3; int j=i+5+7; printf("%d", j);'
+runtest '-5' 'int i=3; int j=5-i-7; printf("%d", j);'
+runtest '10' 'int i=3; int j=1+i*3; printf("%d", j);'
+runtest '5' 'int i=9; int j=1+i/3+9/i; printf("%d", j);'
+runtest 'true' 'int i=1; if (i) { printf("true"); } else { printf("false"); }'
+runtest 'false' 'int i=0; if (i) { printf("true"); } else { printf("false"); }'
 
 rm -f tmp$$ tmp$$.o
 echo

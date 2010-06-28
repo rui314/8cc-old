@@ -33,6 +33,7 @@ static String *make_string_int(int size) {
     obj->buf = malloc(size);
     obj->nalloc = size;
     obj->len = 0;
+    obj->pos = 0;
     return obj;
 }
 
@@ -54,7 +55,7 @@ bool string_equal(String *a, String *b) {
 }
 
 static void ensure_room(String *b, long room) {
-    if (b->nalloc >= (b->len + room))
+    if (b->nalloc >= (b->pos + room))
         return;
     long newsize = b->nalloc * 2;
     char *buf = malloc(newsize);
@@ -65,7 +66,9 @@ static void ensure_room(String *b, long room) {
 
 void o1(String *b, int byte) {
     ensure_room(b, 1);
-    b->buf[b->len++] = byte;
+    b->buf[b->pos++] = byte;
+    if (b->len < b->pos)
+        b->len = b->pos;
 }
 
 void out(String *b, void *data, size_t size) {
@@ -98,4 +101,10 @@ void align(String *b, int n) {
     int pad = n - b->len % n;
     for (int i = 0; i < pad; i++)
         o1(b, 0);
+}
+
+void string_seek(String *b, int pos) {
+    if (pos > b->len)
+        error("can't seek beyond the string boundary");
+    b->pos = pos;
 }

@@ -54,10 +54,12 @@ void list_push(List *list, void *e) {
     list->elems[list->len++] = e;
 }
 
-void list_pop(List *list) {
+void *list_pop(List *list) {
     if (list->len == 0)
         error("list empty");
-    list->elems[--list->len] = NULL;
+    void *r = list->elems[--list->len];
+    list->elems[list->len] = NULL;
+    return r;
 }
 
 List *sublist(List *orig, int off) {
