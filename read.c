@@ -414,10 +414,10 @@ static Var *read_mul_expr(ReadContext *ctx) {
     Var *v0 = read_unary_expr(ctx);
     for (;;) {
         Token *tok = read_token(ctx);
-        if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '*') {
+        if (tok->toktype == TOKTYPE_KEYWORD && (tok->val.k == '*' || tok->val.k == '/')) {
             Var *v1 = read_unary_expr(ctx);
             Var *r = make_var(CTYPE_INT, NULL);
-            emit(ctx, make_inst3('*', r, v0, v1));
+            emit(ctx, make_inst3(tok->val.k, r, v0, v1));
             v0 = r;
             continue;
         }

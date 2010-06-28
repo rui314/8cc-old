@@ -335,6 +335,27 @@ static void handle_imul(Context *ctx, Inst *inst) {
     store_rax(ctx, LIST_ELEM(inst->args, 0));
 }
 
+static void handle_idiv(Context *ctx, Inst *inst) {
+    Var *src0 = LIST_ELEM(inst->args, 1);
+    Var *src1 = LIST_ELEM(inst->args, 2);
+    emit_load(ctx, src0);
+    // XOR edx, edx
+    o2(ctx->text, 0xd231);
+    if (src1->stype == VAR_IMM) {
+        // MOV r11, imm
+        o2(ctx->text, 0xbb49);
+        o8(ctx->text, src1->val.i);
+        // IDIV r11
+        o3(ctx->text, 0xfbf749);
+    } else {
+        int off = var_stack_pos(ctx, src1);
+        // IDIV [rbp+off]
+        o3(ctx->text, 0x7df748);
+        o1(ctx->text, off);
+    }
+    store_rax(ctx, LIST_ELEM(inst->args, 0));
+}
+
 static void handle_assign(Context *ctx, Inst *inst) {
     Var *var = LIST_ELEM(inst->args, 0);
     Var *val = LIST_ELEM(inst->args, 1);
@@ -369,6 +390,9 @@ void assemble(Elf *elf, List *insts) {
             break;
         case '*':
             handle_imul(ctx, inst);
+            break;
+        case '/':
+            handle_idiv(ctx, inst);
             break;
         case '$':
             handle_func_call(ctx, inst);
