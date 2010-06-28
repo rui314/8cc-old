@@ -199,13 +199,16 @@ static void test_read_float(void) {
 }
 
 static void test_read_char(void) {
-    FILE *stream = create_file("'a'");
+    FILE *stream = create_file("'a' '\\n' '\\0' '\\233'");
     File *file = make_file(stream, "-");
     ReadContext *ctx = make_read_context(file, NULL);
 
     Token *tok = read_token(ctx);
     EQ(TOKTYPE_CHAR, tok->toktype);
     EQ('a', tok->val.c);
+    EQ('\n', read_token(ctx)->val.c);
+    EQ('\0', read_token(ctx)->val.c);
+    EQ('\233', read_token(ctx)->val.c);
 }
 
 static void test_read_keywords_int(ReadContext *ctx, int type) {
