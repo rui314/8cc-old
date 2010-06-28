@@ -147,6 +147,9 @@ Var *make_extern(String *name) {
 /*
  * Instructions for intermediate code
  */
+
+static void handle_block(Context *ctx, ControlBlock *block);
+
 static Inst *make_inst(int op, int narg) {
     Inst *r = malloc(sizeof(Inst));
     r->op = op;
@@ -176,6 +179,15 @@ Inst *make_inst3(int op, void *v0, void *v1, void *v2) {
     LIST_ELEM(r->args, 0) = v0;
     LIST_ELEM(r->args, 1) = v1;
     LIST_ELEM(r->args, 2) = v2;
+    return r;
+}
+
+Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v3) {
+    Inst *r = make_inst(op, 4);
+    LIST_ELEM(r->args, 0) = v0;
+    LIST_ELEM(r->args, 1) = v1;
+    LIST_ELEM(r->args, 2) = v2;
+    LIST_ELEM(r->args, 3) = v3;
     return r;
 }
 
@@ -306,12 +318,12 @@ static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
     emit_load(ctx, v0);
     Var *v1 = LIST_ELEM(inst->args, 2);
     if (v1->stype == VAR_IMM) {
-        // ADD rax, imm
+        // ADD/SUB rax, imm
         o1(ctx->text, add ? 0x4805 : 0x482d);
         o4(ctx->text, v1->val.i);
     } else {
         int off = var_stack_pos(ctx, v1);
-        // ADD rax, [rbp-v1]
+        // ADD/SUB rax, [rbp-v1]
         o3(ctx->text, add ? 0x450348 : 0x452b48);
         o1(ctx->text, off);
     }
@@ -376,14 +388,68 @@ static void handle_assign(Context *ctx, Inst *inst) {
     }
 }
 
-void assemble(Elf *elf, List *insts) {
-    Context *ctx = make_context(elf);
-    o1(ctx->text, 0x55); // PUSH rbp
-    o3(ctx->text, 0xe58948); // MOV rbp, rsp
-    o3(ctx->text, 0xec8148); o4(ctx->text, 160); // SUB rsp, 160
+static void handle_if(Context *ctx, Inst *inst) {
+    Var *cond = LIST_ELEM(inst->args, 0);
+    ControlBlock *then = LIST_ELEM(inst->args, 1);
+    ControlBlock *els = LIST_ELEM(inst->args, 2);
+    ControlBlock *cont = LIST_ELEM(inst->args, 3);
+    if (cond->stype == VAR_IMM) {
+        handle_block(ctx, cond->val.i ? then : els);
+        return;
+    }
+    emit_load(ctx, cond);
 
-    for (int i = 0; i < LIST_LEN(insts); i++) {
-        Inst *inst = LIST_ELEM(insts, i);
+    // TEST rax, rax
+    o2(ctx->text, 0xc085);
+
+    // JE offset
+    o2(ctx->text, 0x840f);
+    o4(ctx->text, 0); // filled later
+    int pos0 = STRING_LEN(ctx->text);
+    if (then->pos < 0)
+        handle_block(ctx, then);
+
+    int pos1;
+    if (els) {
+        // JMP offset
+        o1(ctx->text, 0xe9);
+        o4(ctx->text, 0); // filled later
+        pos1 = STRING_LEN(ctx->text);
+        if (els->pos < 0)
+            handle_block(ctx, els);
+    }
+
+    // Backfill
+    int save = STRING_LEN(ctx->text);
+    string_seek(ctx->text, pos0 - 4);
+    if (els) {
+        o4(ctx->text, pos1 - pos0);
+        string_seek(ctx->text, pos1 - 4);
+        o4(ctx->text, save - pos1);
+    } else {
+        o4(ctx->text, save - pos0);
+    }
+    string_seek(ctx->text, save);
+
+    handle_block(ctx, cont);
+}
+
+static void handle_jmp(Context *ctx, Inst *inst) {
+    ControlBlock *dst = LIST_ELEM(inst->args, 0);
+
+    if (dst->pos < 0) {
+        handle_block(ctx, dst);
+    } else {
+        // JMP offset
+        o1(ctx->text, 0xe9);
+        o4(ctx->text, dst->pos - STRING_LEN(ctx->text) - 4);
+    }
+}
+
+static void handle_block(Context *ctx, ControlBlock *block) {
+    block->pos = STRING_LEN(ctx->text);
+    for (int i = 0; i < LIST_LEN(block->code); i++) {
+        Inst *inst = LIST_ELEM(block->code, i);
         switch (inst->op) {
         case '+': case '-':
             handle_add_or_sub(ctx, inst, inst->op == '+');
@@ -394,8 +460,14 @@ void assemble(Elf *elf, List *insts) {
         case '/':
             handle_idiv(ctx, inst);
             break;
-        case '$':
+        case OP_FUNC_CALL:
             handle_func_call(ctx, inst);
+            break;
+        case OP_IF:
+            handle_if(ctx, inst);
+            break;
+        case OP_JMP:
+            handle_jmp(ctx, inst);
             break;
         case '=':
             handle_assign(ctx, inst);
@@ -404,6 +476,14 @@ void assemble(Elf *elf, List *insts) {
             error("unknown op\n");
         }
     }
+}
+
+void assemble(Elf *elf, ControlBlock *entry) {
+    Context *ctx = make_context(elf);
+    o1(ctx->text, 0x55); // PUSH rbp
+    o3(ctx->text, 0xe58948); // MOV rbp, rsp
+    o3(ctx->text, 0xec8148); o4(ctx->text, 160); // SUB rsp, 160
+    handle_block(ctx, entry);
     o2(ctx->text, 0xc031); // XOR eax, eax
     o1(ctx->text, 0xc9); // LEAVE
     o1(ctx->text, 0xc3); // RET
