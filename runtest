@@ -1,13 +1,21 @@
-#!/bin/sh
-echo Running tests...
-./tests
+#!/bin/bash
+
+fail=0
+
+./tests || fail=$((fail+1))
+echo
 
 runtest() {
     /bin/echo -En "$2 ... "
     echo "main() {$2;}" | ./8cc - tmp$$.o
     gcc -o tmp$$ tmp$$.o
-    [ "`./tmp$$`" = "$1" ] || (echo NG; exit)
-    echo $1
+    local result="`./tmp$$`"
+    if [ "$result" = "$1" ]; then
+	echo $1
+    else
+	echo "NG ($result)"
+	fail=$((fail+1))
+    fi
 }
 
 runtest 'Hello, world!' 'printf("Hello, world!\n")'
@@ -18,6 +26,13 @@ runtest '50' 'int i=atoi("50"); int j = i; printf("%d", j)'
 runtest '15' 'int i=3; int j=i+5+7; printf("%d", j)'
 runtest '-5' 'int i=3; int j=5-i-7; printf("%d", j)'
 runtest '10' 'int i=3; int j=1+i*3; printf("%d", j)'
+runtest '5' 'int i=9; int j=1+i/3+9/i; printf("%d", j)'
 
 rm -f tmp$$ tmp$$.o
-echo OK
+echo
+if [ $fail -gt 0 ]; then
+    echo "Test failure(s): $fail";
+else
+    echo OK
+fi
+
