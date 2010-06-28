@@ -179,7 +179,14 @@ static Token *read_num(File *file, char first, int lineno) {
     return tok;
 }
 
-static char read_escaped(File *file) {
+static int hextodec(char c) {
+    c = tolower(c);
+    if ('0' <= c && c <= '9')
+        return c - '0';
+    return c - 'a' + 10;
+}
+
+static char read_escape_char(File *file) {
     int c = readc(file);
     int r;
     switch (c) {
@@ -208,6 +215,18 @@ static char read_escaped(File *file) {
             unreadc(c, file);
         }
         return r;
+    case 'x':
+        c = readc(file);
+        if (!isxdigit(c))
+            error("hexdigit expected, but got '%c'", c);
+        r = hextodec(c);
+        c = readc(file);
+        if (isxdigit(c)) {
+            r = r * 16 + hextodec(c);
+        } else {
+            unreadc(c, file);
+        }
+        return r;
     default: return (char)c;
     }
 }
@@ -222,7 +241,7 @@ static String *read_str(File *file) {
             o1(b, '\0');
             return b;
         case '\\':
-            o1(b, read_escaped(file));
+            o1(b, read_escape_char(file));
             break;
         case EOF:
             error("line %d: premature end of input file while reading a literal string", file->lineno);
@@ -237,7 +256,7 @@ static char read_char(File *file) {
     switch (c) {
     case EOF:
         error("line %d: premature end of input file while reading a literal character", file->lineno);
-    case '\\': return read_escaped(file);
+    case '\\': return read_escape_char(file);
     default: return (char)c;
     }
 }
