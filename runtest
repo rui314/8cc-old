@@ -1,35 +1,23 @@
 #!/bin/sh
-echo
+echo Running tests...
 ./tests
 
-echo 'main() {printf("Hello, world!\n");}' | ./8cc - tmp$$.o
-gcc -o tmp$$ tmp$$.o
-[ "`./tmp$$`" = 'Hello, world!' ] || (echo NG; exit)
+runtest() {
+    /bin/echo -En "$2 ... "
+    echo "main() {$2;}" | ./8cc - tmp$$.o
+    gcc -o tmp$$ tmp$$.o
+    [ "`./tmp$$`" = "$1" ] || (echo NG; exit)
+    echo $1
+}
 
-echo 'main() {printf("%2.2f %2.2f %d\n", 12.34, 56.78, 42);}' | ./8cc - tmp$$.o
-gcc -o tmp$$ tmp$$.o
-[ "`./tmp$$`" = '12.34 56.78 42' ] || (echo NG; exit)
-
-echo 'main() {int i = 3; printf("%d", i);}' | ./8cc - tmp$$.o
-gcc -o tmp$$ tmp$$.o
-[ "`./tmp$$`" = '3' ] || (echo NG; exit)
-
-echo 'main() {int i = 3; int j = i; printf("%d", j);}' | ./8cc - tmp$$.o
-gcc -o tmp$$ tmp$$.o
-[ "`./tmp$$`" = '3' ] || (echo NG; exit)
-
-echo 'main() {int i = atoi("50"); int j = i; printf("%d", j);}' | ./8cc - tmp$$.o
-gcc -o tmp$$ tmp$$.o
-[ "`./tmp$$`" = '50' ] || (echo NG; exit)
-
-echo 'main() {int i = 3; int j = i + 5 + 7; printf("%d", j);}' | ./8cc - tmp$$.o
-gcc -o tmp$$ tmp$$.o
-[ "`./tmp$$`" = '15' ] || (echo NG; exit)
-
-echo 'main() {int i = 3; int j = 1 + i * 3; printf("%d", j);}' | ./8cc - tmp$$.o
-gcc -o tmp$$ tmp$$.o
-[ "`./tmp$$`" = '10' ] || (echo NG; exit)
+runtest 'Hello, world!' 'printf("Hello, world!\n")'
+runtest '12.34 56.78 42' 'printf("%2.2f %2.2f %d\n", 12.34, 56.78, 42)'
+runtest '3' 'int i=3; printf("%d", i)'
+runtest '3' 'int i=3; int j=i; printf("%d", j)'
+runtest '50' 'int i=atoi("50"); int j = i; printf("%d", j)'
+runtest '15' 'int i=3; int j=i+5+7; printf("%d", j)'
+runtest '-5' 'int i=3; int j=5-i-7; printf("%d", j)'
+runtest '10' 'int i=3; int j=1+i*3; printf("%d", j)'
 
 rm -f tmp$$ tmp$$.o
-
 echo OK

@@ -301,18 +301,18 @@ static void store_rax(Context *ctx, Var *dst) {
     o1(ctx->text, off);
 }
 
-static void handle_add(Context *ctx, Inst *inst) {
+static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
     Var *v0 = LIST_ELEM(inst->args, 1);
     emit_load(ctx, v0);
     Var *v1 = LIST_ELEM(inst->args, 2);
     if (v1->stype == VAR_IMM) {
         // ADD rax, imm
-        o1(ctx->text, 0x4805);
+        o1(ctx->text, add ? 0x4805 : 0x482d);
         o4(ctx->text, v1->val.i);
     } else {
         int off = var_stack_pos(ctx, v1);
         // ADD rax, [rbp-v1]
-        o3(ctx->text, 0x450348);
+        o3(ctx->text, add ? 0x450348 : 0x452b48);
         o1(ctx->text, off);
     }
     store_rax(ctx, LIST_ELEM(inst->args, 0));
@@ -364,8 +364,8 @@ void assemble(Elf *elf, List *insts) {
     for (int i = 0; i < LIST_LEN(insts); i++) {
         Inst *inst = LIST_ELEM(insts, i);
         switch (inst->op) {
-        case '+':
-            handle_add(ctx, inst);
+        case '+': case '-':
+            handle_add_or_sub(ctx, inst, inst->op == '+');
             break;
         case '*':
             handle_imul(ctx, inst);

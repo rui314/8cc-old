@@ -44,9 +44,6 @@
  *   tmp3 = call(func, tmp1, tmp2)
  *   i = tmp3
  *
- * Note that actual arithmetic operators have not been implemented
- * yet.
- *
  * The following book contains a BNF grammer for C.
  *
  *   C: A Reference Manual, Fifth Edition by Samuel P. Harbison and Guy
@@ -433,10 +430,10 @@ static Var *read_add_expr(ReadContext *ctx) {
     Var *v0 = read_mul_expr(ctx);
     for (;;) {
         Token *tok = read_token(ctx);
-        if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '+') {
+        if (tok->toktype == TOKTYPE_KEYWORD && (tok->val.k == '+' || tok->val.k == '-')) {
             Var *v1 = read_mul_expr(ctx);
             Var *r = make_var(CTYPE_INT, NULL);
-            emit(ctx, make_inst3('+', r, v0, v1));
+            emit(ctx, make_inst3(tok->val.k, r, v0, v1));
             v0 = r;
             continue;
         }
