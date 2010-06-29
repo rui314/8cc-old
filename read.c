@@ -95,6 +95,10 @@ static void push_control_block(ReadContext *ctx) {
     list_push(ctx->blockstack, make_control_block());
 }
 
+static void push_control_block1(ReadContext *ctx, ControlBlock *block) {
+    list_push(ctx->blockstack, block);
+}
+
 static ControlBlock *pop_control_block(ReadContext *ctx) {
     return list_pop(ctx->blockstack);
 }
@@ -332,6 +336,7 @@ Token *read_token(ReadContext *ctx) {
             KEYWORD("float", KEYWORD_FLOAT);
             KEYWORD("if",    KEYWORD_IF);
             KEYWORD("else",  KEYWORD_ELSE);
+            KEYWORD("while", KEYWORD_WHILE);
 #undef KEYWORD
             r = make_token(TOKTYPE_IDENT, file->lineno);
             r->val.str = str;
@@ -569,12 +574,11 @@ static Ctype *read_type(ReadContext *ctx) {
 }
 
 static void read_if_stmt(ReadContext *ctx) {
-    ControlBlock *then, *els = NULL;
+    ControlBlock *then, *els;
     expect(ctx, '(');
     Var *cond = read_expr(ctx);
     expect(ctx, ')');
 
-    ControlBlock *cont = make_control_block();
     push_control_block(ctx);
     expect(ctx, '{');
     read_compound_stmt(ctx);
@@ -588,8 +592,33 @@ static void read_if_stmt(ReadContext *ctx) {
         els = pop_control_block(ctx);
     } else {
         unget_token(ctx, tok);
+        els = NULL;
     }
+    ControlBlock *cont = make_control_block();
     emit(ctx, make_inst4(OP_IF, cond, then, els, cont));
+    replace_control_block(ctx, cont);
+}
+
+static void read_while_stmt(ReadContext *ctx) {
+    push_control_block(ctx);
+    expect(ctx, '(');
+    Var *condvar = read_expr(ctx);
+    expect(ctx, ')');
+    ControlBlock *cond = pop_control_block(ctx);
+    emit(ctx, make_inst1(OP_JMP, cond));
+
+    push_control_block(ctx);
+    expect(ctx, '{');
+    read_compound_stmt(ctx);
+    ControlBlock *body = pop_control_block(ctx);
+
+    ControlBlock *cont = make_control_block();
+    push_control_block1(ctx, cond);
+    emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
+    pop_control_block(ctx);
+    push_control_block1(ctx, body);
+    emit(ctx, make_inst1(OP_JMP, cond));
+    pop_control_block(ctx);
     replace_control_block(ctx, cont);
 }
 
@@ -597,6 +626,10 @@ static void read_stmt(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     if (IS_KEYWORD(tok, KEYWORD_IF)) {
         read_if_stmt(ctx);
+        return;
+    }
+    if (IS_KEYWORD(tok, KEYWORD_WHILE)) {
+        read_while_stmt(ctx);
         return;
     }
     unget_token(ctx, tok);

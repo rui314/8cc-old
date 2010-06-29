@@ -310,6 +310,7 @@ typedef enum KeywordType {
     KEYWORD_TYPE_END,
     KEYWORD_IF,
     KEYWORD_ELSE,
+    KEYWORD_WHILE,
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
