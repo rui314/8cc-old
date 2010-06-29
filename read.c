@@ -351,6 +351,12 @@ Token *read_token(ReadContext *ctx) {
     return NULL;
 }
 
+Token *peek_token(ReadContext *ctx) {
+    Token *r = read_token(ctx);
+    unget_token(ctx, r);
+    return r;
+}
+
 String *token_to_string(Token *tok) {
     char buf[20];
     String *r = make_string();
@@ -481,40 +487,64 @@ static Var *read_unary_expr(ReadContext *ctx) {
     }
 }
 
-static Var *read_mul_expr(ReadContext *ctx) {
-    Var *v0 = read_unary_expr(ctx);
-    for (;;) {
-        Token *tok = read_token(ctx);
-        if (IS_KEYWORD(tok, '*') || IS_KEYWORD(tok, '/')) {
-            Var *v1 = read_unary_expr(ctx);
-            Var *r = make_var(CTYPE_INT, NULL);
-            emit(ctx, make_inst3(tok->val.k, r, v0, v1));
-            v0 = r;
-            continue;
-        }
-        unget_token(ctx, tok);
-        return v0;
+static void ensure_lvalue(Var *var) {
+    if (!var->is_lvalue)
+        error("must be lvalue: '%s'", STRING_BODY(var->name));
+}
+
+static int prec(Token *tok) {
+    if (tok->toktype != TOKTYPE_KEYWORD)
+        return -1;
+    switch (tok->val.k) {
+    case '=': return 0;
+    case '+': case '-': return 1;
+    case '*': case '/': return 2;
+    default: return -1;
     }
 }
 
-static Var *read_add_expr(ReadContext *ctx) {
-    Var *v0 = read_mul_expr(ctx);
+/* Returns true iff a given operator is right-associative. */
+static bool is_rassoc(Token *tok) {
+    return tok->val.k == '=';
+}
+
+static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     for (;;) {
         Token *tok = read_token(ctx);
-        if (IS_KEYWORD(tok, '+') || IS_KEYWORD(tok, '-')) {
-            Var *v1 = read_mul_expr(ctx);
-            Var *r = make_var(CTYPE_INT, NULL);
-            emit(ctx, make_inst3(tok->val.k, r, v0, v1));
-            v0 = r;
-            continue;
+        int prec1 = prec(tok);
+        if (prec1 < 0 || prec1 < prec0) {
+            unget_token(ctx, tok);
+            return v0;
         }
-        unget_token(ctx, tok);
-        return v0;
+        Var *v1 = read_unary_expr(ctx);
+        for (;;) {
+            Token *tok1 = peek_token(ctx);
+            int prec2 = prec(tok1);
+            if (prec2 < 0 || prec2 < prec1 || (prec1 == prec2 && !is_rassoc(tok1))) {
+                break;
+            }
+            v1 = read_expr1(ctx, v1, prec2);
+        }
+        Var *tmp;
+        switch (tok->val.k) {
+        case '=':
+            ensure_lvalue(v0);
+            emit(ctx, make_inst2(tok->val.k, v0, v1));
+            break;
+        case '+': case '-': case '*': case '/':
+            tmp = make_var(CTYPE_INT, NULL);
+            emit(ctx, make_inst3(tok->val.k, tmp, v0, v1));
+            v0 = tmp;
+            break;
+        default:
+            error("unsupported operator: %c", tok->val.k);
+        }
     }
+    return v0;
 }
 
 static Var *read_expr(ReadContext *ctx) {
-    return read_add_expr(ctx);
+    return read_expr1(ctx, read_unary_expr(ctx), 0);
 }
 
 static void read_decl(ReadContext *ctx, Ctype *ctype) {
@@ -536,11 +566,6 @@ static Ctype *read_type(ReadContext *ctx) {
     }
     unget_token(ctx, tok);
     return NULL;
-}
-
-static void ensure_lvalue(Var *var) {
-    if (!var->is_lvalue)
-        error("must be lvalue: '%s'", STRING_BODY(var->name));
 }
 
 static void read_if_stmt(ReadContext *ctx) {
@@ -568,19 +593,6 @@ static void read_if_stmt(ReadContext *ctx) {
     replace_control_block(ctx, cont);
 }
 
-static Var *read_assignment_expr(ReadContext *ctx) {
-    Var *var = read_unary_expr(ctx);
-    Token *tok = read_token(ctx);
-    if (IS_KEYWORD(tok, '=')) {
-        ensure_lvalue(var);
-        Var *val = read_expr(ctx);
-        emit(ctx, make_inst2('=', var, val));
-    } else if (IS_KEYWORD(tok, ';')) {
-        return var;
-    }
-    NOT_SUPPORTED();
-}
-
 static void read_stmt(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     if (IS_KEYWORD(tok, KEYWORD_IF)) {
@@ -588,7 +600,10 @@ static void read_stmt(ReadContext *ctx) {
         return;
     }
     unget_token(ctx, tok);
-    read_assignment_expr(ctx);
+    read_expr(ctx);
+    Token *tok1 = read_token(ctx);
+    if (!IS_KEYWORD(tok1, ';'))
+        error("';' expected");
 }
 
 static void read_stmt_or_decl(ReadContext *ctx) {
