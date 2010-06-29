@@ -341,9 +341,20 @@ Token *read_token(ReadContext *ctx) {
             r = make_token(TOKTYPE_IDENT, file->lineno);
             r->val.str = str;
             return r;
+        case '=': {
+            int c1 = readc(file);
+            if (c1 == '=') {
+                r = make_token(TOKTYPE_KEYWORD, file->lineno);
+                r->val.k = KEYWORD_EQUAL;
+                return r;
+            } else {
+                unreadc(c1, file);
+            }
+            // FALL THROUGH
+        }
         case '!': case '%': case '&': case '(': case ')': case '*': case '+':
-        case ',': case '-': case '/': case ';': case '=': case '[': case ']':
-        case '^': case '{': case '|': case '}': case '~':
+        case ',': case '-': case '/': case ';': case '[': case ']': case '^':
+        case '{': case '|': case '}': case '~':
             r = make_token(TOKTYPE_KEYWORD, file->lineno);
             r->val.c = c;
             return r;
@@ -500,10 +511,12 @@ static void ensure_lvalue(Var *var) {
 static int prec(Token *tok) {
     if (tok->toktype != TOKTYPE_KEYWORD)
         return -1;
+    int r = 0;
     switch (tok->val.k) {
-    case '=': return 0;
-    case '+': case '-': return 1;
-    case '*': case '/': return 2;
+    case '*': case '/': r++;
+    case '+': case '-': r++;
+    case KEYWORD_EQUAL: r++;
+    case '=': return r;
     default: return -1;
     }
 }
@@ -539,6 +552,11 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case '+': case '-': case '*': case '/':
             tmp = make_var(CTYPE_INT, NULL);
             emit(ctx, make_inst3(tok->val.k, tmp, v0, v1));
+            v0 = tmp;
+            break;
+        case KEYWORD_EQUAL:
+            tmp = make_var(CTYPE_INT, NULL);
+            emit(ctx, make_inst3(OP_EQUAL, tmp, v0, v1));
             v0 = tmp;
             break;
         default:

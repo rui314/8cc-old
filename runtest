@@ -51,6 +51,14 @@ runtest 'false' 'int i=0; if (i) { printf("true"); } else { printf("false"); }'
 #
 runtest '54321a' 'int i=5; while (i) { printf("%d", i); i=i-1; } printf("a");'
 
+#
+# "==" operator
+#
+runtest '1' 'int i=5; int j=5; int k=i==j; printf("%d", k);'
+runtest '0' 'int i=3; int j=5; int k=i==j; printf("%d", k);'
+runtest 'true'  'int i=5; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
+runtest 'false' 'int i=3; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
+
 rm -f tmp$$ tmp$$.o
 echo
 if [ $fail -gt 0 ]; then

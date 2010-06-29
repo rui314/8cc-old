@@ -388,6 +388,30 @@ static void handle_assign(Context *ctx, Inst *inst) {
     }
 }
 
+static void handle_equal(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    Var *src0 = LIST_ELEM(inst->args, 1);
+    Var *src1 = LIST_ELEM(inst->args, 2);
+    emit_load(ctx, src0);
+    if (src1->stype == VAR_IMM) {
+        // CMP rax, imm
+        o2(ctx->text, 0x3d48);
+        o4(ctx->text, src1->val.i);
+    } else if (src1->stype == VAR_GLOBAL) {
+        int off = var_stack_pos(ctx, src1);
+        // CMP rax, [rbp+off]
+        o3(ctx->text, 0x453b48);
+        o1(ctx->text, off);
+    } else {
+        error("not supported");
+    }
+    // SETE al
+    // MOVZX eax, al
+    o3(ctx->text, 0xc0940f);
+    o3(ctx->text, 0xc0b60f);
+    store_rax(ctx, dst);
+}
+
 static void handle_if(Context *ctx, Inst *inst) {
     Var *cond = LIST_ELEM(inst->args, 0);
     ControlBlock *then = LIST_ELEM(inst->args, 1);
@@ -471,6 +495,9 @@ static void handle_block(Context *ctx, ControlBlock *block) {
             break;
         case '=':
             handle_assign(ctx, inst);
+            break;
+        case OP_EQUAL:
+            handle_equal(ctx, inst);
             break;
         default:
             error("unknown op\n");

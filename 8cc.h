@@ -311,6 +311,7 @@ typedef enum KeywordType {
     KEYWORD_IF,
     KEYWORD_ELSE,
     KEYWORD_WHILE,
+    KEYWORD_EQUAL,
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
@@ -377,6 +378,7 @@ enum {
     OP_FUNC_CALL = 256,
     OP_IF,
     OP_JMP,
+    OP_EQUAL,
 };
 
 typedef struct Inst {
