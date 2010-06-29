@@ -266,7 +266,7 @@ static String *read_word(File *file, char c0) {
     o1(b, c0);
     for (;;) {
         int c = readc(file);
-        if (isalnum(c)) {
+        if (isalnum(c) || c == '_') {
             o1(b, c);
         } else if (c != EOF) {
             unreadc(c, file);
@@ -320,7 +320,7 @@ Token *read_token(ReadContext *ctx) {
         case 'C': case 'D': case 'E': case 'F': case 'G': case 'H': case 'I':
         case 'J': case 'K': case 'L': case 'M': case 'N': case 'O': case 'P':
         case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W':
-        case 'X': case 'Y': case 'Z':
+        case 'X': case 'Y': case 'Z': case '_':
             str = read_word(file, c);
 #define KEYWORD(type_, val_)                                    \
             if (!strcmp(STRING_BODY(str), (type_))) {           \
@@ -385,7 +385,7 @@ static void expect(ReadContext *ctx, char expected) {
     Token *tok = read_token(ctx);
     if (tok->toktype != TOKTYPE_KEYWORD)
         error("line %d: keyword expected, but got %s", ctx->file->lineno, STRING_BODY(token_to_string(tok)));
-    if (tok->val.k != expected)
+    if (!IS_KEYWORD(tok, expected))
         error("line %d: '%c' expected, but got '%c'", ctx->file->lineno, expected, tok->val.k);
 }
 
@@ -464,7 +464,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
         error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
     case TOKTYPE_IDENT: {
         Token *tok1 = read_token(ctx);
-        if (tok1->toktype == TOKTYPE_KEYWORD && tok1->val.k == '(')
+        if (IS_KEYWORD(tok1, '('))
             return read_func_call(ctx, tok);
         unget_token(ctx, tok1);
         Var *var = find_var(ctx, tok->val.str);
@@ -485,7 +485,7 @@ static Var *read_mul_expr(ReadContext *ctx) {
     Var *v0 = read_unary_expr(ctx);
     for (;;) {
         Token *tok = read_token(ctx);
-        if (tok->toktype == TOKTYPE_KEYWORD && (tok->val.k == '*' || tok->val.k == '/')) {
+        if (IS_KEYWORD(tok, '*') || IS_KEYWORD(tok, '/')) {
             Var *v1 = read_unary_expr(ctx);
             Var *r = make_var(CTYPE_INT, NULL);
             emit(ctx, make_inst3(tok->val.k, r, v0, v1));
@@ -501,7 +501,7 @@ static Var *read_add_expr(ReadContext *ctx) {
     Var *v0 = read_mul_expr(ctx);
     for (;;) {
         Token *tok = read_token(ctx);
-        if (tok->toktype == TOKTYPE_KEYWORD && (tok->val.k == '+' || tok->val.k == '-')) {
+        if (IS_KEYWORD(tok, '+') || IS_KEYWORD(tok, '-')) {
             Var *v1 = read_mul_expr(ctx);
             Var *r = make_var(CTYPE_INT, NULL);
             emit(ctx, make_inst3(tok->val.k, r, v0, v1));
@@ -531,7 +531,7 @@ static void read_decl(ReadContext *ctx, Ctype *ctype) {
 
 static Ctype *read_type(ReadContext *ctx) {
     Token *tok = read_token(ctx);
-    if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == KEYWORD_INT) {
+    if (IS_KEYWORD(tok, KEYWORD_INT)) {
         return make_ctype(CTYPE_INT);
     }
     unget_token(ctx, tok);
@@ -571,11 +571,11 @@ static void read_if_stmt(ReadContext *ctx) {
 static Var *read_assignment_expr(ReadContext *ctx) {
     Var *var = read_unary_expr(ctx);
     Token *tok = read_token(ctx);
-    if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '=') {
+    if (IS_KEYWORD(tok, '=')) {
         ensure_lvalue(var);
         Var *val = read_expr(ctx);
         emit(ctx, make_inst2('=', var, val));
-    } else if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == ';') {
+    } else if (IS_KEYWORD(tok, ';')) {
         return var;
     }
     NOT_SUPPORTED();
@@ -604,7 +604,7 @@ static void read_compound_stmt(ReadContext *ctx) {
     push_scope(ctx);
     for (;;) {
         Token *tok = read_token(ctx);
-        if (tok->toktype == TOKTYPE_KEYWORD && tok->val.k == '}')
+        if (IS_KEYWORD(tok, '}'))
             break;
         unget_token(ctx, tok);
         read_stmt_or_decl(ctx);
