@@ -504,10 +504,10 @@ static void handle_block(Context *ctx, ControlBlock *block) {
             break;
         case OP_JMP:
             handle_jmp(ctx, inst);
-            return; // RETURN HERE
+            return; // return here
         case OP_RETURN:
             handle_return(ctx, inst);
-            return; // RETURN HERE
+            return; // return here
         default:
             error("unknown op\n");
         }

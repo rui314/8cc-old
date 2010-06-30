@@ -240,7 +240,7 @@ static void test_read_keywords(void) {
  */
 
 int main(int argc, char **argv) {
-    printf("Running unit tests ... ");
+    printf("Running unit tests... ");
     fflush(stdout);
     test_string();
 

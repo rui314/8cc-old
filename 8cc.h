@@ -310,6 +310,7 @@ typedef enum KeywordType {
     KEYWORD_TYPE_END,
     KEYWORD_IF,
     KEYWORD_ELSE,
+    KEYWORD_FOR,
     KEYWORD_WHILE,
     KEYWORD_EQUAL,
     KEYWORD_BREAK,

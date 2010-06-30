@@ -1,4 +1,6 @@
 *.o
 hello
 8cc
+test
 tests
+tmp*

@@ -340,6 +340,7 @@ Token *read_token(ReadContext *ctx) {
             KEYWORD("float", KEYWORD_FLOAT);
             KEYWORD("if",    KEYWORD_IF);
             KEYWORD("else",  KEYWORD_ELSE);
+            KEYWORD("for",   KEYWORD_FOR);
             KEYWORD("while", KEYWORD_WHILE);
             KEYWORD("break", KEYWORD_BREAK);
             KEYWORD("continue", KEYWORD_CONTINUE);
@@ -635,6 +636,45 @@ static void read_if_stmt(ReadContext *ctx) {
     replace_control_block(ctx, cont);
 }
 
+static void read_for_stmt(ReadContext *ctx) {
+    ControlBlock *cond = make_control_block();
+    ControlBlock *mod = make_control_block();
+    ControlBlock *body = make_control_block();
+    ControlBlock *cont = make_control_block();
+
+    expect(ctx, '(');
+    read_expr(ctx);
+    expect(ctx, ';');
+
+    emit(ctx, make_inst1(OP_JMP, cond));
+
+    push_control_block1(ctx, cond);
+    Var *condvar = read_expr(ctx);
+    emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
+    pop_control_block(ctx);
+    expect(ctx, ';');
+
+    push_control_block1(ctx, mod);
+    read_expr(ctx);
+    emit(ctx, make_inst1(OP_JMP, cond));
+    pop_control_block(ctx);
+    expect(ctx, ')');
+
+    expect(ctx, '{');
+    ControlBlock *orig_onbreak = ctx->onbreak;
+    ControlBlock *orig_oncontinue = ctx->oncontinue;
+    ctx->onbreak = cont;
+    ctx->oncontinue = mod;
+    push_control_block1(ctx, body);
+    read_compound_stmt(ctx);
+    emit(ctx, make_inst1(OP_JMP, mod));
+    pop_control_block(ctx);
+    ctx->oncontinue = orig_oncontinue;
+    ctx->onbreak = orig_onbreak;
+
+    replace_control_block(ctx, cont);
+}
+
 static void read_while_stmt(ReadContext *ctx) {
     ControlBlock *cond = make_control_block();
     ControlBlock *body = make_control_block();
@@ -668,27 +708,23 @@ static void read_stmt(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     if (IS_KEYWORD(tok, KEYWORD_IF)) {
         read_if_stmt(ctx);
-        return;
-    }
-    if (IS_KEYWORD(tok, KEYWORD_WHILE)) {
+    } else if (IS_KEYWORD(tok, KEYWORD_FOR)) {
+        read_for_stmt(ctx);
+    } else if (IS_KEYWORD(tok, KEYWORD_WHILE)) {
         read_while_stmt(ctx);
-        return;
-    }
-    if (IS_KEYWORD(tok, KEYWORD_BREAK)) {
+    } else if (IS_KEYWORD(tok, KEYWORD_BREAK)) {
         expect(ctx, ';');
         process_break(ctx);
-        return;
-    }
-    if (IS_KEYWORD(tok, KEYWORD_CONTINUE)) {
+    } else if (IS_KEYWORD(tok, KEYWORD_CONTINUE)) {
         expect(ctx, ';');
         process_continue(ctx);
-        return;
+    } else {
+        unget_token(ctx, tok);
+        read_expr(ctx);
+        Token *tok1 = read_token(ctx);
+        if (!IS_KEYWORD(tok1, ';'))
+            error("';' expected");
     }
-    unget_token(ctx, tok);
-    read_expr(ctx);
-    Token *tok1 = read_token(ctx);
-    if (!IS_KEYWORD(tok1, ';'))
-        error("';' expected");
 }
 
 static void read_stmt_or_decl(ReadContext *ctx) {

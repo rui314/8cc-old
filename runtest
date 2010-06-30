@@ -3,10 +3,9 @@
 fail=0
 
 ./tests || fail=$((fail+1))
-echo
 
 runtest() {
-    /bin/echo -En "$2 ... "
+    /bin/echo -En "  $2 ... "
     echo "main() {$2}" | ./8cc - tmp$$.o
     gcc -o tmp$$ tmp$$.o
     local result="`./tmp$$`"
@@ -21,6 +20,7 @@ runtest() {
 #
 # Basic tests
 #
+/bin/echo -e '\nBasic tests...'
 runtest 'Hello, world!' 'printf("Hello, world!");'
 runtest '12.34 56.78 42' 'printf("%2.2f %2.2f %d", 12.34, 56.78, 42);'
 runtest '3' 'int i=3; printf("%d", i);'
@@ -32,28 +32,39 @@ runtest '-5' 'int i=3; int j=5-i-7; printf("%d", j);'
 #
 # Operator precedences
 #
+/bin/echo -e '\nOperator precedences...'
 runtest '10' 'int i=3; int j=1+i*3; printf("%d", j);'
 runtest '5' 'int i=9; int j=1+i/3+9/i; printf("%d", j);'
 
 #
 # Assignment
 #
+/bin/echo -e '\nAssignment...'
 runtest '3' 'int i=3; int j=i; printf("%d", j);'
 
 #
-# "if" expression
+# "if" statement
 #
+/bin/echo -e '\nif statement...'
 runtest 'true' 'int i=1; if (i) { printf("true"); } else { printf("false"); }'
 runtest 'false' 'int i=0; if (i) { printf("true"); } else { printf("false"); }'
 
 #
-# "while" expression
+# "while" statement
 #
+/bin/echo -e '\nwhile statement...'
 runtest '54321a' 'int i=5; while (i) { printf("%d", i); i=i-1; } printf("a");'
+
+#
+# "for" statement
+#
+/bin/echo -e '\nfor statement...'
+runtest '321' 'int i=0; for (i=3;i;i=i-1) { printf("%d", i); }'
 
 #
 # "==" operator
 #
+/bin/echo -e '\n== operator...'
 runtest '1' 'int i=5; int j=5; int k=i==j; printf("%d", k);'
 runtest '0' 'int i=3; int j=5; int k=i==j; printf("%d", k);'
 runtest 'true'  'int i=5; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
@@ -62,8 +73,11 @@ runtest 'false' 'int i=3; int j=5; if (i==j) { printf("true"); } else { printf("
 #
 # "break" and "continue"
 #
+/bin/echo -e '\nbreak and continue...'
 runtest 'bar'  'int i=1; while (1) { if (i) { break; } printf("foo"); } printf("bar");'
 runtest 'aac'  'int i=2; while (i) { if (i) { printf("a"); i=i-1; continue; } printf("b"); } printf("c");'
+runtest '32a'  'int i=0; for (i=3;i;i=i-1) { printf("%d", i); if (i==2) { break; } } printf("a");'
+runtest '321a' 'int i=0; for (i=3;i;i) { if (i) { printf("%d", i); i=i-1; continue; } } printf("a");'
 
 rm -f tmp$$ tmp$$.o
 echo
