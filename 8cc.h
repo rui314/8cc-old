@@ -171,6 +171,7 @@ typedef struct List {
 #define LIST_LEN(lis) ((lis)->len)
 #define LIST_TOP(lis) (LIST_ELEM((lis), 0))
 #define LIST_BOTTOM(lis) (LIST_ELEM((lis), LIST_LEN(lis) - 1))
+#define LIST_IS_EMPTY(lis) ((lis)->len == 0)
 
 extern List *make_list(void);
 extern void list_push(List *list, void *e);
@@ -355,13 +356,14 @@ typedef struct ReadContext {
     List *scope;
     ControlBlock *entry;
     List *blockstack;
-    Token *lasttok;
+    List *ungotten;
     ControlBlock *onbreak;
     ControlBlock *oncontinue;
 } ReadContext;
 
 extern ControlBlock *parse(File *file, Elf *elf);
 extern Token *read_token(ReadContext *ctx);
+extern void unget_token(ReadContext *ctx, Token *tok);
 extern ReadContext *make_read_context(File *file, Elf *elf);
 
 /*

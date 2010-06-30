@@ -235,6 +235,23 @@ static void test_read_keywords(void) {
     test_read_keywords_int(ctx, KEYWORD_EQUAL);
 }
 
+static void test_read_unget_token(void) {
+    FILE *stream = create_file("int float (");
+    File *file = make_file(stream, "-");
+    ReadContext *ctx = make_read_context(file, NULL);
+
+    Token *t0 = read_token(ctx);
+    Token *t1 = read_token(ctx);
+    Token *t2 = read_token(ctx);
+    unget_token(ctx, t2);
+    unget_token(ctx, t1);
+    unget_token(ctx, t0);
+
+    test_read_keywords_int(ctx, KEYWORD_INT);
+    test_read_keywords_int(ctx, KEYWORD_FLOAT);
+    test_read_keywords_int(ctx, '(');
+}
+
 /*
  * Entry point
  */
@@ -253,6 +270,7 @@ int main(int argc, char **argv) {
     test_read_float();
     test_read_char();
     test_read_keywords();
+    test_read_unget_token();
 
     printf("OK\n");
     return 0;

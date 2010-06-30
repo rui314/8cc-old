@@ -79,7 +79,7 @@ ReadContext *make_read_context(File *file, Elf *elf) {
     r->entry = make_control_block();
     r->blockstack = make_list();
     list_push(r->blockstack, r->entry);
-    r->lasttok = NULL;
+    r->ungotten = make_list();
     r->onbreak = NULL;
     r->oncontinue = NULL;
     return r;
@@ -285,19 +285,14 @@ static String *read_word(File *file, char c0) {
     }
 }
 
-static void unget_token(ReadContext *ctx, Token *tok) {
-    if (ctx->lasttok)
-        error("[internal error] token buffer full");
-    ctx->lasttok = tok;
+void unget_token(ReadContext *ctx, Token *tok) {
+    list_push(ctx->ungotten, tok);
 }
 
 Token *read_token(ReadContext *ctx) {
     Token *r;
-    if (ctx->lasttok) {
-        r = ctx->lasttok;
-        ctx->lasttok = NULL;
-        return r;
-    }
+    if (!LIST_IS_EMPTY(ctx->ungotten))
+        return list_pop(ctx->ungotten);
 
     File *file = ctx->file;
     String *str;
