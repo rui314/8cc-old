@@ -430,8 +430,7 @@ static void handle_if(Context *ctx, Inst *inst) {
     o2(ctx->text, 0x840f);
     o4(ctx->text, 0); // filled later
     int pos0 = STRING_LEN(ctx->text);
-    if (then->pos < 0)
-        handle_block(ctx, then);
+    handle_block(ctx, then);
 
     int pos1;
     if (els) {
@@ -439,8 +438,7 @@ static void handle_if(Context *ctx, Inst *inst) {
         o1(ctx->text, 0xe9);
         o4(ctx->text, 0); // filled later
         pos1 = STRING_LEN(ctx->text);
-        if (els->pos < 0)
-            handle_block(ctx, els);
+        handle_block(ctx, els);
     }
 
     // Backfill
@@ -458,15 +456,18 @@ static void handle_if(Context *ctx, Inst *inst) {
     handle_block(ctx, cont);
 }
 
+static void jump_to(Context *ctx, int pos) {
+    // JMP offset
+    o1(ctx->text, 0xe9);
+    o4(ctx->text, pos - STRING_LEN(ctx->text) - 4);
+}
+
 static void handle_jmp(Context *ctx, Inst *inst) {
     ControlBlock *dst = LIST_ELEM(inst->args, 0);
-
     if (dst->pos < 0) {
         handle_block(ctx, dst);
     } else {
-        // JMP offset
-        o1(ctx->text, 0xe9);
-        o4(ctx->text, dst->pos - STRING_LEN(ctx->text) - 4);
+        jump_to(ctx, dst->pos);
     }
 }
 
@@ -477,6 +478,10 @@ void handle_return(Context *ctx, Inst *inst) {
 }
 
 static void handle_block(Context *ctx, ControlBlock *block) {
+    if (block->pos >= 0) {
+        jump_to(ctx, block->pos);
+        return;
+    }
     block->pos = STRING_LEN(ctx->text);
     for (int i = 0; i < LIST_LEN(block->code); i++) {
         Inst *inst = LIST_ELEM(block->code, i);

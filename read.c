@@ -342,6 +342,7 @@ Token *read_token(ReadContext *ctx) {
             KEYWORD("else",  KEYWORD_ELSE);
             KEYWORD("for",   KEYWORD_FOR);
             KEYWORD("while", KEYWORD_WHILE);
+            KEYWORD("do",    KEYWORD_DO);
             KEYWORD("break", KEYWORD_BREAK);
             KEYWORD("continue", KEYWORD_CONTINUE);
 #undef KEYWORD
@@ -410,7 +411,7 @@ String *token_to_string(Token *tok) {
     return r;
 }
 
-static void expect(ReadContext *ctx, char expected) {
+static void expect(ReadContext *ctx, int expected) {
     Token *tok = read_token(ctx);
     if (tok->toktype != TOKTYPE_KEYWORD)
         error("line %d: keyword expected, but got %s", ctx->file->lineno, STRING_BODY(token_to_string(tok)));
@@ -704,6 +705,37 @@ static void read_while_stmt(ReadContext *ctx) {
     replace_control_block(ctx, cont);
 }
 
+static void read_do_stmt(ReadContext *ctx) {
+    ControlBlock *body = make_control_block();
+    ControlBlock *cond = make_control_block();
+    ControlBlock *cont = make_control_block();
+
+    emit(ctx, make_inst1(OP_JMP, body));
+
+    expect(ctx, '{');
+    ControlBlock *orig_onbreak = ctx->onbreak;
+    ControlBlock *orig_oncontinue = ctx->oncontinue;
+    ctx->oncontinue = body;
+    ctx->onbreak = cont;
+    push_control_block1(ctx, body);
+    read_compound_stmt(ctx);
+    emit(ctx, make_inst1(OP_JMP, cond));
+    pop_control_block(ctx);
+    ctx->oncontinue = orig_oncontinue;
+    ctx->onbreak = orig_onbreak;
+
+    expect(ctx, KEYWORD_WHILE);
+    expect(ctx, '(');
+    push_control_block1(ctx, cond);
+    Var *condvar = read_expr(ctx);
+    emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
+    pop_control_block(ctx);
+    expect(ctx, ')');
+    expect(ctx, ';');
+
+    replace_control_block(ctx, cont);
+}
+
 static void read_stmt(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     if (IS_KEYWORD(tok, KEYWORD_IF)) {
@@ -712,6 +744,8 @@ static void read_stmt(ReadContext *ctx) {
         read_for_stmt(ctx);
     } else if (IS_KEYWORD(tok, KEYWORD_WHILE)) {
         read_while_stmt(ctx);
+    } else if (IS_KEYWORD(tok, KEYWORD_DO)) {
+        read_do_stmt(ctx);
     } else if (IS_KEYWORD(tok, KEYWORD_BREAK)) {
         expect(ctx, ';');
         process_break(ctx);
