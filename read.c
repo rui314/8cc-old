@@ -80,6 +80,8 @@ ReadContext *make_read_context(File *file, Elf *elf) {
     r->blockstack = make_list();
     list_push(r->blockstack, r->entry);
     r->lasttok = NULL;
+    r->onbreak = NULL;
+    r->oncontinue = NULL;
     return r;
 }
 
@@ -91,8 +93,10 @@ static void pop_scope(ReadContext *ctx) {
     list_pop(ctx->scope);
 }
 
-static void push_control_block(ReadContext *ctx) {
-    list_push(ctx->blockstack, make_control_block());
+static ControlBlock *push_control_block(ReadContext *ctx) {
+    ControlBlock *r = make_control_block();
+    list_push(ctx->blockstack, r);
+    return r;
 }
 
 static void push_control_block1(ReadContext *ctx, ControlBlock *block) {
@@ -337,6 +341,8 @@ Token *read_token(ReadContext *ctx) {
             KEYWORD("if",    KEYWORD_IF);
             KEYWORD("else",  KEYWORD_ELSE);
             KEYWORD("while", KEYWORD_WHILE);
+            KEYWORD("break", KEYWORD_BREAK);
+            KEYWORD("continue", KEYWORD_CONTINUE);
 #undef KEYWORD
             r = make_token(TOKTYPE_IDENT, file->lineno);
             r->val.str = str;
@@ -409,6 +415,18 @@ static void expect(ReadContext *ctx, char expected) {
         error("line %d: keyword expected, but got %s", ctx->file->lineno, STRING_BODY(token_to_string(tok)));
     if (!IS_KEYWORD(tok, expected))
         error("line %d: '%c' expected, but got '%c'", ctx->file->lineno, expected, tok->val.k);
+}
+
+static void process_break(ReadContext *ctx) {
+    if (!ctx->onbreak)
+        error("'break' statement not in loop or switch");
+    emit(ctx, make_inst1(OP_JMP, ctx->onbreak));
+}
+
+static void process_continue(ReadContext *ctx) {
+    if (!ctx->oncontinue)
+        error("'continue' statement not in loop statement");
+    emit(ctx, make_inst1(OP_JMP, ctx->oncontinue));
 }
 
 static Var *read_func_call(ReadContext *ctx, Token *fntok) {
@@ -618,25 +636,31 @@ static void read_if_stmt(ReadContext *ctx) {
 }
 
 static void read_while_stmt(ReadContext *ctx) {
-    push_control_block(ctx);
-    expect(ctx, '(');
-    Var *condvar = read_expr(ctx);
-    expect(ctx, ')');
-    ControlBlock *cond = pop_control_block(ctx);
+    ControlBlock *cond = make_control_block();
+    ControlBlock *body = make_control_block();
+    ControlBlock *cont = make_control_block();
+
     emit(ctx, make_inst1(OP_JMP, cond));
 
-    push_control_block(ctx);
-    expect(ctx, '{');
-    read_compound_stmt(ctx);
-    ControlBlock *body = pop_control_block(ctx);
-
-    ControlBlock *cont = make_control_block();
+    expect(ctx, '(');
     push_control_block1(ctx, cond);
+    Var *condvar = read_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
     pop_control_block(ctx);
+    expect(ctx, ')');
+
+    expect(ctx, '{');
+    ControlBlock *orig_onbreak = ctx->onbreak;
+    ControlBlock *orig_oncontinue = ctx->oncontinue;
+    ctx->oncontinue = cond;
+    ctx->onbreak = cont;
     push_control_block1(ctx, body);
+    read_compound_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_control_block(ctx);
+    ctx->oncontinue = orig_oncontinue;
+    ctx->onbreak = orig_onbreak;
+
     replace_control_block(ctx, cont);
 }
 
@@ -648,6 +672,16 @@ static void read_stmt(ReadContext *ctx) {
     }
     if (IS_KEYWORD(tok, KEYWORD_WHILE)) {
         read_while_stmt(ctx);
+        return;
+    }
+    if (IS_KEYWORD(tok, KEYWORD_BREAK)) {
+        expect(ctx, ';');
+        process_break(ctx);
+        return;
+    }
+    if (IS_KEYWORD(tok, KEYWORD_CONTINUE)) {
+        expect(ctx, ';');
+        process_continue(ctx);
         return;
     }
     unget_token(ctx, tok);
@@ -687,6 +721,13 @@ static void read_func_def(ReadContext *ctx) {
     expect(ctx, ')');
     expect(ctx, '{');
     read_compound_stmt(ctx);
+
+    ControlBlock *epilogue = make_control_block();
+    emit(ctx, make_inst1(OP_JMP, epilogue));
+    push_control_block1(ctx, epilogue);
+    emit(ctx, make_inst0(OP_RETURN));
+    pop_control_block(ctx);
+
     Symbol *fsym = make_symbol(fname->val.str, text, 0, STB_GLOBAL, STT_NOTYPE, 1);
     dict_put(ctx->elf->syms, fname->val.str, fsym);
 }

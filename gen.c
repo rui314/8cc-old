@@ -470,6 +470,12 @@ static void handle_jmp(Context *ctx, Inst *inst) {
     }
 }
 
+void handle_return(Context *ctx, Inst *inst) {
+    o2(ctx->text, 0xc031); // XOR eax, eax
+    o1(ctx->text, 0xc9); // LEAVE
+    o1(ctx->text, 0xc3); // RET
+}
+
 static void handle_block(Context *ctx, ControlBlock *block) {
     block->pos = STRING_LEN(ctx->text);
     for (int i = 0; i < LIST_LEN(block->code); i++) {
@@ -490,15 +496,18 @@ static void handle_block(Context *ctx, ControlBlock *block) {
         case OP_IF:
             handle_if(ctx, inst);
             break;
-        case OP_JMP:
-            handle_jmp(ctx, inst);
-            break;
         case '=':
             handle_assign(ctx, inst);
             break;
         case OP_EQUAL:
             handle_equal(ctx, inst);
             break;
+        case OP_JMP:
+            handle_jmp(ctx, inst);
+            return; // RETURN HERE
+        case OP_RETURN:
+            handle_return(ctx, inst);
+            return; // RETURN HERE
         default:
             error("unknown op\n");
         }
@@ -511,7 +520,4 @@ void assemble(Elf *elf, ControlBlock *entry) {
     o3(ctx->text, 0xe58948); // MOV rbp, rsp
     o3(ctx->text, 0xec8148); o4(ctx->text, 160); // SUB rsp, 160
     handle_block(ctx, entry);
-    o2(ctx->text, 0xc031); // XOR eax, eax
-    o1(ctx->text, 0xc9); // LEAVE
-    o1(ctx->text, 0xc3); // RET
 }

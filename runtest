@@ -59,6 +59,12 @@ runtest '0' 'int i=3; int j=5; int k=i==j; printf("%d", k);'
 runtest 'true'  'int i=5; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
 runtest 'false' 'int i=3; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
 
+#
+# "break" and "continue"
+#
+runtest 'bar'  'int i=1; while (1) { if (i) { break; } printf("foo"); } printf("bar");'
+runtest 'aac'  'int i=2; while (i) { if (i) { printf("a"); i=i-1; continue; } printf("b"); } printf("c");'
+
 rm -f tmp$$ tmp$$.o
 echo
 if [ $fail -gt 0 ]; then

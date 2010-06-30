@@ -312,6 +312,8 @@ typedef enum KeywordType {
     KEYWORD_ELSE,
     KEYWORD_WHILE,
     KEYWORD_EQUAL,
+    KEYWORD_BREAK,
+    KEYWORD_CONTINUE,
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
@@ -352,6 +354,8 @@ typedef struct ReadContext {
     ControlBlock *entry;
     List *blockstack;
     Token *lasttok;
+    ControlBlock *onbreak;
+    ControlBlock *oncontinue;
 } ReadContext;
 
 extern ControlBlock *parse(File *file, Elf *elf);
@@ -379,6 +383,7 @@ enum {
     OP_IF,
     OP_JMP,
     OP_EQUAL,
+    OP_RETURN,
 };
 
 typedef struct Inst {
