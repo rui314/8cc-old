@@ -122,7 +122,9 @@ static void write_one_symbol(Symbol *sym, int *index, String *symtab, String *st
  */
 static void write_sym_to_buf(Elf *elf, int *index, String *symtab, String *strtab, bool localonly) {
     DictIter *iter = make_dict_iter(elf->syms);
-    for (Symbol *sym = dict_iter_next(iter); sym; sym = dict_iter_next(iter)) {
+    void **p;
+    for (p = dict_iter_next(iter); p; p = dict_iter_next(iter)) {
+        Symbol *sym = p[1];
         if (localonly && sym->bind != STB_LOCAL)
             continue;
         if (!localonly && sym->bind == STB_LOCAL)

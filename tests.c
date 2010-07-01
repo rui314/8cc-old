@@ -124,7 +124,9 @@ static void test_dict_iter(void) {
 
     dict_put(dict, to_string("key"), (void *)-1);
     iter = make_dict_iter(dict);
-    EQ(-1, (long)dict_iter_next(iter));
+    void **p = dict_iter_next(iter);
+    EQ_STR(STRING_BODY((String *)to_string("key")), STRING_BODY((String *)p[0]));
+    EQ(-1, (intptr)p[1]);
     EQ(NULL, dict_iter_next(iter));
 }
 

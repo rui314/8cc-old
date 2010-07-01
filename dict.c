@@ -192,8 +192,12 @@ void *dict_iter_next(DictIter* iter) {
     while (iter->idx < iter->dict->nalloc) {
         Bucket *ent = &iter->dict->buckets[iter->idx];
         iter->idx++;
-        if (ent->key)
-            return ent->elem;
+        if (!BUCKET_EMPTY(ent)) {
+            void **r = malloc(sizeof(void *) * 2);
+            r[0] = ent->key;
+            r[1] = ent->elem;
+            return r;
+        }
     }
     return NULL;
 }
