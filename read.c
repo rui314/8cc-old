@@ -54,7 +54,8 @@
 #define NOT_SUPPORTED()                                                 \
     do { error("line %d: not supported yet", __LINE__); } while (0)
 
-static Var *read_expr(ReadContext *ctx);
+static Var *read_assign_expr(ReadContext *ctx);
+static Var *read_comma_expr(ReadContext *ctx);
 static void read_compound_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 
@@ -436,53 +437,27 @@ static void process_continue(ReadContext *ctx) {
 }
 
 static Var *read_func_call(ReadContext *ctx, Token *fntok) {
-    Section *data = find_section(ctx->elf, ".data");
-    List *argtoks = make_list();
-    for (;;) {
-        Token *arg = read_token(ctx);
-        list_push(argtoks, arg);
-        Token *sep = read_token(ctx);
-        if (sep->toktype != TOKTYPE_KEYWORD)
-            error("line %d:%d: expected ',', or ')', but got '%c'", sep->line, sep->column, sep->val.c);
-        if (sep->val.c == ')')
-            break;
-        if (sep->val.c != ',')
-            error("line %d:%d: expected ',', but got '%c'", sep->line, sep->column, sep->val.c);
-    }
-
     List *args = make_list();
     list_push(args, make_extern(fntok->val.str));
-    Var *val = make_var(CTYPE_INT, NULL);
-    list_push(args, val);
-    int i;
-    for (i = 0; i < LIST_LEN(argtoks); i++) {
-        Token *arg = LIST_ELEM(argtoks, i);
-        switch (arg->toktype) {
-        case TOKTYPE_INT:
-            list_push(args, make_imm(CTYPE_INT, (Cvalue)arg->val.i));
-            break;
-        case TOKTYPE_FLOAT:
-            list_push(args, make_imm(CTYPE_FLOAT, (Cvalue)arg->val.f));
-            break;
-        case TOKTYPE_IDENT: {
-            Var *var = find_var(ctx, arg->val.str);
-            list_push(args, var);
-            break;
-        }
-        case TOKTYPE_STRING: {
-            int off = add_string(data, arg->val.str);
-            Var *var = make_imm(CTYPE_PTR, (Cvalue)off);
-            list_push(args, var);
-            break;
-        }
-        case TOKTYPE_CHAR:
-            NOT_SUPPORTED();
-        default:
-            error("unknown token type: %d", arg->toktype);
+    Var *retval = make_var(CTYPE_INT, NULL);
+    list_push(args, retval);
+    Token *tok = read_token(ctx);
+    if (!IS_KEYWORD(tok, ')')) {
+        unget_token(ctx, tok);
+        for (;;) {
+            Var *v = read_assign_expr(ctx);
+            list_push(args, v);
+            Token *sep = read_token(ctx);
+            if (sep->toktype != TOKTYPE_KEYWORD)
+                error("line %d:%d: expected ',', or ')', but got '%c'", sep->line, sep->column, sep->val.c);
+            if (IS_KEYWORD(sep, ')'))
+                break;
+            if (!IS_KEYWORD(sep, ','))
+                error("line %d:%d: expected ',', but got '%c'", sep->line, sep->column, sep->val.c);
         }
     }
     emit(ctx, make_instn(OP_FUNC_CALL, args));
-    return val;
+    return retval;
 }
 
 static void expect_ident(Token *tok) {
@@ -512,7 +487,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
     }
     case TOKTYPE_KEYWORD: {
         if (IS_KEYWORD(tok, '(')) {
-            Var *r = read_expr(ctx);
+            Var *r = read_comma_expr(ctx);
             expect(ctx, ')');
             return r;
         }
@@ -604,7 +579,11 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     return v0;
 }
 
-static Var *read_expr(ReadContext *ctx) {
+static Var *read_assign_expr(ReadContext *ctx) {
+    return read_expr1(ctx, read_unary_expr(ctx), 1);
+}
+
+static Var *read_comma_expr(ReadContext *ctx) {
     return read_expr1(ctx, read_unary_expr(ctx), 0);
 }
 
@@ -612,7 +591,7 @@ static void read_decl(ReadContext *ctx, Ctype *ctype) {
     Token *ident = read_ident(ctx);
     expect_ident(ident);
     expect(ctx, '=');
-    Var *val = read_expr(ctx);
+    Var *val = read_assign_expr(ctx);
     expect(ctx, ';');
     Var *var = make_var(CTYPE_INT, ident->val.str);
     add_local_var(ctx, ident->val.str, var);
@@ -631,7 +610,7 @@ static Ctype *read_type(ReadContext *ctx) {
 static void read_if_stmt(ReadContext *ctx) {
     Block *then, *els;
     expect(ctx, '(');
-    Var *cond = read_expr(ctx);
+    Var *cond = read_comma_expr(ctx);
     expect(ctx, ')');
 
     push_block(ctx);
@@ -659,19 +638,19 @@ static void read_for_stmt(ReadContext *ctx) {
     Block *cont = make_block();
 
     expect(ctx, '(');
-    read_expr(ctx);
+    read_comma_expr(ctx);
     expect(ctx, ';');
 
     emit(ctx, make_inst1(OP_JMP, cond));
 
     push_block1(ctx, cond);
-    Var *condvar = read_expr(ctx);
+    Var *condvar = read_comma_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
     pop_block(ctx);
     expect(ctx, ';');
 
     push_block1(ctx, mod);
-    read_expr(ctx);
+    read_comma_expr(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_block(ctx);
     expect(ctx, ')');
@@ -699,7 +678,7 @@ static void read_while_stmt(ReadContext *ctx) {
 
     expect(ctx, '(');
     push_block1(ctx, cond);
-    Var *condvar = read_expr(ctx);
+    Var *condvar = read_comma_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
     pop_block(ctx);
     expect(ctx, ')');
@@ -739,7 +718,7 @@ static void read_do_stmt(ReadContext *ctx) {
     expect(ctx, KEYWORD_WHILE);
     expect(ctx, '(');
     push_block1(ctx, cond);
-    Var *condvar = read_expr(ctx);
+    Var *condvar = read_comma_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
     pop_block(ctx);
     expect(ctx, ')');
@@ -830,7 +809,7 @@ static void read_stmt(ReadContext *ctx) {
             unget_token(ctx, tok1);
             unget_token(ctx, tok);
         }
-        read_expr(ctx);
+        read_comma_expr(ctx);
         Token *tok2 = read_token(ctx);
         if (!IS_KEYWORD(tok2, ';'))
             error("';' expected");
