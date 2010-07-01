@@ -624,15 +624,13 @@ static void read_if_stmt(ReadContext *ctx) {
     expect(ctx, ')');
 
     push_block(ctx);
-    expect(ctx, '{');
-    read_compound_stmt(ctx);
+    read_stmt(ctx);
     then = pop_block(ctx);
 
     Token *tok = read_token(ctx);
     if (IS_KEYWORD(tok, KEYWORD_ELSE)) {
-        expect(ctx, '{');
         push_block(ctx);
-        read_compound_stmt(ctx);
+        read_stmt(ctx);
         els = pop_block(ctx);
     } else {
         unget_token(ctx, tok);
@@ -667,13 +665,12 @@ static void read_for_stmt(ReadContext *ctx) {
     pop_block(ctx);
     expect(ctx, ')');
 
-    expect(ctx, '{');
     Block *orig_onbreak = ctx->onbreak;
     Block *orig_oncontinue = ctx->oncontinue;
     ctx->onbreak = cont;
     ctx->oncontinue = mod;
     push_block1(ctx, body);
-    read_compound_stmt(ctx);
+    read_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, mod));
     pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
@@ -696,13 +693,12 @@ static void read_while_stmt(ReadContext *ctx) {
     pop_block(ctx);
     expect(ctx, ')');
 
-    expect(ctx, '{');
     Block *orig_onbreak = ctx->onbreak;
     Block *orig_oncontinue = ctx->oncontinue;
     ctx->oncontinue = cond;
     ctx->onbreak = cont;
     push_block1(ctx, body);
-    read_compound_stmt(ctx);
+    read_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
@@ -718,13 +714,12 @@ static void read_do_stmt(ReadContext *ctx) {
 
     emit(ctx, make_inst1(OP_JMP, body));
 
-    expect(ctx, '{');
     Block *orig_onbreak = ctx->onbreak;
     Block *orig_oncontinue = ctx->oncontinue;
     ctx->oncontinue = body;
     ctx->onbreak = cont;
     push_block1(ctx, body);
-    read_compound_stmt(ctx);
+    read_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
@@ -814,6 +809,8 @@ static void read_stmt(ReadContext *ctx) {
         process_continue(ctx);
     } else if (IS_KEYWORD(tok, KEYWORD_GOTO)) {
         read_goto_stmt(ctx);
+    } else if (IS_KEYWORD(tok, '{')) {
+        read_compound_stmt(ctx);
     } else {
         Token *tok1 = read_token(ctx);
         if (IS_KEYWORD(tok1, ':')) {

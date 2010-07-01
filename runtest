@@ -46,8 +46,9 @@ runtest '3' 'int i=3; int j=i; printf("%d", j);'
 # "if" statement
 #
 /bin/echo -e '\nif statement...'
-runtest 'true' 'int i=1; if (i) { printf("true"); } else { printf("false"); }'
+runtest 'true'  'int i=1; if (i) { printf("true"); } else { printf("false"); }'
 runtest 'false' 'int i=0; if (i) { printf("true"); } else { printf("false"); }'
+runtest 'true'  'int i=1; if (i)   printf("true");   else   printf("false");'
 
 #
 # "while" statement
@@ -60,6 +61,7 @@ runtest '54321a' 'int i=5; while (i) { printf("%d", i); i=i-1; } printf("a");'
 #
 /bin/echo -e '\nfor statement...'
 runtest '321' 'int i=0; for (i=3;i;i=i-1) { printf("%d", i); }'
+runtest '321' 'int i=0; for (i=3;i;i=i-1) printf("%d", i);'
 
 #
 # "do" statement
