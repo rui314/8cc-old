@@ -272,7 +272,9 @@ extern Section *find_section(Elf *elf, char *name);
 
 typedef struct File {
     FILE *stream;
-    int lineno;
+    int line;
+    int column;
+    int last_column;
     String *filename;
     int ungotten;
 } File;
@@ -332,6 +334,7 @@ typedef union TokenValue {
 } TokenValue;
 
 typedef enum TokType {
+    TOKTYPE_INVALID,
     TOKTYPE_KEYWORD,
     TOKTYPE_CHAR,
     TOKTYPE_STRING ,
@@ -343,7 +346,8 @@ typedef enum TokType {
 typedef struct Token {
     TokType toktype;
     TokenValue val;
-    int lineno;
+    int line;
+    int column;
 } Token;
 
 typedef struct Block {

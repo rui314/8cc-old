@@ -35,7 +35,9 @@
 File *make_file(FILE *stream, char *filename) {
     File *r = malloc(sizeof(File));
     r->stream = stream;
-    r->lineno = 1;
+    r->line = 1;
+    r->column = 1;
+    r->last_column = 0;
     r->filename = make_string();
     ostr(r->filename, filename);
     r->ungotten = EOF;
@@ -55,7 +57,12 @@ File *open_file(char *path) {
 }
 
 void unreadc(int c, File *file) {
-    if (c == '\n') file->lineno--;
+    if (c == '\n') {
+        file->line--;
+        file->column = file->last_column;
+    } else {
+        file->column--;
+    }
     if (file->ungotten != EOF)
         ungetc(file->ungotten, file->stream);
     file->ungotten = c;
@@ -76,12 +83,19 @@ int readc(File *file) {
     if (c == EOF || c == '\0')
         return EOF;
     if (c == '\r') {
-        file->lineno++;
+        file->line++;
+        file->last_column = file->column;
+        file->column = 1;
         c = getc(file->stream);
         if (c == '\n') return '\n';
         unreadc(c, file);
         return '\n';
+    } else if (c == '\n') {
+        file->line++;
+        file->last_column = file->column;
+        file->column = 1;
+    } else {
+        file->column++;
     }
-    if (c == '\n') file->lineno++;
     return c;
 }

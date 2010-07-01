@@ -98,4 +98,3 @@ if [ $fail -gt 0 ]; then
 else
     echo OK
 fi
-

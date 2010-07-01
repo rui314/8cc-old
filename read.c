@@ -57,10 +57,11 @@
 static void read_compound_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 
-static Token *make_token(int toktype, int lineno) {
+static Token *make_token(ReadContext *ctx) {
     Token *r = malloc(sizeof(Token));
-    r->toktype = toktype;
-    r->lineno = lineno;
+    r->toktype = TOKTYPE_INVALID;
+    r->line = ctx->file->line;
+    r->column = ctx->file->column;
     return r;
 }
 
@@ -152,12 +153,11 @@ void skip_comment(File *file) {
     }
 }
 
-static Token *read_num(File *file, char first, int lineno) {
-    Token *tok;
+static Token *read_num(ReadContext *ctx) {
+    Token *tok = make_token(ctx);
     String *buf = make_string();
-    o1(buf, first);
     for (;;) {
-        int c = readc(file);
+        int c = readc(ctx->file);
         if (c == EOF) {
             goto ret_int;
         } else if ('0' <= c && c <= '9') {
@@ -166,27 +166,27 @@ static Token *read_num(File *file, char first, int lineno) {
             o1(buf, c);
             break;
         } else {
-            unreadc(c, file);
+            unreadc(c, ctx->file);
             goto ret_int;
         }
     }
     for (;;) {
-        int c = readc(file);
+        int c = readc(ctx->file);
         if (c == EOF) {
             goto ret_float;
         } else if ('0' <= c && c <= '9') {
             o1(buf, c);
         } else {
-            unreadc(c, file);
+            unreadc(c, ctx->file);
             goto ret_float;
         }
     }
  ret_int:
-    tok = make_token(TOKTYPE_INT, lineno);
+    tok->toktype = TOKTYPE_INT;
     tok->val.i = atoi(STRING_BODY(buf));
     return tok;
  ret_float:
-    tok = make_token(TOKTYPE_FLOAT, lineno);
+    tok->toktype = TOKTYPE_FLOAT;
     tok->val.f = atof(STRING_BODY(buf));
     return tok;
 }
@@ -203,7 +203,7 @@ static char read_escape_char(File *file) {
     int r;
     switch (c) {
     case EOF:
-        error("line %d: premature end of input file while reading a literal string or a character", file->lineno);
+        error("line %d:%d: premature end of input file while reading a literal string or a character", file->line, file->column);
     case 'a': return '\a';
     case 'b': return '\b';
     case 't': return '\t';
@@ -256,7 +256,7 @@ static String *read_str(File *file) {
             o1(b, read_escape_char(file));
             break;
         case EOF:
-            error("line %d: premature end of input file while reading a literal string", file->lineno);
+            error("line %d:%d: premature end of input file while reading a literal string", file->line, file->column);
         default:
             o1(b, c);
         }
@@ -267,7 +267,7 @@ static char read_char(File *file) {
     int c = readc(file);
     switch (c) {
     case EOF:
-        error("line %d: premature end of input file while reading a literal character", file->lineno);
+        error("line %d:%d: premature end of input file while reading a literal character", file->line, file->column);
     case '\\': return read_escape_char(file);
     default: return (char)c;
     }
@@ -294,7 +294,7 @@ void unget_token(ReadContext *ctx, Token *tok) {
 }
 
 Token *read_token(ReadContext *ctx) {
-    Token *r;
+    Token *r = make_token(ctx);
     if (!LIST_IS_EMPTY(ctx->ungotten))
         return list_pop(ctx->ungotten);
 
@@ -307,13 +307,14 @@ Token *read_token(ReadContext *ctx) {
             continue;
         case '0': case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8': case '9':
-            return read_num(file, c, file->lineno);
+            unreadc(c, file);
+            return read_num(ctx);
         case '"':
-            r = make_token(TOKTYPE_STRING, file->lineno);
+            r->toktype = TOKTYPE_STRING;
             r->val.str = read_str(file);
             return r;
         case '\'': {
-            r = make_token(TOKTYPE_CHAR, file->lineno);
+            r->toktype = TOKTYPE_CHAR;
             r->val.c = read_char(file);
             int c1 = read_char(file);
             if (c1 != '\'')
@@ -331,7 +332,7 @@ Token *read_token(ReadContext *ctx) {
             str = read_word(file, c);
 #define KEYWORD(type_, val_)                                    \
             if (!strcmp(STRING_BODY(str), (type_))) {           \
-                r = make_token(TOKTYPE_KEYWORD, file->lineno);  \
+                r->toktype = TOKTYPE_KEYWORD;                   \
                 r->val.k = (val_);                              \
                 return r;                                       \
             }
@@ -346,13 +347,13 @@ Token *read_token(ReadContext *ctx) {
             KEYWORD("continue", KEYWORD_CONTINUE);
             KEYWORD("goto",  KEYWORD_GOTO);
 #undef KEYWORD
-            r = make_token(TOKTYPE_IDENT, file->lineno);
+            r->toktype = TOKTYPE_IDENT;
             r->val.str = str;
             return r;
         case '=': {
             int c1 = readc(file);
             if (c1 == '=') {
-                r = make_token(TOKTYPE_KEYWORD, file->lineno);
+                r->toktype = TOKTYPE_KEYWORD;
                 r->val.k = KEYWORD_EQUAL;
                 return r;
             } else {
@@ -363,13 +364,13 @@ Token *read_token(ReadContext *ctx) {
         case '!': case '%': case '&': case '(': case ')': case '*': case '+':
         case ',': case '-': case '/': case ';': case '[': case ']': case '^':
         case '{': case '|': case '}': case '~': case ':':
-            r = make_token(TOKTYPE_KEYWORD, file->lineno);
+            r->toktype = TOKTYPE_KEYWORD;
             r->val.c = c;
             return r;
         case EOF:
             return NULL;
         default:
-            error("line %d: unimplemented '%c'", file->lineno, c);
+            error("line %d:%d: unimplemented '%c'", file->line, file->column, c);
         }
     }
     return NULL;
@@ -407,6 +408,8 @@ String *token_to_string(Token *tok) {
         sprintf(buf, "%f", tok->val.f);
         ostr(r, buf);
         break;
+    case TOKTYPE_INVALID:
+        error("[internal error] got TOKTYPE_INVALID");
     }
     return r;
 }
@@ -414,9 +417,9 @@ String *token_to_string(Token *tok) {
 static void expect(ReadContext *ctx, int expected) {
     Token *tok = read_token(ctx);
     if (tok->toktype != TOKTYPE_KEYWORD)
-        error("line %d: keyword expected, but got %s", ctx->file->lineno, STRING_BODY(token_to_string(tok)));
+        error("line %d:%d: keyword expected, but got %s", ctx->file->line, ctx->file->column, STRING_BODY(token_to_string(tok)));
     if (!IS_KEYWORD(tok, expected))
-        error("line %d: '%c' expected, but got '%c'", ctx->file->lineno, expected, tok->val.k);
+        error("line %d:%d: '%c' expected, but got '%c'", ctx->file->line, ctx->file->column, expected, tok->val.k);
 }
 
 static void process_break(ReadContext *ctx) {
@@ -439,11 +442,11 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
         list_push(argtoks, arg);
         Token *sep = read_token(ctx);
         if (sep->toktype != TOKTYPE_KEYWORD)
-            error("line %d: expected ',', or ')', but got '%c'", sep->lineno, sep->val.c);
+            error("line %d:%d: expected ',', or ')', but got '%c'", sep->line, sep->column, sep->val.c);
         if (sep->val.c == ')')
             break;
         if (sep->val.c != ',')
-            error("line %d: expected ',', but got '%c'", sep->lineno, sep->val.c);
+            error("line %d:%d: expected ',', but got '%c'", sep->line, sep->column, sep->val.c);
     }
 
     List *args = make_list();
@@ -481,10 +484,14 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
     return val;
 }
 
+static void expect_ident(Token *tok) {
+    if (tok->toktype != TOKTYPE_IDENT)
+        error("line %d:%d: identifier expected", tok->line, tok->column);
+}
+
 static Token *read_ident(ReadContext *ctx) {
     Token *r = read_token(ctx);
-    if (r->toktype != TOKTYPE_IDENT)
-        error("identifier expected");
+    expect_ident(r);
     return r;
 }
 
@@ -592,8 +599,7 @@ static Var *read_expr(ReadContext *ctx) {
 
 static void read_decl(ReadContext *ctx, Ctype *ctype) {
     Token *ident = read_ident(ctx);
-    if (ident->toktype != TOKTYPE_IDENT)
-        error("identifier expected");
+    expect_ident(ident);
     expect(ctx, '=');
     Var *val = read_expr(ctx);
     expect(ctx, ';');
@@ -737,8 +743,7 @@ static void read_do_stmt(ReadContext *ctx) {
 }
 
 static void process_label(ReadContext *ctx, Token *tok) {
-    if (tok->toktype != TOKTYPE_IDENT)
-        error("identifier expected");
+    expect_ident(tok);
     String *label = tok->val.str;
 
     if (dict_get(ctx->label, label))
@@ -764,8 +769,7 @@ static void process_label(ReadContext *ctx, Token *tok) {
 
 static void read_goto_stmt(ReadContext *ctx) {
     Token *tok = read_token(ctx);
-    if (tok->toktype != TOKTYPE_IDENT)
-        error("identifier expected");
+    expect_ident(tok);
     expect(ctx, ';');
     String *label = tok->val.str;
 
@@ -849,8 +853,7 @@ static void read_compound_stmt(ReadContext *ctx) {
 static void read_func_def(ReadContext *ctx) {
     Section *text = find_section(ctx->elf, ".text");
     Token *fname = read_token(ctx);
-    if (fname->toktype != TOKTYPE_IDENT)
-        error("line %d: identifier expected", fname->lineno);
+    expect_ident(fname);
     expect(ctx, '(');
     expect(ctx, ')');
     expect(ctx, '{');
