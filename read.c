@@ -54,6 +54,7 @@
 #define NOT_SUPPORTED()                                                 \
     do { error("line %d: not supported yet", __LINE__); } while (0)
 
+static Var *read_expr(ReadContext *ctx);
 static void read_compound_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 
@@ -509,8 +510,14 @@ static Var *read_unary_expr(ReadContext *ctx) {
         int off = add_string(data, tok->val.str);
         return make_imm(CTYPE_PTR, (Cvalue)off);
     }
-    case TOKTYPE_KEYWORD:
+    case TOKTYPE_KEYWORD: {
+        if (IS_KEYWORD(tok, '(')) {
+            Var *r = read_expr(ctx);
+            expect(ctx, ')');
+            return r;
+        }
         error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
+    }
     case TOKTYPE_IDENT: {
         Token *tok1 = read_token(ctx);
         if (IS_KEYWORD(tok1, '('))
