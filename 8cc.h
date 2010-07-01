@@ -317,6 +317,7 @@ typedef enum KeywordType {
     KEYWORD_EQUAL,
     KEYWORD_BREAK,
     KEYWORD_CONTINUE,
+    KEYWORD_GOTO,
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
@@ -359,6 +360,8 @@ typedef struct ReadContext {
     List *ungotten;
     ControlBlock *onbreak;
     ControlBlock *oncontinue;
+    Dict *label;
+    Dict *label_tbf;
 } ReadContext;
 
 extern ControlBlock *parse(File *file, Elf *elf);

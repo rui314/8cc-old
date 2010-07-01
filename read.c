@@ -82,6 +82,8 @@ ReadContext *make_read_context(File *file, Elf *elf) {
     r->ungotten = make_list();
     r->onbreak = NULL;
     r->oncontinue = NULL;
+    r->label = make_string_dict();
+    r->label_tbf = make_string_dict();
     return r;
 }
 
@@ -107,8 +109,10 @@ static ControlBlock *pop_control_block(ReadContext *ctx) {
     return list_pop(ctx->blockstack);
 }
 
-static void replace_control_block(ReadContext *ctx, ControlBlock *block) {
+static ControlBlock *replace_control_block(ReadContext *ctx, ControlBlock *block) {
+    ControlBlock *r = LIST_BOTTOM(ctx->blockstack);
     LIST_BOTTOM(ctx->blockstack) = block;
+    return r;
 }
 
 static void emit(ReadContext *ctx, Inst *inst) {
@@ -340,6 +344,7 @@ Token *read_token(ReadContext *ctx) {
             KEYWORD("do",    KEYWORD_DO);
             KEYWORD("break", KEYWORD_BREAK);
             KEYWORD("continue", KEYWORD_CONTINUE);
+            KEYWORD("goto",  KEYWORD_GOTO);
 #undef KEYWORD
             r = make_token(TOKTYPE_IDENT, file->lineno);
             r->val.str = str;
@@ -357,7 +362,7 @@ Token *read_token(ReadContext *ctx) {
         }
         case '!': case '%': case '&': case '(': case ')': case '*': case '+':
         case ',': case '-': case '/': case ';': case '[': case ']': case '^':
-        case '{': case '|': case '}': case '~':
+        case '{': case '|': case '}': case '~': case ':':
             r = make_token(TOKTYPE_KEYWORD, file->lineno);
             r->val.c = c;
             return r;
@@ -731,6 +736,62 @@ static void read_do_stmt(ReadContext *ctx) {
     replace_control_block(ctx, cont);
 }
 
+static void process_label(ReadContext *ctx, Token *tok) {
+    if (tok->toktype != TOKTYPE_IDENT)
+        error("identifier expected");
+    String *label = tok->val.str;
+
+    if (dict_get(ctx->label, label))
+        error("duplicate label: %s", STRING_BODY(label));
+
+    ControlBlock *cont = make_control_block();
+    emit(ctx, make_inst1(OP_JMP, cont));
+    replace_control_block(ctx, cont);
+
+    dict_put(ctx->label, label, cont);
+
+    List *tbf = dict_get(ctx->label_tbf, label);
+    if (!tbf)
+        return;
+    for (int i = 0; i < LIST_LEN(tbf); i++) {
+        ControlBlock *block = LIST_ELEM(tbf, i);
+        push_control_block1(ctx, block);
+        emit(ctx, make_inst1(OP_JMP, cont));
+        pop_control_block(ctx);
+    }
+    dict_delete(ctx->label_tbf, label);
+}
+
+static void read_goto_stmt(ReadContext *ctx) {
+    Token *tok = read_token(ctx);
+    if (tok->toktype != TOKTYPE_IDENT)
+        error("identifier expected");
+    expect(ctx, ';');
+    String *label = tok->val.str;
+
+    ControlBlock *dst = dict_get(ctx->label, label);
+    if (dst) {
+        emit(ctx, make_inst1(OP_JMP, dst));
+        return;
+    }
+    List *blocks = dict_get(ctx->label_tbf, label);
+    if (!blocks) {
+        blocks = make_list();
+        dict_put(ctx->label_tbf, label, blocks);
+    }
+    ControlBlock *cur = replace_control_block(ctx, make_control_block());
+    list_push(blocks, cur);
+}
+
+static void check_context(ReadContext *ctx) {
+    DictIter *iter = make_dict_iter(ctx->label_tbf);
+    void **p;
+    for (p = dict_iter_next(iter); p; p = dict_iter_next(iter)) {
+        String *label = p[0];
+        error("dangling goto label: '%s'", STRING_BODY(label));
+    }
+}
+
 static void read_stmt(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     if (IS_KEYWORD(tok, KEYWORD_IF)) {
@@ -747,11 +808,19 @@ static void read_stmt(ReadContext *ctx) {
     } else if (IS_KEYWORD(tok, KEYWORD_CONTINUE)) {
         expect(ctx, ';');
         process_continue(ctx);
+    } else if (IS_KEYWORD(tok, KEYWORD_GOTO)) {
+        read_goto_stmt(ctx);
     } else {
-        unget_token(ctx, tok);
-        read_expr(ctx);
         Token *tok1 = read_token(ctx);
-        if (!IS_KEYWORD(tok1, ';'))
+        if (IS_KEYWORD(tok1, ':')) {
+            process_label(ctx, tok);
+        } else {
+            unget_token(ctx, tok1);
+            unget_token(ctx, tok);
+        }
+        read_expr(ctx);
+        Token *tok2 = read_token(ctx);
+        if (!IS_KEYWORD(tok2, ';'))
             error("';' expected");
     }
 }
@@ -800,5 +869,6 @@ static void read_func_def(ReadContext *ctx) {
 ControlBlock *parse(File *file, Elf *elf) {
     ReadContext *ctx = make_read_context(file, elf);
     read_func_def(ctx);
+    check_context(ctx);
     return ctx->entry;
 }
