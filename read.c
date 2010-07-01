@@ -543,7 +543,8 @@ static int prec(Token *tok) {
     case '*': case '/': r++;
     case '+': case '-': r++;
     case KEYWORD_EQUAL: r++;
-    case '=': return r;
+    case '=': r++;
+    case ',': return r;
     default: return -1;
     }
 }
@@ -572,6 +573,9 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         }
         Var *tmp;
         switch (tok->val.k) {
+        case ',':
+            v0 = v1;
+            break;
         case '=':
             ensure_lvalue(v0);
             emit(ctx, make_inst2(tok->val.k, v0, v1));

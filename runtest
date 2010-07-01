@@ -43,6 +43,12 @@ runtest '5' 'int i=9; int j=1+i/3+9/i; printf("%d", j);'
 runtest '3' 'int i=3; int j=i; printf("%d", j);'
 
 #
+# Comma operator
+#
+/bin/echo -e '\nComma operator...'
+runtest '321' 'int i=3; while (i) printf("%d", i), i=i-1;'
+
+#
 # "if" statement
 #
 /bin/echo -e '\nif statement...'
@@ -55,19 +61,21 @@ runtest 'true'  'int i=1; if (i)   printf("true");   else   printf("false");'
 #
 /bin/echo -e '\nwhile statement...'
 runtest '54321a' 'int i=5; while (i) { printf("%d", i); i=i-1; } printf("a");'
+runtest '54321a' 'int i=5; while (i)   printf("%d", i), i=i-1;   printf("a");'
 
 #
 # "for" statement
 #
 /bin/echo -e '\nfor statement...'
 runtest '321' 'int i=0; for (i=3;i;i=i-1) { printf("%d", i); }'
-runtest '321' 'int i=0; for (i=3;i;i=i-1) printf("%d", i);'
+runtest '321' 'int i=0; for (i=3;i;i=i-1)   printf("%d", i);'
 
 #
 # "do" statement
 #
 /bin/echo -e '\ndo statement...'
 runtest '321' 'int i=3; do { printf("%d", i); i=i-1;} while (i);'
+runtest '321' 'int i=3; do   printf("%d", i), i=i-1;  while (i);'
 
 #
 # "==" operator
