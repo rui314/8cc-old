@@ -148,7 +148,7 @@ Var *make_extern(String *name) {
  * Instructions for intermediate code
  */
 
-static void handle_block(Context *ctx, ControlBlock *block);
+static void handle_block(Context *ctx, Block *block);
 
 static Inst *make_inst(int op, int narg) {
     Inst *r = malloc(sizeof(Inst));
@@ -414,9 +414,9 @@ static void handle_equal(Context *ctx, Inst *inst) {
 
 static void handle_if(Context *ctx, Inst *inst) {
     Var *cond = LIST_ELEM(inst->args, 0);
-    ControlBlock *then = LIST_ELEM(inst->args, 1);
-    ControlBlock *els = LIST_ELEM(inst->args, 2);
-    ControlBlock *cont = LIST_ELEM(inst->args, 3);
+    Block *then = LIST_ELEM(inst->args, 1);
+    Block *els = LIST_ELEM(inst->args, 2);
+    Block *cont = LIST_ELEM(inst->args, 3);
     if (cond->stype == VAR_IMM) {
         handle_block(ctx, cond->val.i ? then : els);
         return;
@@ -463,7 +463,7 @@ static void jump_to(Context *ctx, int pos) {
 }
 
 static void handle_jmp(Context *ctx, Inst *inst) {
-    ControlBlock *dst = LIST_ELEM(inst->args, 0);
+    Block *dst = LIST_ELEM(inst->args, 0);
     if (dst->pos < 0) {
         handle_block(ctx, dst);
     } else {
@@ -477,7 +477,7 @@ void handle_return(Context *ctx, Inst *inst) {
     o1(ctx->text, 0xc3); // RET
 }
 
-static void handle_block(Context *ctx, ControlBlock *block) {
+static void handle_block(Context *ctx, Block *block) {
     if (block->pos >= 0) {
         jump_to(ctx, block->pos);
         return;
@@ -519,7 +519,7 @@ static void handle_block(Context *ctx, ControlBlock *block) {
     }
 }
 
-void assemble(Elf *elf, ControlBlock *entry) {
+void assemble(Elf *elf, Block *entry) {
     Context *ctx = make_context(elf);
     o1(ctx->text, 0x55); // PUSH rbp
     o3(ctx->text, 0xe58948); // MOV rbp, rsp

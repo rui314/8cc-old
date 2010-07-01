@@ -12,11 +12,7 @@ tests: $(OBJS1) tests.o 8cc.h
 	$(CC) -Wall $(CFLAGS) -o $@ tests.o $(OBJS1)
 
 clean:
-	-rm -f 8cc $(OBJS) *.o hello tests
-
-hello: 8cc
-	echo 'main() {printf("Hello, world!\n");}' | ./8cc - hello.o
-	$(CC) -o hello hello.o
+	-rm -f 8cc $(OBJS) *.o tests
 
 test: tests 8cc
 	@./runtest

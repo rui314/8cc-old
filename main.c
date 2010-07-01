@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     text->align = 16;
     add_section(elf, text);
 
-    ControlBlock *entry = parse(infile, elf);
+    Block *entry = parse(infile, elf);
     assemble(elf, entry);
     write_elf(outfile, elf);
 }

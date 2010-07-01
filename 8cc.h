@@ -346,25 +346,25 @@ typedef struct Token {
     int lineno;
 } Token;
 
-typedef struct ControlBlock {
+typedef struct Block {
     int pos;
     List *code;
-} ControlBlock;
+} Block;
 
 typedef struct ReadContext {
     File *file;
     Elf *elf;
     List *scope;
-    ControlBlock *entry;
+    Block *entry;
     List *blockstack;
     List *ungotten;
-    ControlBlock *onbreak;
-    ControlBlock *oncontinue;
+    Block *onbreak;
+    Block *oncontinue;
     Dict *label;
     Dict *label_tbf;
 } ReadContext;
 
-extern ControlBlock *parse(File *file, Elf *elf);
+extern Block *parse(File *file, Elf *elf);
 extern Token *read_token(ReadContext *ctx);
 extern void unget_token(ReadContext *ctx, Token *tok);
 extern ReadContext *make_read_context(File *file, Elf *elf);
@@ -399,7 +399,7 @@ typedef struct Inst {
     Cvalue val;
 } Inst;
 
-extern void assemble(Elf *elf, ControlBlock *entry);
+extern void assemble(Elf *elf, Block *entry);
 extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined);
 

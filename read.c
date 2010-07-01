@@ -64,8 +64,8 @@ static Token *make_token(int toktype, int lineno) {
     return r;
 }
 
-ControlBlock *make_control_block() {
-    ControlBlock *r = malloc(sizeof(ControlBlock));
+Block *make_block() {
+    Block *r = malloc(sizeof(Block));
     r->pos = -1;
     r->code = make_list();
     return r;
@@ -76,7 +76,7 @@ ReadContext *make_read_context(File *file, Elf *elf) {
     r->file = file;
     r->elf = elf;
     r->scope = make_list();
-    r->entry = make_control_block();
+    r->entry = make_block();
     r->blockstack = make_list();
     list_push(r->blockstack, r->entry);
     r->ungotten = make_list();
@@ -95,22 +95,22 @@ static void pop_scope(ReadContext *ctx) {
     list_pop(ctx->scope);
 }
 
-static ControlBlock *push_control_block(ReadContext *ctx) {
-    ControlBlock *r = make_control_block();
+static Block *push_block(ReadContext *ctx) {
+    Block *r = make_block();
     list_push(ctx->blockstack, r);
     return r;
 }
 
-static void push_control_block1(ReadContext *ctx, ControlBlock *block) {
+static void push_block1(ReadContext *ctx, Block *block) {
     list_push(ctx->blockstack, block);
 }
 
-static ControlBlock *pop_control_block(ReadContext *ctx) {
+static Block *pop_block(ReadContext *ctx) {
     return list_pop(ctx->blockstack);
 }
 
-static ControlBlock *replace_control_block(ReadContext *ctx, ControlBlock *block) {
-    ControlBlock *r = LIST_BOTTOM(ctx->blockstack);
+static Block *replace_block(ReadContext *ctx, Block *block) {
+    Block *r = LIST_BOTTOM(ctx->blockstack);
     LIST_BOTTOM(ctx->blockstack) = block;
     return r;
 }
@@ -118,7 +118,7 @@ static ControlBlock *replace_control_block(ReadContext *ctx, ControlBlock *block
 static void emit(ReadContext *ctx, Inst *inst) {
     if (LIST_LEN(ctx->blockstack) == 0)
         error("[internal error] control block stack is empty");
-    ControlBlock *block = LIST_BOTTOM(ctx->blockstack);
+    Block *block = LIST_BOTTOM(ctx->blockstack);
     list_push(block->code, inst);
 }
 
@@ -612,36 +612,36 @@ static Ctype *read_type(ReadContext *ctx) {
 }
 
 static void read_if_stmt(ReadContext *ctx) {
-    ControlBlock *then, *els;
+    Block *then, *els;
     expect(ctx, '(');
     Var *cond = read_expr(ctx);
     expect(ctx, ')');
 
-    push_control_block(ctx);
+    push_block(ctx);
     expect(ctx, '{');
     read_compound_stmt(ctx);
-    then = pop_control_block(ctx);
+    then = pop_block(ctx);
 
     Token *tok = read_token(ctx);
     if (IS_KEYWORD(tok, KEYWORD_ELSE)) {
         expect(ctx, '{');
-        push_control_block(ctx);
+        push_block(ctx);
         read_compound_stmt(ctx);
-        els = pop_control_block(ctx);
+        els = pop_block(ctx);
     } else {
         unget_token(ctx, tok);
         els = NULL;
     }
-    ControlBlock *cont = make_control_block();
+    Block *cont = make_block();
     emit(ctx, make_inst4(OP_IF, cond, then, els, cont));
-    replace_control_block(ctx, cont);
+    replace_block(ctx, cont);
 }
 
 static void read_for_stmt(ReadContext *ctx) {
-    ControlBlock *cond = make_control_block();
-    ControlBlock *mod = make_control_block();
-    ControlBlock *body = make_control_block();
-    ControlBlock *cont = make_control_block();
+    Block *cond = make_block();
+    Block *mod = make_block();
+    Block *body = make_block();
+    Block *cont = make_block();
 
     expect(ctx, '(');
     read_expr(ctx);
@@ -649,91 +649,91 @@ static void read_for_stmt(ReadContext *ctx) {
 
     emit(ctx, make_inst1(OP_JMP, cond));
 
-    push_control_block1(ctx, cond);
+    push_block1(ctx, cond);
     Var *condvar = read_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
-    pop_control_block(ctx);
+    pop_block(ctx);
     expect(ctx, ';');
 
-    push_control_block1(ctx, mod);
+    push_block1(ctx, mod);
     read_expr(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
-    pop_control_block(ctx);
+    pop_block(ctx);
     expect(ctx, ')');
 
     expect(ctx, '{');
-    ControlBlock *orig_onbreak = ctx->onbreak;
-    ControlBlock *orig_oncontinue = ctx->oncontinue;
+    Block *orig_onbreak = ctx->onbreak;
+    Block *orig_oncontinue = ctx->oncontinue;
     ctx->onbreak = cont;
     ctx->oncontinue = mod;
-    push_control_block1(ctx, body);
+    push_block1(ctx, body);
     read_compound_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, mod));
-    pop_control_block(ctx);
+    pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
     ctx->onbreak = orig_onbreak;
 
-    replace_control_block(ctx, cont);
+    replace_block(ctx, cont);
 }
 
 static void read_while_stmt(ReadContext *ctx) {
-    ControlBlock *cond = make_control_block();
-    ControlBlock *body = make_control_block();
-    ControlBlock *cont = make_control_block();
+    Block *cond = make_block();
+    Block *body = make_block();
+    Block *cont = make_block();
 
     emit(ctx, make_inst1(OP_JMP, cond));
 
     expect(ctx, '(');
-    push_control_block1(ctx, cond);
+    push_block1(ctx, cond);
     Var *condvar = read_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
-    pop_control_block(ctx);
+    pop_block(ctx);
     expect(ctx, ')');
 
     expect(ctx, '{');
-    ControlBlock *orig_onbreak = ctx->onbreak;
-    ControlBlock *orig_oncontinue = ctx->oncontinue;
+    Block *orig_onbreak = ctx->onbreak;
+    Block *orig_oncontinue = ctx->oncontinue;
     ctx->oncontinue = cond;
     ctx->onbreak = cont;
-    push_control_block1(ctx, body);
+    push_block1(ctx, body);
     read_compound_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
-    pop_control_block(ctx);
+    pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
     ctx->onbreak = orig_onbreak;
 
-    replace_control_block(ctx, cont);
+    replace_block(ctx, cont);
 }
 
 static void read_do_stmt(ReadContext *ctx) {
-    ControlBlock *body = make_control_block();
-    ControlBlock *cond = make_control_block();
-    ControlBlock *cont = make_control_block();
+    Block *body = make_block();
+    Block *cond = make_block();
+    Block *cont = make_block();
 
     emit(ctx, make_inst1(OP_JMP, body));
 
     expect(ctx, '{');
-    ControlBlock *orig_onbreak = ctx->onbreak;
-    ControlBlock *orig_oncontinue = ctx->oncontinue;
+    Block *orig_onbreak = ctx->onbreak;
+    Block *orig_oncontinue = ctx->oncontinue;
     ctx->oncontinue = body;
     ctx->onbreak = cont;
-    push_control_block1(ctx, body);
+    push_block1(ctx, body);
     read_compound_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
-    pop_control_block(ctx);
+    pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
     ctx->onbreak = orig_onbreak;
 
     expect(ctx, KEYWORD_WHILE);
     expect(ctx, '(');
-    push_control_block1(ctx, cond);
+    push_block1(ctx, cond);
     Var *condvar = read_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
-    pop_control_block(ctx);
+    pop_block(ctx);
     expect(ctx, ')');
     expect(ctx, ';');
 
-    replace_control_block(ctx, cont);
+    replace_block(ctx, cont);
 }
 
 static void process_label(ReadContext *ctx, Token *tok) {
@@ -744,9 +744,9 @@ static void process_label(ReadContext *ctx, Token *tok) {
     if (dict_get(ctx->label, label))
         error("duplicate label: %s", STRING_BODY(label));
 
-    ControlBlock *cont = make_control_block();
+    Block *cont = make_block();
     emit(ctx, make_inst1(OP_JMP, cont));
-    replace_control_block(ctx, cont);
+    replace_block(ctx, cont);
 
     dict_put(ctx->label, label, cont);
 
@@ -754,10 +754,10 @@ static void process_label(ReadContext *ctx, Token *tok) {
     if (!tbf)
         return;
     for (int i = 0; i < LIST_LEN(tbf); i++) {
-        ControlBlock *block = LIST_ELEM(tbf, i);
-        push_control_block1(ctx, block);
+        Block *block = LIST_ELEM(tbf, i);
+        push_block1(ctx, block);
         emit(ctx, make_inst1(OP_JMP, cont));
-        pop_control_block(ctx);
+        pop_block(ctx);
     }
     dict_delete(ctx->label_tbf, label);
 }
@@ -769,7 +769,7 @@ static void read_goto_stmt(ReadContext *ctx) {
     expect(ctx, ';');
     String *label = tok->val.str;
 
-    ControlBlock *dst = dict_get(ctx->label, label);
+    Block *dst = dict_get(ctx->label, label);
     if (dst) {
         emit(ctx, make_inst1(OP_JMP, dst));
         return;
@@ -779,7 +779,7 @@ static void read_goto_stmt(ReadContext *ctx) {
         blocks = make_list();
         dict_put(ctx->label_tbf, label, blocks);
     }
-    ControlBlock *cur = replace_control_block(ctx, make_control_block());
+    Block *cur = replace_block(ctx, make_block());
     list_push(blocks, cur);
 }
 
@@ -856,17 +856,17 @@ static void read_func_def(ReadContext *ctx) {
     expect(ctx, '{');
     read_compound_stmt(ctx);
 
-    ControlBlock *epilogue = make_control_block();
+    Block *epilogue = make_block();
     emit(ctx, make_inst1(OP_JMP, epilogue));
-    push_control_block1(ctx, epilogue);
+    push_block1(ctx, epilogue);
     emit(ctx, make_inst0(OP_RETURN));
-    pop_control_block(ctx);
+    pop_block(ctx);
 
     Symbol *fsym = make_symbol(fname->val.str, text, 0, STB_GLOBAL, STT_NOTYPE, 1);
     dict_put(ctx->elf->syms, fname->val.str, fsym);
 }
 
-ControlBlock *parse(File *file, Elf *elf) {
+Block *parse(File *file, Elf *elf) {
     ReadContext *ctx = make_read_context(file, elf);
     read_func_def(ctx);
     check_context(ctx);
