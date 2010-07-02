@@ -523,6 +523,14 @@ void assemble(Elf *elf, Block *entry) {
     Context *ctx = make_context(elf);
     o1(ctx->text, 0x55); // PUSH rbp
     o3(ctx->text, 0xe58948); // MOV rbp, rsp
-    o3(ctx->text, 0xec8148); o4(ctx->text, 160); // SUB rsp, 160
+
+    // SUB rsp, 0
+    o3(ctx->text, 0xec8148);
+    int pos = STRING_LEN(ctx->text);
+    o4(ctx->text, 0); // filled later
     handle_block(ctx, entry);
+
+    string_seek(ctx->text, pos);
+    o4(ctx->text, (ctx->stack->nelem + 1) * 8);
+    string_seek(ctx->text, STRING_LEN(ctx->text));
 }
