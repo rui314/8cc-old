@@ -56,6 +56,7 @@
 
 static Var *read_assign_expr(ReadContext *ctx);
 static Var *read_comma_expr(ReadContext *ctx);
+static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0);
 static void read_compound_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 
@@ -368,7 +369,7 @@ Token *read_token(ReadContext *ctx) {
         }
         case '!': case '%': case '&': case '(': case ')': case '*': case '+':
         case ',': case '-': case '/': case ';': case '[': case ']': case '^':
-        case '{': case '|': case '}': case '~': case ':':
+        case '{': case '|': case '}': case '~': case ':': case '?':
             r->toktype = TOKTYPE_KEYWORD;
             r->val.c = c;
             return r;
@@ -528,6 +529,7 @@ static int prec(Token *tok) {
     case '*': case '/': r++;
     case '+': case '-': r++;
     case KEYWORD_EQUAL: r++;
+    case '?': r++;
     case '=': r++;
     case ',': return r;
     default: return -1;
@@ -539,6 +541,44 @@ static bool is_rassoc(Token *tok) {
     return tok->val.k == '=';
 }
 
+static Var *read_logor_expr(ReadContext *ctx) {
+    return read_expr1(ctx, read_unary_expr(ctx), 3);
+}
+
+static Var *read_assign_expr(ReadContext *ctx) {
+    return read_expr1(ctx, read_unary_expr(ctx), 1);
+}
+
+static Var *read_comma_expr(ReadContext *ctx) {
+    return read_expr1(ctx, read_unary_expr(ctx), 0);
+}
+
+static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
+    Block *then = make_block();
+    Block *els = make_block();
+    Block *cont = make_block();
+    Var *r = make_var(CTYPE_INT, NULL);
+
+    emit(ctx, make_inst4(OP_IF, condvar, then, els, cont));
+
+    push_block1(ctx, then);
+    Var *v0 = read_logor_expr(ctx);
+    emit(ctx, make_inst2('=', r, v0));
+    pop_block(ctx);
+    expect(ctx, ':');
+
+    push_block1(ctx, els);
+    Var *v1 = read_logor_expr(ctx);
+    emit(ctx, make_inst2('=', r, v1));
+    pop_block(ctx);
+
+    replace_block(ctx, cont);
+    return r;
+}
+
+/*
+ * Operator-precedence parser.
+ */
 static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     for (;;) {
         Token *tok = read_token(ctx);
@@ -546,6 +586,10 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         if (prec1 < 0 || prec1 < prec0) {
             unget_token(ctx, tok);
             return v0;
+        }
+        if (IS_KEYWORD(tok, '?')) {
+            v0 = read_cond_expr(ctx, v0);
+            continue;
         }
         Var *v1 = read_unary_expr(ctx);
         for (;;) {
@@ -580,14 +624,6 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         }
     }
     return v0;
-}
-
-static Var *read_assign_expr(ReadContext *ctx) {
-    return read_expr1(ctx, read_unary_expr(ctx), 1);
-}
-
-static Var *read_comma_expr(ReadContext *ctx) {
-    return read_expr1(ctx, read_unary_expr(ctx), 0);
 }
 
 static void read_decl(ReadContext *ctx, Ctype *ctype) {
