@@ -4,9 +4,9 @@ fail=0
 
 ./tests || fail=$((fail+1))
 
-runtest() {
+runtest_int() {
     /bin/echo -En "  $2 ... "
-    echo "main() {$2}" | ./8cc - tmp$$.o
+    echo "$3" | ./8cc - tmp$$.o
     gcc -o tmp$$ tmp$$.o
     local result="`./tmp$$`"
     if [ "$result" = "$1" ]; then
@@ -15,6 +15,14 @@ runtest() {
 	echo "NG ($result)"
 	fail=$((fail+1))
     fi
+}
+
+runtest() {
+    runtest_int "$1" "$2" "main() {$2}"
+}
+
+runtest1() {
+    runtest_int "$1" "$2" "$2"
 }
 
 #
@@ -115,6 +123,14 @@ runtest 'acbd' 'A: printf("a"); goto C; B: printf("b"); goto D; C: printf("c"); 
 #
 /bin/echo -e '\nreturn statement...'
 runtest 'a' 'printf("a"); return 1;'
+
+#
+# Function call
+#
+/bin/echo -e '\nfunction call...'
+runtest1 'foo' 'main() { bar(); } bar() { printf("foo"); }'
+runtest1 'foo' 'bar() { printf("foo"); } main() { bar(); }'
+runtest1 '17' 'main() { printf("%d", bar()); } bar() { return 17; }'
 
 rm -f tmp$$ tmp$$.o
 echo

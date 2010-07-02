@@ -206,6 +206,7 @@ extern Dict *make_address_dict(void);
 extern void dict_put(Dict *dict, void *key, void *obj);
 extern void *dict_get(Dict *dict, void *key);
 extern bool dict_delete(Dict *dict, void *key);
+extern bool dict_has(Dict *dict, void *key);
 
 typedef struct DictIter {
     Dict *dict;
@@ -359,6 +360,7 @@ typedef struct Token {
 typedef struct Block {
     int pos;
     List *code;
+    String *name;
 } Block;
 
 /*
@@ -388,7 +390,7 @@ typedef struct ReadContext {
     Dict *label_tbf;
 } ReadContext;
 
-extern Block *parse(File *file, Elf *elf);
+extern List *parse(File *file, Elf *elf);
 extern Token *read_token(ReadContext *ctx);
 extern void unget_token(ReadContext *ctx, Token *tok);
 extern ReadContext *make_read_context(File *file, Elf *elf);
@@ -423,7 +425,7 @@ typedef struct Inst {
     Cvalue val;
 } Inst;
 
-extern void assemble(Elf *elf, Block *entry);
+extern void assemble(Elf *elf, List *fns);
 extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined);
 

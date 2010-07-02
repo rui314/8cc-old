@@ -71,6 +71,7 @@ Block *make_block() {
     Block *r = malloc(sizeof(Block));
     r->pos = -1;
     r->code = make_list();
+    r->name = NULL;
     return r;
 }
 
@@ -852,7 +853,6 @@ static void read_compound_stmt(ReadContext *ctx) {
 }
 
 static void read_func_def(ReadContext *ctx) {
-    Section *text = find_section(ctx->elf, ".text");
     Token *fname = read_ident(ctx);
     expect(ctx, '(');
     expect(ctx, ')');
@@ -865,13 +865,18 @@ static void read_func_def(ReadContext *ctx) {
     emit(ctx, make_inst1(OP_RETURN, make_imm(CTYPE_INT, (Cvalue)0)));
     pop_block(ctx);
 
-    Symbol *fsym = make_symbol(fname->val.str, text, 0, STB_GLOBAL, STT_NOTYPE, 1);
-    dict_put(ctx->elf->syms, fname->val.str, fsym);
+    ctx->entry->name = fname->val.str;
 }
 
-Block *parse(File *file, Elf *elf) {
-    ReadContext *ctx = make_read_context(file, elf);
-    read_func_def(ctx);
-    check_context(ctx);
-    return ctx->entry;
+List *parse(File *file, Elf *elf) {
+    List *r = make_list();
+    for (;;) {
+        ReadContext *ctx = make_read_context(file, elf);
+        if (!peek_token(ctx))
+            break;
+        read_func_def(ctx);
+        check_context(ctx);
+        list_push(r, ctx->entry);
+    }
+    return r;
 }

@@ -173,8 +173,13 @@ bool dict_delete(Dict *dict, void *key) {
 
 void *dict_get(Dict *dict, void *key) {
     Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
-    if (!ent->key) return NULL;
+    if (BUCKET_EMPTY(ent)) return NULL;
     return ent->elem;
+}
+
+bool dict_has(Dict *dict, void *key) {
+    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
+    return !BUCKET_EMPTY(ent);
 }
 
 /*============================================================

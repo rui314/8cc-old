@@ -28,14 +28,18 @@
 
 #include "8cc.h"
 
-List *make_list(void) {
+static List *make_list_int(int size) {
     List *obj = malloc(sizeof(List));
-    obj->elems = malloc(sizeof(void*) * LIST_INITIAL_SIZE);
-    for (int i = 0; i < LIST_INITIAL_SIZE; i++)
+    obj->elems = malloc(sizeof(void*) * size);
+    for (int i = 0; i < size; i++)
         obj->elems[i] = NULL;
-    obj->nalloc = LIST_INITIAL_SIZE;
+    obj->nalloc = size;
     obj->len = 0;
     return obj;
+}
+
+List *make_list(void) {
+    return make_list_int(LIST_INITIAL_SIZE);
 }
 
 static void ensure_room(List *list) {

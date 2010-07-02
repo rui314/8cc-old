@@ -58,6 +58,7 @@ typedef struct Context {
     String *text;
     Dict *stack;
     Dict *tmpvar;
+    List *func_tbf;
 } Context;
 
 Context *make_context(Elf *elf) {
@@ -66,6 +67,7 @@ Context *make_context(Elf *elf) {
     r->text = find_section(elf, ".text")->body;
     r->stack = make_address_dict();
     r->tmpvar = make_address_dict();
+    r->func_tbf = NULL;
     return r;
 }
 
@@ -299,11 +301,27 @@ static void handle_func_call(Context *ctx, Inst *inst) {
     o1(ctx->text, 0xb8); // MOV eax
     o4(ctx->text, xmm);
     o1(ctx->text, 0xe8); // CALL
-    add_reloc(text, STRING_LEN(ctx->text), STRING_BODY(fn->name), NULL, R_X86_64_PC32, -4);
+    list_push(ctx->func_tbf, fn->name);
+    list_push(ctx->func_tbf, (void *)(intptr)STRING_LEN(ctx->text));
     o4(ctx->text, 0);
 
     // Save function return value to the stack;
     o4(ctx->text, 0x458948 | (rval_off << 24)); // MOV [rbp+off], rax
+}
+
+static void finish_func_call(Elf *elf, Dict *func, List *tbf) {
+    Section *text = find_section(elf, ".text");
+    for (int i = 0; i < LIST_LEN(tbf); i = i + 2) {
+        String *fname = LIST_ELEM(tbf, i);
+        u32 pos = (intptr)LIST_ELEM(tbf, i + 1);
+        if (dict_has(func, fname)) {
+            string_seek(text->body, pos);
+            o4(text->body, (u32)(intptr)dict_get(func, fname) - pos - 4);
+            string_seek(text->body, STRING_LEN(text->body));
+        } else {
+            add_reloc(text, pos, STRING_BODY(fname), NULL, R_X86_64_PC32, -4);
+        }
+    }
 }
 
 static void store_rax(Context *ctx, Var *dst) {
@@ -520,8 +538,7 @@ static void handle_block(Context *ctx, Block *block) {
     }
 }
 
-void assemble(Elf *elf, Block *entry) {
-    Context *ctx = make_context(elf);
+void assemble1(Context *ctx, Block *entry) {
     o1(ctx->text, 0x55); // PUSH rbp
     o3(ctx->text, 0xe58948); // MOV rbp, rsp
 
@@ -534,4 +551,22 @@ void assemble(Elf *elf, Block *entry) {
     string_seek(ctx->text, pos);
     o4(ctx->text, (ctx->stack->nelem + 1) * 8);
     string_seek(ctx->text, STRING_LEN(ctx->text));
+}
+
+void assemble(Elf *elf, List *fns) {
+    Section *text = find_section(elf, ".text");
+    Dict *dict = make_string_dict();
+    List *tbf = make_list();
+    for (int i = 0; i < LIST_LEN(fns); i++) {
+        Context *ctx = make_context(elf);
+        ctx->func_tbf = tbf;
+        Block *entry = LIST_ELEM(fns, i);
+
+        Symbol *fsym = make_symbol(entry->name, text, STRING_LEN(ctx->text), STB_GLOBAL, STT_NOTYPE, 1);
+        dict_put(ctx->elf->syms, entry->name, fsym);
+
+        dict_put(dict, entry->name, (void *)(intptr)STRING_LEN(ctx->text));
+        assemble1(ctx, entry);
+    }
+    finish_func_call(elf, dict, tbf);
 }
