@@ -209,6 +209,7 @@ static char read_escape_char(File *file) {
         error("line %d:%d: premature end of input file while reading a literal string or a character", file->line, file->column);
     case 'a': return '\a';
     case 'b': return '\b';
+    case 'e': return '\033'; // GNU extension
     case 't': return '\t';
     case 'n': return '\n';
     case 'v': return '\v';
