@@ -322,6 +322,14 @@ typedef enum KeywordType {
     KEYWORD_CONTINUE,
     KEYWORD_GOTO,
     KEYWORD_RETURN,
+    KEYWORD_A_ADD,
+    KEYWORD_A_SUB,
+    KEYWORD_A_MUL,
+    KEYWORD_A_DIV,
+    KEYWORD_A_MOD,
+    KEYWORD_A_AND,
+    KEYWORD_A_XOR,
+    KEYWORD_A_NOT,
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)

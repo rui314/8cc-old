@@ -307,6 +307,7 @@ Token *read_token(ReadContext *ctx) {
     String *str;
     for (;;) {
         int c = readc(file);
+        int c1;
         switch (c) {
         case ' ': case '\t': case '\r': case '\n':
             continue;
@@ -356,20 +357,37 @@ Token *read_token(ReadContext *ctx) {
             r->toktype = TOKTYPE_IDENT;
             r->val.str = str;
             return r;
-        case '=': {
-            int c1 = readc(file);
+        case '=':
+            c1 = readc(file);
             if (c1 == '=') {
                 r->toktype = TOKTYPE_KEYWORD;
                 r->val.k = KEYWORD_EQUAL;
+                return r;
+            }
+            unreadc(c1, file);
+            r->toktype = TOKTYPE_KEYWORD;
+            r->val.k = '=';
+            return r;
+        case '+': case '-': case '*': case '/': case '%': case '&':
+        case '^': case '~':
+            c1 = readc(file);
+            if (c1 == '=') {
+                r->toktype = TOKTYPE_KEYWORD;
+                r->val.k = c == '+' ? KEYWORD_A_ADD
+                    : c == '-' ? KEYWORD_A_SUB
+                    : c == '*' ? KEYWORD_A_MUL
+                    : c == '/' ? KEYWORD_A_DIV
+                    : c == '%' ? KEYWORD_A_MOD
+                    : c == '&' ? KEYWORD_A_AND
+                    : c == '^' ? KEYWORD_A_XOR
+                    : KEYWORD_A_NOT;
                 return r;
             } else {
                 unreadc(c1, file);
             }
             // FALL THROUGH
-        }
-        case '!': case '%': case '&': case '(': case ')': case '*': case '+':
-        case ',': case '-': case '/': case ';': case '[': case ']': case '^':
-        case '{': case '|': case '}': case '~': case ':': case '?':
+        case '!': case '(': case ')': case ',': case ';': case '[':
+        case ']': case '{': case '}': case '|': case ':': case '?':
             r->toktype = TOKTYPE_KEYWORD;
             r->val.c = c;
             return r;
@@ -521,36 +539,65 @@ static void ensure_lvalue(Var *var) {
         error("must be lvalue: '%s'", STRING_BODY(var->name));
 }
 
+/*
+ * Returns operators precedence.  There are 15 precedences in C as
+ * shown below.
+ *
+ * 1       () [] -> .                      left
+ * 2       ! ~ ++ -- - (type) * & sizeof   right
+ * 3       * / %                           left
+ * 4       + -                             left
+ * 5       >> <<                           left
+ * 6       < <= > >=                       left
+ * 7       == !=                           left
+ * 8       &                               left
+ * 9       ^                               left
+ * 10      |                               left
+ * 11      &&                              left
+ * 12      ||                              left
+ * 13      ?:                              right
+ * 14      = op=                           right
+ * 15      ,                               left
+ */
 static int prec(Token *tok) {
     if (tok->toktype != TOKTYPE_KEYWORD)
         return -1;
-    int r = 0;
     switch (tok->val.k) {
-    case '*': case '/': r++;
-    case '+': case '-': r++;
-    case KEYWORD_EQUAL: r++;
-    case '?': r++;
-    case '=': r++;
-    case ',': return r;
+    case '*': case '/': case '%': return 3;
+    case '+': case '-': return 4;
+    case KEYWORD_EQUAL: return 7;
+    case '?': return 13;
+    case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
+    case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
+    case KEYWORD_A_XOR: case KEYWORD_A_NOT: case '=':
+        return 14;
+    case ',': return 15;
     default: return -1;
     }
 }
 
+
 /* Returns true iff a given operator is right-associative. */
 static bool is_rassoc(Token *tok) {
-    return tok->val.k == '=';
+    switch (tok->val.k) {
+    case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
+    case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
+    case KEYWORD_A_XOR: case KEYWORD_A_NOT: case '=': case '?':
+        return true;
+    default: return false;
+    }
 }
 
 static Var *read_logor_expr(ReadContext *ctx) {
-    return read_expr1(ctx, read_unary_expr(ctx), 3);
+    return read_expr1(ctx, read_unary_expr(ctx), 12);
 }
 
 static Var *read_assign_expr(ReadContext *ctx) {
-    return read_expr1(ctx, read_unary_expr(ctx), 1);
+    return read_expr1(ctx, read_unary_expr(ctx), 14);
 }
 
 static Var *read_comma_expr(ReadContext *ctx) {
-    return read_expr1(ctx, read_unary_expr(ctx), 0);
+    return read_expr1(ctx, read_unary_expr(ctx), 15);
 }
 
 static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
@@ -583,7 +630,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     for (;;) {
         Token *tok = read_token(ctx);
         int prec1 = prec(tok);
-        if (prec1 < 0 || prec1 < prec0) {
+        if (prec1 < 0 || prec0 < prec1) {
             unget_token(ctx, tok);
             return v0;
         }
@@ -595,11 +642,12 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         for (;;) {
             Token *tok1 = peek_token(ctx);
             int prec2 = prec(tok1);
-            if (prec2 < 0 || prec2 < prec1 || (prec1 == prec2 && !is_rassoc(tok1))) {
+            if (prec2 < 0 || prec1 < prec2 || (prec1 == prec2 && !is_rassoc(tok1))) {
                 break;
             }
             v1 = read_expr1(ctx, v1, prec2);
         }
+
         Var *tmp;
         switch (tok->val.k) {
         case ',':
@@ -618,6 +666,22 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             tmp = make_var(CTYPE_INT, NULL);
             emit(ctx, make_inst3(OP_EQUAL, tmp, v0, v1));
             v0 = tmp;
+            break;
+        case KEYWORD_A_ADD:
+            ensure_lvalue(v0);
+            emit(ctx, make_inst3('+', v0, v0, v1));
+            break;
+        case KEYWORD_A_SUB:
+            ensure_lvalue(v0);
+            emit(ctx, make_inst3('-', v0, v0, v1));
+            break;
+        case KEYWORD_A_MUL:
+            ensure_lvalue(v0);
+            emit(ctx, make_inst3('*', v0, v0, v1));
+            break;
+        case KEYWORD_A_DIV:
+            ensure_lvalue(v0);
+            emit(ctx, make_inst3('/', v0, v0, v1));
             break;
         default:
             error("unsupported operator: %c", tok->val.k);
