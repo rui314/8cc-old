@@ -110,6 +110,12 @@ runtest '321a' 'int i=0; for (i=3;i;i) { if (i) { printf("%d", i); i=i-1; contin
 /bin/echo -e '\ngoto statement...'
 runtest 'acbd' 'A: printf("a"); goto C; B: printf("b"); goto D; C: printf("c"); goto B; D: printf("d");'
 
+#
+# "return" statement
+#
+/bin/echo -e '\nreturn statement...'
+runtest 'a' 'printf("a"); return 1;'
+
 rm -f tmp$$ tmp$$.o
 echo
 if [ $fail -gt 0 ]; then

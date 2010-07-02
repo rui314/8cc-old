@@ -320,6 +320,7 @@ typedef enum KeywordType {
     KEYWORD_BREAK,
     KEYWORD_CONTINUE,
     KEYWORD_GOTO,
+    KEYWORD_RETURN,
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
@@ -350,21 +351,40 @@ typedef struct Token {
     int column;
 } Token;
 
+/*
+ * Represents basic block of program.  Code must contain one of OP_RETURN OP_JMP
+ * or OP_IF which is the end of the basic block.  Other instructions following
+ * the instruction are dead code and safely be ignored.
+ */
 typedef struct Block {
     int pos;
     List *code;
 } Block;
 
+/*
+ * Read context for parser.
+ */
 typedef struct ReadContext {
     File *file;
     Elf *elf;
     List *scope;
+    // The entry basic block for the fucntion being read.
     Block *entry;
+    // The stack of basic blocks.  Instructions for code being processsed are
+    // emitted to the top basic block of the stack.
     List *blockstack;
+    // Pushback buffer for tokens.
     List *ungotten;
+    // "break" and "continue" targets.  NULL means we're outside of loop or
+    // switch.
     Block *onbreak;
     Block *oncontinue;
+    // Labels and their jump destination basic blocks.  Used by goto.
     Dict *label;
+    // Labels and their jump origination basic blocks.  When the parser visits
+    // a forward-referencing goto (having labels which has not yet seen), the
+    // label and the block is stored to the dictionary.  Such blocks are
+    // processed when the labels are read.
     Dict *label_tbf;
 } ReadContext;
 

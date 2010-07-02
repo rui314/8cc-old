@@ -472,7 +472,8 @@ static void handle_jmp(Context *ctx, Inst *inst) {
 }
 
 void handle_return(Context *ctx, Inst *inst) {
-    o2(ctx->text, 0xc031); // XOR eax, eax
+    Var *retval = LIST_ELEM(inst->args, 0);
+    emit_load(ctx, retval);
     o1(ctx->text, 0xc9); // LEAVE
     o1(ctx->text, 0xc3); // RET
 }

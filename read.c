@@ -348,6 +348,7 @@ Token *read_token(ReadContext *ctx) {
             KEYWORD("break", KEYWORD_BREAK);
             KEYWORD("continue", KEYWORD_CONTINUE);
             KEYWORD("goto",  KEYWORD_GOTO);
+            KEYWORD("return", KEYWORD_RETURN);
 #undef KEYWORD
             r->toktype = TOKTYPE_IDENT;
             r->val.str = str;
@@ -589,7 +590,6 @@ static Var *read_comma_expr(ReadContext *ctx) {
 
 static void read_decl(ReadContext *ctx, Ctype *ctype) {
     Token *ident = read_ident(ctx);
-    expect_ident(ident);
     expect(ctx, '=');
     Var *val = read_assign_expr(ctx);
     expect(ctx, ';');
@@ -753,8 +753,7 @@ static void process_label(ReadContext *ctx, Token *tok) {
 }
 
 static void read_goto_stmt(ReadContext *ctx) {
-    Token *tok = read_token(ctx);
-    expect_ident(tok);
+    Token *tok = read_ident(ctx);
     expect(ctx, ';');
     String *label = tok->val.str;
 
@@ -770,6 +769,19 @@ static void read_goto_stmt(ReadContext *ctx) {
     }
     Block *cur = replace_block(ctx, make_block());
     list_push(blocks, cur);
+}
+
+static void read_return_stmt(ReadContext *ctx) {
+    Token *tok = read_token(ctx);
+    Var *retval;
+    if (IS_KEYWORD(tok, ';')) {
+        retval = make_imm(CTYPE_INT, (Cvalue)0);
+    } else {
+        unget_token(ctx, tok);
+        retval = read_comma_expr(ctx);
+        expect(ctx, ';');
+    }
+    emit(ctx, make_inst1(OP_RETURN, retval));
 }
 
 static void check_context(ReadContext *ctx) {
@@ -799,6 +811,8 @@ static void read_stmt(ReadContext *ctx) {
         process_continue(ctx);
     } else if (IS_KEYWORD(tok, KEYWORD_GOTO)) {
         read_goto_stmt(ctx);
+    } else if (IS_KEYWORD(tok, KEYWORD_RETURN)) {
+        read_return_stmt(ctx);
     } else if (IS_KEYWORD(tok, '{')) {
         read_compound_stmt(ctx);
     } else {
@@ -839,8 +853,7 @@ static void read_compound_stmt(ReadContext *ctx) {
 
 static void read_func_def(ReadContext *ctx) {
     Section *text = find_section(ctx->elf, ".text");
-    Token *fname = read_token(ctx);
-    expect_ident(fname);
+    Token *fname = read_ident(ctx);
     expect(ctx, '(');
     expect(ctx, ')');
     expect(ctx, '{');
@@ -849,7 +862,7 @@ static void read_func_def(ReadContext *ctx) {
     Block *epilogue = make_block();
     emit(ctx, make_inst1(OP_JMP, epilogue));
     push_block1(ctx, epilogue);
-    emit(ctx, make_inst0(OP_RETURN));
+    emit(ctx, make_inst1(OP_RETURN, make_imm(CTYPE_INT, (Cvalue)0)));
     pop_block(ctx);
 
     Symbol *fsym = make_symbol(fname->val.str, text, 0, STB_GLOBAL, STT_NOTYPE, 1);
