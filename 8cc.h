@@ -278,6 +278,7 @@ typedef struct File {
     int last_column;
     String *filename;
     int ungotten;
+    bool eof_flag;
 } File;
 
 extern File *make_file(FILE *stream, char *filename);

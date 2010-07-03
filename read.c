@@ -146,15 +146,28 @@ static Var *find_var(ReadContext *ctx, String *name) {
     return NULL;
 }
 
-void skip_comment(File *file) {
+static void skip_comment(File *file) {
+    int line = file->line;
+    int column = file->column;
     int prev = '\0';
     for (;;) {
         int c = readc(file);
         if (c == EOF)
-            error("premature end of input file in comment");
+            error("Line %d:%d: premature end of input file in comment", line, column);
         if (c == '/' && prev == '*')
             return;
         prev = c;
+    }
+}
+
+static void skip_line_comment(File *file) {
+    for (;;) {
+        int c = readc(file);
+        if (c == EOF) return;
+        if (c == '\n') {
+            unreadc(c, file);
+            return;
+        }
     }
 }
 
@@ -369,7 +382,19 @@ Token *read_token(ReadContext *ctx) {
             r->toktype = TOKTYPE_KEYWORD;
             r->val.k = '=';
             return r;
-        case '+': case '-': case '*': case '/': case '%': case '&':
+        case '/':
+            c1 = readc(file);
+            if (c1 == '*') {
+                skip_comment(file);
+                return read_token(ctx);
+            }
+            if (c1 == '/') {
+                skip_line_comment(file);
+                return read_token(ctx);
+            }
+            unreadc(c1, file);
+            // FALL THROUGH
+        case '+': case '-': case '*': case '%': case '&':
         case '^': case '~':
             c1 = readc(file);
             if (c1 == '=') {
@@ -383,9 +408,8 @@ Token *read_token(ReadContext *ctx) {
                     : c == '^' ? KEYWORD_A_XOR
                     : KEYWORD_A_NOT;
                 return r;
-            } else {
-                unreadc(c1, file);
             }
+            unreadc(c1, file);
             // FALL THROUGH
         case '!': case '(': case ')': case ',': case ';': case '[':
         case ']': case '{': case '}': case '|': case ':': case '?':

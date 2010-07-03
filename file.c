@@ -41,6 +41,7 @@ File *make_file(FILE *stream, char *filename) {
     r->filename = make_string();
     ostr(r->filename, filename);
     r->ungotten = EOF;
+    r->eof_flag = false;
     return r;
 }
 
@@ -57,6 +58,8 @@ File *open_file(char *path) {
 }
 
 void unreadc(int c, File *file) {
+    if (c == EOF)
+        error("[internal error] can't pushback EOF");
     if (c == '\n') {
         file->line--;
         file->column = file->last_column;
@@ -66,6 +69,7 @@ void unreadc(int c, File *file) {
     if (file->ungotten != EOF)
         ungetc(file->ungotten, file->stream);
     file->ungotten = c;
+    file->eof_flag = false;
 }
 
 static void next_line(File *file, int c) {
@@ -95,8 +99,10 @@ int readc(File *file) {
         c = file->ungotten;
         file->ungotten = EOF;
     }
-    if (c == EOF || c == '\0')
+    if (file->eof_flag || c == EOF || c == '\0') {
+        file->eof_flag = true;
         return EOF;
+    }
     if (c == '\\') {
         int c1 = getc(file->stream);
         if (c1 == '\r' || c1 == '\n') {

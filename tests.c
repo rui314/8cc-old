@@ -209,6 +209,15 @@ static void test_file_backslash_at_eol(void) {
  * Parser
  */
 
+static void test_read_comment(void) {
+    FILE *stream = create_file("/* 1 * */ 2 // 3 \n 4");
+    File *file = make_file(stream, "-");
+    ReadContext *ctx = make_read_context(file, NULL);
+    EQ(2, read_token(ctx)->val.i);
+    EQ(4, read_token(ctx)->val.i);
+    EQ(NULL, read_token(ctx));
+}
+
 static void test_read_float(void) {
     FILE *stream = create_file("1 2.0");
     File *file = make_file(stream, "-");
@@ -293,6 +302,7 @@ int main(int argc, char **argv) {
     test_file_unreadc();
     test_file_backslash_at_eol();
 
+    test_read_comment();
     test_read_float();
     test_read_char();
     test_read_keywords();
