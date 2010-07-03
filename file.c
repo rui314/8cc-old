@@ -68,9 +68,24 @@ void unreadc(int c, File *file) {
     file->ungotten = c;
 }
 
+static void next_line(File *file, int c) {
+    file->line++;
+    file->last_column = file->column;
+    file->column = 1;
+    if (c == '\r') {
+        int c1 = getc(file->stream);
+        if (c1 != EOF && c1 != '\n') {
+            ungetc(c1, file->stream);
+        }
+    }
+}
+
 /*
- * Abstracts end-of-line differences.  All sequences of "\r\n", "\n"
- * and "\r" are converted to '\n'.
+ * Abstracts C source file.  This does two things:
+ *
+ *   - converts "\r\n" or "\r" to "\n".
+ *   - removes backslash and following end-of-line marker
+ *     (C:ARM p.13).
  */
 int readc(File *file) {
     int c;
@@ -82,20 +97,19 @@ int readc(File *file) {
     }
     if (c == EOF || c == '\0')
         return EOF;
-    if (c == '\r') {
-        file->line++;
-        file->last_column = file->column;
-        file->column = 1;
-        c = getc(file->stream);
-        if (c == '\n') return '\n';
-        unreadc(c, file);
-        return '\n';
-    } else if (c == '\n') {
-        file->line++;
-        file->last_column = file->column;
-        file->column = 1;
-    } else {
-        file->column++;
+    if (c == '\\') {
+        int c1 = getc(file->stream);
+        if (c1 == '\r' || c1 == '\n') {
+            next_line(file, c1);
+            return readc(file);
+        }
+        unreadc(c1, file);
+        return c;
     }
+    if (c == '\r' || c == '\n') {
+        next_line(file, c);
+        return '\n';
+    }
+    file->column++;
     return c;
 }

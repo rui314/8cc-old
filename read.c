@@ -44,7 +44,8 @@
  *   tmp3 = call(func, tmp1, tmp2)
  *   i = tmp3
  *
- * The following book contains a BNF grammer for C.
+ * The following book (abbreviated as "C:ARM") contains a BNF grammer
+ * for C.
  *
  *   C: A Reference Manual, Fifth Edition by Samuel P. Harbison and Guy
  *   L. Steele, published by Prentice Hall in February 2002, ISBN 0-13-089592X.

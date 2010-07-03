@@ -190,6 +190,21 @@ static void test_file_simple(void) {
     EQ_CHAR(EOF, readc(file));
 }
 
+static void test_file_backslash_at_eol(void) {
+    char *data = "2\\\n0\\\r\n10";
+    FILE *stream = create_file(data);
+    File *file = make_file(stream, "foo");
+
+    EQ(1, file->line);
+    EQ(1, file->column);
+    EQ_CHAR('2', readc(file));
+    EQ_CHAR('0', readc(file));
+    EQ_CHAR('1', readc(file));
+    EQ_CHAR('0', readc(file));
+    EQ(3, file->line);
+    EQ(3, file->column);
+}
+
 /*
  * Parser
  */
@@ -276,6 +291,7 @@ int main(int argc, char **argv) {
 
     test_file_simple();
     test_file_unreadc();
+    test_file_backslash_at_eol();
 
     test_read_float();
     test_read_char();
