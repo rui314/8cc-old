@@ -146,6 +146,13 @@ runtest1 'foo' 'main() { bar(); } bar() { printf("foo"); }'
 runtest1 'foo' 'bar() { printf("foo"); } main() { bar(); }'
 runtest1 '17' 'main() { printf("%d", bar()); } bar() { return 17; }'
 
+#
+# Pointer operations
+#
+/bin/echo -e '\npointer operations...'
+runtest '17' 'int i=17; int *j=&i; printf("%d", *j);'
+runtest '17' 'int i=17; int **j=&&i; printf("%d", **j);'
+
 rm -f tmp$$ tmp$$.o
 echo
 if [ $fail -gt 0 ]; then

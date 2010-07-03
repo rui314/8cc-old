@@ -305,11 +305,9 @@ typedef struct Ctype {
     struct Ctype *ptr;
 } Ctype;
 
-extern Ctype *make_ctype(int type);
-extern Ctype *make_ctype_ptr(Ctype *type);
-
 typedef enum KeywordType {
     KEYWORD_TYPE_BEGIN = 256,
+    KEYWORD_CONST,
     KEYWORD_INT,
     KEYWORD_FLOAT,
     KEYWORD_TYPE_END,
@@ -421,6 +419,8 @@ typedef struct Var {
 } Var;
 
 enum {
+    OP_ADDRESS,
+    OP_DEREF,
     OP_FUNC_CALL = 256,
     OP_IF,
     OP_JMP,
@@ -445,10 +445,6 @@ extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);
 extern Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v4);
 extern Inst *make_instn(int op, List *args);
 
-extern Var *make_imm(int type, Cvalue val);
-extern Var *make_var(int stype, String *name);
-extern Var *make_global_var(String *name, u64 val);
 extern int add_string(Section *data, String *str);
-extern Var *make_extern(String *name);
 
 #endif /* ECC_H */

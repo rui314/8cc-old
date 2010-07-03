@@ -71,20 +71,6 @@ Context *make_context(Elf *elf) {
     return r;
 }
 
-Ctype *make_ctype(int type) {
-    Ctype *r = malloc(sizeof(Ctype));
-    r->type = type;
-    r->ptr = NULL;
-    return r;
-}
-
-Ctype *make_ctype_ptr(Ctype *type) {
-    Ctype *r = malloc(sizeof(Ctype));
-    r->type = CTYPE_PTR;
-    r->ptr = type;
-    return r;
-}
-
 Section *find_section(Elf *elf, char *name) {
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
         Section *sect = LIST_ELEM(elf->sections, i);
@@ -115,35 +101,6 @@ Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend) {
     rel->type = type;
     rel->addend = addend;
     return rel;
-}
-
-Var *make_var(int ctype, String *name) {
-    Var *r = malloc(sizeof(Var));
-    r->stype = VAR_GLOBAL;
-    r->ctype = make_ctype(ctype);
-    r->val.i = 0;
-    r->name = name;
-    r->is_lvalue = false;
-    return r;
-}
-
-Var *make_imm(int ctype, Cvalue val) {
-    Var *r = make_var(ctype, NULL);
-    r->stype = VAR_IMM;
-    r->val = val;
-    return r;
-}
-
-Var *make_global_var(String *name, u64 val) {
-    Var *r = make_var(CTYPE_INT, name);
-    r->val.i = val;
-    return r;
-}
-
-Var *make_extern(String *name) {
-    Var *r = make_var(CTYPE_INT, name);
-    r->stype = VAR_EXTERN;
-    return r;
 }
 
 /*
@@ -430,6 +387,25 @@ static void handle_equal(Context *ctx, Inst *inst) {
     store_rax(ctx, dst);
 }
 
+static void handle_address(Context *ctx, Inst *inst) {
+    Var *p = LIST_ELEM(inst->args, 0);
+    Var *v = LIST_ELEM(inst->args, 1);
+    int off = var_stack_pos(ctx, v);
+    // LEA rax, [ebp+off]
+    o3(ctx->text, 0x458d48);
+    o1(ctx->text, off);
+    store_rax(ctx, p);
+}
+
+static void handle_deref(Context *ctx, Inst *inst) {
+    Var *v = LIST_ELEM(inst->args, 0);
+    Var *p = LIST_ELEM(inst->args, 1);
+    emit_load(ctx, p);
+    // MOV rax, [rax]
+    o3(ctx->text, 0x008b48);
+    store_rax(ctx, v);
+}
+
 static void handle_if(Context *ctx, Inst *inst) {
     Var *cond = LIST_ELEM(inst->args, 0);
     Block *then = LIST_ELEM(inst->args, 1);
@@ -525,6 +501,12 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case OP_EQUAL:
             handle_equal(ctx, inst);
+            break;
+        case OP_ADDRESS:
+            handle_address(ctx, inst);
+            break;
+        case OP_DEREF:
+            handle_deref(ctx, inst);
             break;
         case OP_JMP:
             handle_jmp(ctx, inst);

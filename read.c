@@ -57,18 +57,77 @@
 
 static Var *read_assign_expr(ReadContext *ctx);
 static Var *read_comma_expr(ReadContext *ctx);
+static Var *read_unary_expr(ReadContext *ctx);
 static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0);
 static void read_compound_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 
-static Token *make_token(ReadContext *ctx) {
-    Token *r = malloc(sizeof(Token));
-    r->toktype = TOKTYPE_INVALID;
-    r->line = ctx->file->line;
-    r->column = ctx->file->column;
+/*============================================================
+ * Variables
+ */
+
+static Ctype *make_ctype(int type) {
+    Ctype *r = malloc(sizeof(Ctype));
+    r->type = type;
+    r->ptr = NULL;
     return r;
 }
 
+static Ctype *make_ctype_ptr(Ctype *type) {
+    Ctype *r = malloc(sizeof(Ctype));
+    r->type = CTYPE_PTR;
+    r->ptr = type;
+    return r;
+}
+
+static Var *make_var(int ctype, String *name) {
+    Var *r = malloc(sizeof(Var));
+    r->stype = VAR_GLOBAL;
+    r->ctype = make_ctype(ctype);
+    r->val.i = 0;
+    r->name = name;
+    r->is_lvalue = false;
+    return r;
+}
+
+static Var *make_var1(Ctype *ctype, String *name) {
+    Var *r = make_var(CTYPE_INT, name);
+    r->ctype = ctype;
+    return r;
+}
+
+static Var *make_deref_var(Var *v) {
+    Var *r = malloc(sizeof(Var));
+    *r = *v;
+    if (!r->ctype->ptr)
+        error("Pointer required, but got %s", STRING_BODY(v->name));
+    r->ctype = r->ctype->ptr;
+    return r;
+}
+
+static Var *make_ptr_var(Var *v) {
+    Var *r = malloc(sizeof(Var));
+    *r = *v;
+    r->ctype = make_ctype_ptr(r->ctype);
+    return r;
+}
+
+static Var *make_imm(int ctype, Cvalue val) {
+    Var *r = make_var(ctype, NULL);
+    r->stype = VAR_IMM;
+    r->val = val;
+    return r;
+}
+
+static Var *make_extern(String *name) {
+    Var *r = make_var(CTYPE_INT, name);
+    r->stype = VAR_EXTERN;
+    return r;
+}
+
+/*============================================================
+ * Basic block
+ */
 Block *make_block() {
     Block *r = malloc(sizeof(Block));
     r->pos = -1;
@@ -144,6 +203,18 @@ static Var *find_var(ReadContext *ctx, String *name) {
         }
     }
     return NULL;
+}
+
+/*============================================================
+ * Parser
+ */
+
+static Token *make_token(ReadContext *ctx) {
+    Token *r = malloc(sizeof(Token));
+    r->toktype = TOKTYPE_INVALID;
+    r->line = ctx->file->line;
+    r->column = ctx->file->column;
+    return r;
 }
 
 static void skip_comment(File *file) {
@@ -356,6 +427,7 @@ Token *read_token(ReadContext *ctx) {
                 r->val.k = (val_);                              \
                 return r;                                       \
             }
+            KEYWORD("const", KEYWORD_CONST);
             KEYWORD("int",   KEYWORD_INT);
             KEYWORD("float", KEYWORD_FLOAT);
             KEYWORD("if",    KEYWORD_IF);
@@ -429,6 +501,15 @@ Token *peek_token(ReadContext *ctx) {
     Token *r = read_token(ctx);
     unget_token(ctx, r);
     return r;
+}
+
+
+bool next_token_is(ReadContext *ctx, int keyword) {
+    Token *tok = read_token(ctx);
+    if (IS_KEYWORD(tok, keyword))
+        return true;
+    unget_token(ctx, tok);
+    return false;
 }
 
 String *token_to_string(Token *tok) {
@@ -518,6 +599,10 @@ static Token *read_ident(ReadContext *ctx) {
     return r;
 }
 
+static Var *read_cast_expr(ReadContext *ctx) {
+    return read_unary_expr(ctx);
+}
+
 static Var *read_unary_expr(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     switch (tok->toktype) {
@@ -537,6 +622,18 @@ static Var *read_unary_expr(ReadContext *ctx) {
             Var *r = read_comma_expr(ctx);
             expect(ctx, ')');
             return r;
+        }
+        if (IS_KEYWORD(tok, '*')) {
+            Var *ptr = read_cast_expr(ctx);
+            Var *v = make_deref_var(ptr);
+            emit(ctx, make_inst2(OP_DEREF, v, ptr));
+            return v;
+        }
+        if (IS_KEYWORD(tok, '&')) {
+            Var *v = read_cast_expr(ctx);
+            Var *ptr = make_ptr_var(v);
+            emit(ctx, make_inst2(OP_ADDRESS, ptr, v));
+            return ptr;
         }
         error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
     }
@@ -715,23 +812,81 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     return v0;
 }
 
-static void read_decl(ReadContext *ctx, Ctype *ctype) {
-    Token *ident = read_ident(ctx);
-    expect(ctx, '=');
-    Var *val = read_assign_expr(ctx);
-    expect(ctx, ';');
-    Var *var = make_var(CTYPE_INT, ident->val.str);
-    add_local_var(ctx, ident->val.str, var);
+Ctype *read_declaration_spec(ReadContext *ctx) {
+    Ctype *r = NULL;
+    Token *tok;
+    for (;;) {
+        tok = read_token(ctx);
+        if (tok->toktype != TOKTYPE_KEYWORD)
+            goto end;
+        switch (tok->val.k) {
+        case KEYWORD_CONST:
+            // ignore type ualifiers for now.
+            break;
+        case KEYWORD_INT:
+        case KEYWORD_FLOAT:
+            if (r)
+                error("Line %d:%d: two or more data types in declaration specifiers", tok->line, tok->column);
+            r = make_ctype(tok->val.k == KEYWORD_INT ? CTYPE_INT : CTYPE_FLOAT);
+            break;
+        default:
+            goto end;
+        }
+    }
+ end:
+    unget_token(ctx, tok);
+    if (!r)
+        return make_ctype(CTYPE_INT);
+    return r;
+}
+
+Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
+    for (;;) {
+        if (next_token_is(ctx, '*')) {
+            // TODO: implement type-qualifier-list here
+            ctype = make_ctype_ptr(ctype);
+            continue;
+        }
+        break;
+    }
+    Token *tok = read_ident(ctx);
+    return make_var1(ctype, tok->val.str);
+}
+
+Var *read_initializer(ReadContext *ctx) {
+    return read_assign_expr(ctx);
+}
+
+void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
+    Var *var = read_declarator(ctx, ctype);
+    Var *val = next_token_is(ctx, '=')
+        ? read_initializer(ctx)
+        : make_var(CTYPE_INT, NULL);
+    add_local_var(ctx, var->name, var);
     emit(ctx, make_inst2('=', var, val));
 }
 
-static Ctype *read_type(ReadContext *ctx) {
-    Token *tok = read_token(ctx);
-    if (IS_KEYWORD(tok, KEYWORD_INT)) {
-        return make_ctype(CTYPE_INT);
+static bool is_type_keyword(Token *tok) {
+    if (tok->toktype != TOKTYPE_KEYWORD)
+        return false;
+    switch (tok->val.k) {
+    case KEYWORD_CONST:
+    case KEYWORD_INT:
+    case KEYWORD_FLOAT:
+        return true;
+    default:
+        return false;
     }
-    unget_token(ctx, tok);
-    return NULL;
+}
+
+static void read_declaration(ReadContext *ctx) {
+    Ctype *declspec = read_declaration_spec(ctx);
+    for (;;) {
+        read_initialized_declarator(ctx, declspec);
+        if (!next_token_is(ctx, ','))
+            break;
+    }
+    expect(ctx, ';');
 }
 
 static void read_if_stmt(ReadContext *ctx) {
@@ -958,11 +1113,11 @@ static void read_stmt(ReadContext *ctx) {
 }
 
 static void read_stmt_or_decl(ReadContext *ctx) {
-    Ctype *type = read_type(ctx);
-    if (type == NULL) {
-        read_stmt(ctx);
+    Token *tok = peek_token(ctx);
+    if (is_type_keyword(tok)) {
+        read_declaration(ctx);
     } else {
-        read_decl(ctx, type);
+        read_stmt(ctx);
     }
 }
 
@@ -993,6 +1148,10 @@ static void read_func_def(ReadContext *ctx) {
 
     ctx->entry->name = fname->val.str;
 }
+
+/*============================================================
+ * Entry function
+ */
 
 List *parse(File *file, Elf *elf) {
     List *r = make_list();
