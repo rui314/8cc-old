@@ -184,15 +184,18 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
     list_push(text->rels, rel);
 }
 
-// MOV to rdi, rsi, rdx, rcx, r8, or r9
-static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
+// MOV rdi/rsi/rdx/rcx/r8/r9, imm
+static u16 push_arg_imm[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
 
-// MOVSD to xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, or xmm7
-static u32 PUSH_XMM_ABS[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
-                              0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
+// MOVSD xmm0/xmm1/xmm2/xmm3/xmm4/xmm5/xmm6/xmm7, imm
+static u32 push_arg_xmm_imm[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
+                                  0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
 
-// MOV rdi/rsi/rdx/rcx/r8/r9, [rbp+x]
-static u32 MOV_STACK[] = { 0xbd8b48, 0xb58b48, 0x958b48, 0x8d8b48, 0x858b4c, 0x8d8b4c };
+// MOV rdi/rsi/rdx/rcx/r8/r9, [rbp+off]
+static u32 push_arg[] = { 0xbd8b48, 0xb58b48, 0x958b48, 0x8d8b48, 0x858b4c, 0x8d8b4c };
+
+// MOV [rbp+off], rdi/rsi/rdx/rcx/r8/r9
+static u32 pop_arg[] = { 0xbd8948, 0xb58948, 0x958948, 0x8d8948, 0x85894c, 0x8d894c };
 
 static void emit_load(Context *ctx, Var *var) {
     if (var->stype == VAR_IMM) {
@@ -226,30 +229,29 @@ static void handle_func_call(Context *ctx, Inst *inst) {
         Var *var = LIST_ELEM(inst->args, i);
         switch (var->stype) {
         case VAR_GLOBAL:
-            if (var->ctype->type == CTYPE_INT) {
+            if (var->ctype->type == CTYPE_INT || var->ctype->type == CTYPE_PTR) {
                 int off = var_stack_pos(ctx, var);
-                o3(ctx->text, MOV_STACK[gpr++]);
+                o3(ctx->text, push_arg[gpr++]);
                 o4(ctx->text, off);
                 break;
             }
-
             error("unsupported type: %d", var->ctype->type);
         case VAR_IMM:
             switch (var->ctype->type) {
             case CTYPE_PTR:
             case CTYPE_ARRAY:
-                o2(ctx->text, PUSH_ABS[gpr++]);
+                o2(ctx->text, push_arg_imm[gpr++]);
                 add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_64, var->val.i);
                 o8(ctx->text, 0);
                 break;
             case CTYPE_INT:
             case CTYPE_CHAR:
-                o2(ctx->text, PUSH_ABS[gpr++]);
+                o2(ctx->text, push_arg_imm[gpr++]);
                 o8(ctx->text, var->val.i);
                 break;
             case CTYPE_FLOAT:
                 align(data->body, 8);
-                o4(ctx->text, PUSH_XMM_ABS[xmm++]);
+                o4(ctx->text, push_arg_xmm_imm[xmm++]);
                 add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_PC32, STRING_LEN(data->body) - 4);
                 o4(ctx->text, 0);
                 double tmp = var->val.f;
@@ -577,15 +579,25 @@ static void handle_block(Context *ctx, Block *block) {
     }
 }
 
-void assemble1(Context *ctx, Block *entry) {
+void save_params(Context *ctx, Function *func) {
+    for (int i = 0; i < LIST_LEN(func->params); i++) {
+        Var *param = LIST_ELEM(func->params, i);
+        int off = var_stack_pos(ctx, param);
+        o3(ctx->text, pop_arg[i]);
+        o4(ctx->text, off);
+    }
+}
+
+void assemble1(Context *ctx, Function *func) {
     o1(ctx->text, 0x55); // PUSH rbp
     o3(ctx->text, 0xe58948); // MOV rbp, rsp
+    save_params(ctx, func);
 
     // SUB rsp, 0
     o3(ctx->text, 0xec8148);
     int pos = STRING_LEN(ctx->text);
     o4(ctx->text, 0); // filled later
-    handle_block(ctx, entry);
+    handle_block(ctx, func->entry);
 
     // Backfill SUB rsp, 0
     string_seek(ctx->text, pos);
@@ -600,13 +612,13 @@ void assemble(Elf *elf, List *fns) {
     for (int i = 0; i < LIST_LEN(fns); i++) {
         Context *ctx = make_context(elf);
         ctx->func_tbf = tbf;
-        Block *entry = LIST_ELEM(fns, i);
+        Function *func = LIST_ELEM(fns, i);
 
-        Symbol *fsym = make_symbol(entry->name, text, STRING_LEN(ctx->text), STB_GLOBAL, STT_NOTYPE, 1);
-        dict_put(ctx->elf->syms, entry->name, fsym);
+        Symbol *fsym = make_symbol(func->name, text, STRING_LEN(ctx->text), STB_GLOBAL, STT_NOTYPE, 1);
+        dict_put(ctx->elf->syms, func->name, fsym);
 
-        dict_put(dict, entry->name, (void *)(intptr)STRING_LEN(ctx->text));
-        assemble1(ctx, entry);
+        dict_put(dict, func->name, (void *)(intptr)STRING_LEN(ctx->text));
+        assemble1(ctx, func);
     }
     finish_func_call(elf, dict, tbf);
 }

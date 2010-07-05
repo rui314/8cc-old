@@ -158,6 +158,9 @@ runtest 'a' 'printf("a"); return 1;'
 runtest1 'foo' 'main() { bar(); } bar() { printf("foo"); }'
 runtest1 'foo' 'bar() { printf("foo"); } main() { bar(); }'
 runtest1 '17' 'main() { printf("%d", bar()); } bar() { return 17; }'
+# functions taking parameters
+runtest1 '1 2' 'main() { bar(1, 2); } bar(int i, int j) { printf("%d %d", i, j); }'
+runtest1 '17 42' 'main() { int p[3]; p[0]=17; p[1]=42; bar(p); } bar(int *p) { printf("%d %d", p[0], p[1]); }'
 
 #
 # Pointer operations

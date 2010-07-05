@@ -126,6 +126,14 @@ static Var *make_extern(String *name) {
     return r;
 }
 
+static Function *make_function(String *name, List *params, Block *entry) {
+    Function *r = malloc(sizeof(Function));
+    r->name = name;
+    r->params = params;
+    r->entry = entry;
+    return r;
+}
+
 /*============================================================
  * Basic block
  */
@@ -133,7 +141,6 @@ Block *make_block() {
     Block *r = malloc(sizeof(Block));
     r->pos = -1;
     r->code = make_list();
-    r->name = NULL;
     return r;
 }
 
@@ -1591,18 +1598,62 @@ static void read_compound_stmt(ReadContext *ctx) {
 }
 
 /*
+ * parameter-type-list:
+ *     parameter-list
+ *     parameter-list "," "..."
+ *
+ * parameter-list:
+ *     parameter-declaration
+ *     parameter-list "," parameter-declaration
+ *
+ * parameter-declaration:
+ *     declaration-specifiers declarator
+ *     declaration-specifiers abstract-declarator?
+ */
+static List *read_param_type_list(ReadContext *ctx) {
+    List *params = make_list();
+    if (next_token_is(ctx, ')'))
+        return params;
+    for (;;) {
+        Ctype *type = read_declaration_spec(ctx);
+        Var *param = read_declarator(ctx, type);
+        add_local_var(ctx, param->name, param);
+        list_push(params, param);
+        if (next_token_is(ctx, ')'))
+            return params;
+        expect(ctx, ',');
+    }
+}
+
+/*
  * function-declaration:
  *     function-def-specifier compound-statement
  *
  * function-def-specifier:
  *     declaration-specifiers? declarator declaration*
+ *
+ * function-declarator:
+ *     direct-declarator "(" parameter-type-list ")"
+ *     direct-declarator "(" identifier* ")"
+ *
+ * abstract-declarator:
+ *     pointer? direct-abstract-declarator
+ *
+ * direct-abstract-declarator:
+ *     "(" abstract-declarator ")"
+ *     direct-abstract-declarator? "[" constant-expression? "]"
+ *     direct-abstract-declarator? "[" expression "]"
+ *     direct-abstract-declarator? "[" "*" "]"
+ *     direct-abstract-declarator? "(" parameter-type-list? ")"
  */
-static void read_func_def(ReadContext *ctx) {
+static Function *read_func_declaration(ReadContext *ctx) {
     Token *fname = read_ident(ctx);
     expect(ctx, '(');
-    expect(ctx, ')');
+    push_scope(ctx);
+    List *params = read_param_type_list(ctx);
     expect(ctx, '{');
     read_compound_stmt(ctx);
+    pop_scope(ctx);
 
     Block *epilogue = make_block();
     emit(ctx, make_inst1(OP_JMP, epilogue));
@@ -1610,7 +1661,7 @@ static void read_func_def(ReadContext *ctx) {
     emit(ctx, make_inst1(OP_RETURN, make_imm(CTYPE_INT, (Cvalue)0)));
     pop_block(ctx);
 
-    ctx->entry->name = fname->val.str;
+    return make_function(fname->val.str, params, ctx->entry);
 }
 
 /*============================================================
@@ -1623,9 +1674,9 @@ List *parse(File *file, Elf *elf) {
         ReadContext *ctx = make_read_context(file, elf);
         if (!peek_token(ctx))
             break;
-        read_func_def(ctx);
+        Function *f = read_func_declaration(ctx);
         check_context(ctx);
-        list_push(r, ctx->entry);
+        list_push(r, f);
     }
     return r;
 }

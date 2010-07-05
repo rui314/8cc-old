@@ -370,8 +370,13 @@ typedef struct Token {
 typedef struct Block {
     int pos;
     List *code;
-    String *name;
 } Block;
+
+typedef struct Function {
+    String *name;
+    List *params;
+    Block *entry;
+} Function;
 
 /*
  * Read context for parser.
