@@ -239,6 +239,74 @@ static void skip_line_comment(File *file) {
     }
 }
 
+/*
+ * integer-constant:
+ *     decimal-constant integer-suffix?
+ *     octal-constant integer-suffix?
+ *     hexadecimal-constant integer-suffix?
+ *
+ * decimal-constant:
+ *     [1-9] [0-9]*
+ *
+ * octal-constant:
+ *     "0" [0-7]*
+ *
+ * hexadecimal-constant
+ *     "0" [xX] [0-9a-fA-F]+
+ *
+ * integer-suffix:
+ *     long-suffix unsigned-suffix?
+ *     long-long-suffix unsigned-suffix?
+ *     unsigned-suffix long-suffix?
+ *     unsigned-suffix long--longsuffix?
+ *
+ * long-suffix;
+ *     "l"
+ *     "L"
+ *
+ * long-long-suffix:
+ *     "ll"
+ *     "LL"
+ *
+ * unsigned-suffix:
+ *     "u"
+ *     "U"
+ *
+ * floating-constant:
+ *     decimal-floating-constant
+ *     hexadecimal-floating-constant
+ *
+ * decimal-floating-constant:
+ *     digit-sequence exponent? floating-suffix?
+ *
+ * hexadecimal-floating-constant:
+ *     hex-prefix dotted-hex-digits binary-exponent floating-suffix?
+ *     hex-prefix hex-digit-sequence binary-exponent floating-suffix?
+ *
+ * hex-prefix:
+ *     0x
+ *     0X
+ *
+ * dotted-hex-digits:
+ *     hex-digit-sequence "."
+ *     hex-digit-sequence "." hex-digit-sequence
+ *     "." hex-digit-sequence
+ *
+ * exponent:
+ *     [eE] [-+]? digit-sequence
+ *
+ * binary-exponent:
+ *     [pP] [-+]? digit-sequence
+ *
+ * floating-suffix:
+ *     [fFlL]
+ *
+ * digit-sequence:
+ *     [0-9]+
+ *
+ * hex-digit-sequence:
+ *     [0-9a-fA-F]+
+ */
 static Token *read_num(ReadContext *ctx) {
     Token *tok = make_token(ctx);
     String *buf = make_string();
@@ -284,6 +352,30 @@ static int hextodec(char c) {
     return c - 'a' + 10;
 }
 
+/*
+ * escape-character:
+ *     "\" escape-code
+ *     universal-character-name
+ *
+ * escape-code:
+ *     character-escape-code
+ *     octal-escape-code
+ *     hex-escape-code
+ *
+ * character-escape-code:
+ *     one of: n t b r f v \ ' " a ? e
+ *     ('\e' is GNU extension)
+ *
+ * octal-escape-code:
+ *     [0-7]{,3}
+ *
+ * hex-escape-code:
+ *     "x" [0-9a-fA-F]+
+ *
+ * universal-character-name:
+ *     "\u" [0-9a-fA-F]{4}
+ *     "\U" [0-9a-fA-F]{8}
+ */
 static char read_escape_char(File *file) {
     int c = readc(file);
     int r;
@@ -330,7 +422,15 @@ static char read_escape_char(File *file) {
     }
 }
 
-
+/*
+ * string-constant:
+ *     '"' s-char* '"'
+ *     'L"' s-char* '"'
+ *
+ * s-char:
+ *    any source character except the double quote, backslash or newline
+ *    escape-character
+ */
 static String *read_str(File *file) {
     String *b = make_string();
     for (;;) {
@@ -350,6 +450,15 @@ static String *read_str(File *file) {
     }
 }
 
+/*
+ * character-constant:
+ *     "'" c-char* "'"
+ *     "L'" c-char* "'"
+ *
+ * c-char:
+ *    any source character except the single quote, backslash or newline
+ *    escape-character
+ */
 static char read_char(File *file) {
     int c = readc(file);
     switch (c) {
@@ -561,6 +670,23 @@ static void process_continue(ReadContext *ctx) {
     emit(ctx, make_inst1(OP_JMP, ctx->oncontinue));
 }
 
+/*
+ * function-call:
+ *     postfix-expression "(" expression-list? ")"
+ *
+ * postfix-expression:
+ *     primary-expression
+ *     subscript-expression
+ *     component-expression
+ *     function-call
+ *     postincrement-expression
+ *     postdecrement-expression
+ *     compound-literal
+ *
+ * expression-list:
+ *     assignment-expression
+ *     expression-list "," assignment-expression
+ */
 static Var *read_func_call(ReadContext *ctx, Token *fntok) {
     List *args = make_list();
     list_push(args, make_extern(fntok->val.str));
@@ -600,6 +726,19 @@ static Var *read_cast_expr(ReadContext *ctx) {
     return read_unary_expr(ctx);
 }
 
+/*
+ * unary-expression:
+ *     postfix-expression
+ *     sizeof-expression
+ *     unary-minus-expression
+ *     unary-plus-expression
+ *     logical-negation-expression
+ *     bitwise-negation-expression
+ *     address-expression
+ *     indirection-expression
+ *     preincrement-expression
+ *     postincrement-expression
+ */
 static Var *read_unary_expr(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     switch (tok->toktype) {
@@ -706,22 +845,49 @@ static bool is_rassoc(Token *tok) {
     }
 }
 
+/*
+ * logical-or-expression:
+ *     logical-and-expression
+ *     logical-or-expression "||" logical-and-expression
+ */
 static Var *read_logor_expr(ReadContext *ctx) {
     return read_expr1(ctx, read_unary_expr(ctx), 12);
 }
 
+/*
+ * assignment-expression:
+ *     conditional-expression
+ *     unary-expression assignment-op assignment-expression
+ *
+ * assignment-op:
+ *    one of: = += -= *= /= %= <<= >>= &= ^= |=
+ */
 static Var *read_assign_expr(ReadContext *ctx) {
     return read_expr1(ctx, read_unary_expr(ctx), 14);
 }
 
+/*
+ * comma-expression:
+ *     assignment-expression
+ *     comma-expression "," assignment-expression
+ */
 static Var *read_comma_expr(ReadContext *ctx) {
     return read_expr1(ctx, read_unary_expr(ctx), 15);
 }
 
+/*
+ * subscript-expression:
+ *     postfix-expression "[" expression "]"
+ */
 static Var *read_subscript_expr(ReadContext *ctx, Var *var, Token *tok) {
     return make_var(make_ctype(CTYPE_INT));
 }
 
+/*
+ * conditional-expression:
+ *     logical-or-expression
+ *     logical-or-expression "?" expression : conditional-expression
+ */
 static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
     Block *then = make_block();
     Block *els = make_block();
@@ -826,6 +992,31 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     return v0;
 }
 
+/*
+ * declaration-specifiers:
+ *     storage-class-specifier declaration-specifiers?
+ *     type-specifier declaration-specifiers?
+ *     type-qualifier declaration-specifiers?
+ *     function-specifier declaration-specifiers?
+ *
+ * storage-class-specifier:
+ *     one of: auto extern register static typedef
+ *
+ * type-specifier:
+ *     enumeration-type-specifier
+ *     floating-point-type-specifier
+ *     integer-type-type-specifier
+ *     structure-type-type-specifier
+ *     typedef-name
+ *     union-type-specifier
+ *     void-type-specifier
+ *
+ * type-qualifier:
+ *     one of: const volatile restrict
+ *
+ * function-specifier:
+ *     "inline"
+ */
 Ctype *read_declaration_spec(ReadContext *ctx) {
     Ctype *r = NULL;
     Token *tok;
@@ -854,6 +1045,26 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
     return r;
 }
 
+/*
+ * declarator:
+ *     pointer-declarator
+ *     direct-declarator
+ *
+ * pointer-declarator:
+ *     pointer direct-declarator
+ *
+ * pointer:
+ *     "*" type-qualifier* pointer?
+ *
+ * direct-declarator:
+ *     simple-declarator
+ *     "(" declarator ")"
+ *     function-declarator
+ *     array-declarator
+ *
+ * simple-declarator:
+ *     identifier
+ */
 Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
     for (;;) {
         if (next_token_is(ctx, '*')) {
@@ -869,10 +1080,33 @@ Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
     return r;
 }
 
+/*
+ * initializer:
+ *     assignment-expression
+ *     "{" initializer-list ","? "}"
+ *
+ * initializer-list:
+ *     initializer
+ *     initializer-list "," initializer
+ *     designation initializer
+ *     initializer-list "," designation initializer
+ *
+ * designation:
+ *     designator+ "="
+ *
+ * designator:
+ *     pointer-declarator
+ *     direct-declarator
+ */
 Var *read_initializer(ReadContext *ctx) {
     return read_assign_expr(ctx);
 }
 
+/*
+ * initialized-declarator:
+ *     declarator
+ *     declarator "=" initializer
+ */
 void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *var = read_declarator(ctx, ctype);
     Var *val = next_token_is(ctx, '=')
@@ -895,6 +1129,14 @@ static bool is_type_keyword(Token *tok) {
     }
 }
 
+/*
+ * declaration:
+ *     declaration-specifiers initialized-declarator-list
+ *
+ * initialized-declarator-list:
+ *     initialized-declarator
+ *     initialized-declarator-list "," initialized-declarator
+ */
 static void read_declaration(ReadContext *ctx) {
     Ctype *declspec = read_declaration_spec(ctx);
     for (;;) {
@@ -905,6 +1147,17 @@ static void read_declaration(ReadContext *ctx) {
     expect(ctx, ';');
 }
 
+/*
+ * conditional-statement:
+ *     if-statement:
+ *     if-else-statement:
+ *
+ * if-statement:
+ *     "if" "(" expression ")" statement
+ *
+ * if-else-statement:
+ *     "if" "(" expression ")" statement "else" statement
+ */
 static void read_if_stmt(ReadContext *ctx) {
     Block *then, *els;
     expect(ctx, '(');
@@ -929,6 +1182,17 @@ static void read_if_stmt(ReadContext *ctx) {
     replace_block(ctx, cont);
 }
 
+/*
+ * for-statement:
+ *     "for" for-expressions statement
+ *
+ * for-expressions:
+ *     "(" initial-clause? ";" expression? ";" expression? ")"
+ *
+ * initial-clause:
+ *     expression
+ *     declaration
+ */
 static void read_for_stmt(ReadContext *ctx) {
     Block *cond = make_block();
     Block *mod = make_block();
@@ -967,6 +1231,10 @@ static void read_for_stmt(ReadContext *ctx) {
     replace_block(ctx, cont);
 }
 
+/*
+ * while-statement:
+ *     "while" "(" expression ")" statement
+ */
 static void read_while_stmt(ReadContext *ctx) {
     Block *cond = make_block();
     Block *body = make_block();
@@ -995,8 +1263,13 @@ static void read_while_stmt(ReadContext *ctx) {
     replace_block(ctx, cont);
 }
 
+/*
+ * do-statement:
+ *     "do" statmenet "(" expression ")" ";"
+ */
 static void read_do_stmt(ReadContext *ctx) {
     Block *body = make_block();
+
     Block *cond = make_block();
     Block *cont = make_block();
 
@@ -1025,6 +1298,15 @@ static void read_do_stmt(ReadContext *ctx) {
     replace_block(ctx, cont);
 }
 
+/*
+ * labeled-statement:
+ *     label ":" statement
+ *
+ * label:
+ *     identifier
+ *     "case" identifier
+ *     "default"
+ */
 static void process_label(ReadContext *ctx, Token *tok) {
     expect_ident(tok);
     String *label = tok->val.str;
@@ -1050,6 +1332,10 @@ static void process_label(ReadContext *ctx, Token *tok) {
     dict_delete(ctx->label_tbf, label);
 }
 
+/*
+ * goto-statement:
+ *     "goto" identifier ";"
+ */
 static void read_goto_stmt(ReadContext *ctx) {
     Token *tok = read_ident(ctx);
     expect(ctx, ';');
@@ -1069,6 +1355,10 @@ static void read_goto_stmt(ReadContext *ctx) {
     list_push(blocks, cur);
 }
 
+/*
+ * return-statement:
+ *     "return" expression? ";"
+ */
 static void read_return_stmt(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     Var *retval;
@@ -1091,6 +1381,28 @@ static void check_context(ReadContext *ctx) {
     }
 }
 
+/*
+ * statement:
+ *     expression-statement
+ *     labeled-statement
+ *     compound-statement
+ *     conditional-statement
+ *     iterative-statement
+ *     switch-statement
+ *     break-statement
+ *     continue-statement
+ *     return-statement
+ *     goto-statement
+ *     null-statement
+ *
+ * iterative-statement:
+ *     while-statement
+ *     do-statement
+ *     for-statement
+ *
+ * null-statement:
+ *     ";"
+ */
 static void read_stmt(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     if (IS_KEYWORD(tok, KEYWORD_IF)) {
@@ -1128,7 +1440,12 @@ static void read_stmt(ReadContext *ctx) {
     }
 }
 
-static void read_stmt_or_decl(ReadContext *ctx) {
+/*
+ * declaration-or-statemnet:
+ *     declaration
+ *     statement
+ */
+static void read_decl_or_stmt(ReadContext *ctx) {
     Token *tok = peek_token(ctx);
     if (is_type_keyword(tok)) {
         read_declaration(ctx);
@@ -1137,6 +1454,10 @@ static void read_stmt_or_decl(ReadContext *ctx) {
     }
 }
 
+/*
+ * compound-statemnet:
+ *     "{" declaration-or-statment* "}"
+ */
 static void read_compound_stmt(ReadContext *ctx) {
     push_scope(ctx);
     for (;;) {
@@ -1144,11 +1465,18 @@ static void read_compound_stmt(ReadContext *ctx) {
         if (IS_KEYWORD(tok, '}'))
             break;
         unget_token(ctx, tok);
-        read_stmt_or_decl(ctx);
+        read_decl_or_stmt(ctx);
     }
     pop_scope(ctx);
 }
 
+/*
+ * function-declaration:
+ *     function-def-specifier compound-statement
+ *
+ * function-def-specifier:
+ *     declaration-specifiers? declarator declaration*
+ */
 static void read_func_def(ReadContext *ctx) {
     Token *fname = read_ident(ctx);
     expect(ctx, '(');
