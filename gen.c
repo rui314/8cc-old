@@ -156,12 +156,6 @@ Inst *make_instn(int op, List *args) {
     return r;
 }
 
-int add_string(Section *data, String *str) {
-    int r = STRING_LEN(data->body);
-    out(data->body, STRING_BODY(str), STRING_LEN(str));
-    return r;
-}
-
 /*
  * Code generator
  */
@@ -181,7 +175,6 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
 }
 
 // MOV to rdi, rsi, rdx, rcx, r8, or r9
-// static u32 PUSH_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
 static u16 PUSH_ABS[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
 
 // MOVSD to xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, or xmm7
@@ -189,26 +182,31 @@ static u32 PUSH_XMM_ABS[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
                               0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
 
 // MOV rdi/rsi/rdx/rcx/r8/r9, [rbp+x]
-static u32 MOV_STACK[] = { 0x7d8b48, 0x758b48, 0x558b48, 0x4d8b48, 0x458b4c, 0x4d8b4c };
-
+static u32 MOV_STACK[] = { 0xbd8b48, 0xb58b48, 0x958b48, 0x8d8b48, 0x858b4c, 0x8d8b4c };
 
 static void emit_load(Context *ctx, Var *var) {
     if (var->stype == VAR_IMM) {
-        // MOV rax, imm
+        // MOV rax, [rbp+off]
         o1(ctx->text, 0x48);
         o1(ctx->text, 0xb8);
         o8(ctx->text, var->val.i);
     } else {
-        // MOV rax, [rbp-off]
+        // MOV rax, [rbp+off]
         int off = var_stack_pos(ctx, var);
-        o3(ctx->text, 0x458b48);
-        o1(ctx->text, off);
+        o3(ctx->text, 0x858b48);
+        o4(ctx->text, off);
     }
+}
+
+static void store_rax(Context *ctx, Var *dst) {
+    int off = var_stack_pos(ctx, dst);
+    // MOV [rbp+off], rax
+    o3(ctx->text, 0x858948);
+    o4(ctx->text, off);
 }
 
 static void handle_func_call(Context *ctx, Inst *inst) {
     Var *fn = LIST_ELEM(inst->args, 0);
-    int rval_off = var_stack_pos(ctx, LIST_ELEM(inst->args, 1));
     Section *text = find_section(ctx->elf, ".text");
     Section *data = find_section(ctx->elf, ".data");
     int gpr = 0;
@@ -220,7 +218,8 @@ static void handle_func_call(Context *ctx, Inst *inst) {
         case VAR_GLOBAL:
             if (var->ctype->type == CTYPE_INT) {
                 int off = var_stack_pos(ctx, var);
-                o4(ctx->text, MOV_STACK[gpr++] | off << 24);
+                o3(ctx->text, MOV_STACK[gpr++]);
+                o4(ctx->text, off);
                 break;
             }
 
@@ -263,7 +262,8 @@ static void handle_func_call(Context *ctx, Inst *inst) {
     o4(ctx->text, 0);
 
     // Save function return value to the stack;
-    o4(ctx->text, 0x458948 | (rval_off << 24)); // MOV [rbp+off], rax
+    Var *rval = LIST_ELEM(inst->args, 1);
+    store_rax(ctx, rval);
 }
 
 static void finish_func_call(Elf *elf, Dict *func, List *tbf) {
@@ -281,26 +281,19 @@ static void finish_func_call(Elf *elf, Dict *func, List *tbf) {
     }
 }
 
-static void store_rax(Context *ctx, Var *dst) {
-    int off = var_stack_pos(ctx, dst);
-    // MOV [rbp+off], rax
-    o3(ctx->text, 0x458948);
-    o1(ctx->text, off);
-}
-
 static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
     Var *v0 = LIST_ELEM(inst->args, 1);
     emit_load(ctx, v0);
     Var *v1 = LIST_ELEM(inst->args, 2);
     if (v1->stype == VAR_IMM) {
         // ADD/SUB rax, imm
-        o1(ctx->text, add ? 0x4805 : 0x482d);
+        o2(ctx->text, add ? 0x0548 : 0x2d48);
         o4(ctx->text, v1->val.i);
     } else {
         int off = var_stack_pos(ctx, v1);
         // ADD/SUB rax, [rbp-v1]
-        o3(ctx->text, add ? 0x450348 : 0x452b48);
-        o1(ctx->text, off);
+        o3(ctx->text, add ? 0x850348 : 0x852b48);
+        o4(ctx->text, off);
     }
     store_rax(ctx, LIST_ELEM(inst->args, 0));
 }
@@ -316,8 +309,8 @@ static void handle_imul(Context *ctx, Inst *inst) {
     } else {
         int off = var_stack_pos(ctx, src1);
         // IMUL rax, [rbp+off]
-        o4(ctx->text, 0x45af0f48);
-        o1(ctx->text, off);
+        o4(ctx->text, 0x85af0f48);
+        o4(ctx->text, off);
     }
     store_rax(ctx, LIST_ELEM(inst->args, 0));
 }
@@ -337,8 +330,8 @@ static void handle_idiv(Context *ctx, Inst *inst) {
     } else {
         int off = var_stack_pos(ctx, src1);
         // IDIV [rbp+off]
-        o3(ctx->text, 0x7df748);
-        o1(ctx->text, off);
+        o3(ctx->text, 0xbdf748);
+        o4(ctx->text, off);
     }
     store_rax(ctx, LIST_ELEM(inst->args, 0));
 }
@@ -346,18 +339,24 @@ static void handle_idiv(Context *ctx, Inst *inst) {
 static void handle_assign(Context *ctx, Inst *inst) {
     Var *var = LIST_ELEM(inst->args, 0);
     Var *val = LIST_ELEM(inst->args, 1);
+    if (!val) {
+        var_stack_pos(ctx, var);
+        return;
+    }
     int off = var_stack_pos(ctx, var);
     if (val->stype == VAR_IMM) {
         // MOV [rbp-off*8], inst->val.i
-        o3(ctx->text, 0x45c748);
-        o1(ctx->text, off);
+        o3(ctx->text, 0x85c748);
+        o4(ctx->text, off);
         o4(ctx->text, val->val.i);
     } else if (val->stype == VAR_GLOBAL) {
         // MOV rax, [rbp-val]
         // MOV [rbp-var], rax
         int off1 = var_stack_pos(ctx, val);
-        o4(ctx->text, 0x458b48 | (off1 << 24));
-        o4(ctx->text, 0x458948 | (off << 24));
+        o3(ctx->text, 0x858b48);
+        o4(ctx->text, off1);
+        o3(ctx->text, 0x858948);
+        o4(ctx->text, off);
     } else {
         error("not supported");
     }
@@ -392,8 +391,8 @@ static void handle_address(Context *ctx, Inst *inst) {
     Var *v = LIST_ELEM(inst->args, 1);
     int off = var_stack_pos(ctx, v);
     // LEA rax, [ebp+off]
-    o3(ctx->text, 0x458d48);
-    o1(ctx->text, off);
+    o3(ctx->text, 0x858d48);
+    o4(ctx->text, off);
     store_rax(ctx, p);
 }
 
@@ -532,6 +531,7 @@ static void handle_block(Context *ctx, Block *block) {
         default:
             error("unknown op\n");
         }
+        // NOP
         o1(ctx->text, 0x90);
     }
 }
@@ -546,6 +546,7 @@ void assemble1(Context *ctx, Block *entry) {
     o4(ctx->text, 0); // filled later
     handle_block(ctx, entry);
 
+    // Backfill SUB rsp, 0
     string_seek(ctx->text, pos);
     o4(ctx->text, (ctx->stack->nelem + 1) * 8);
     string_seek(ctx->text, STRING_LEN(ctx->text));

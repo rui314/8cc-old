@@ -483,7 +483,7 @@ Token *read_token(ReadContext *ctx) {
         case '!': case '(': case ')': case ',': case ';': case '[':
         case ']': case '{': case '}': case '|': case ':': case '?':
             r->toktype = TOKTYPE_KEYWORD;
-            r->val.c = c;
+            r->val.k = c;
             return r;
         case EOF:
             return NULL;
@@ -611,7 +611,8 @@ static Var *read_unary_expr(ReadContext *ctx) {
         return make_imm(CTYPE_FLOAT, (Cvalue)tok->val.f);
     case TOKTYPE_STRING: {
         Section *data = find_section(ctx->elf, ".data");
-        int off = add_string(data, tok->val.str);
+        int off = STRING_LEN(data->body);
+        out(data->body, STRING_BODY(tok->val.str), STRING_LEN(tok->val.str));
         return make_imm(CTYPE_PTR, (Cvalue)off);
     }
     case TOKTYPE_KEYWORD: {
@@ -679,6 +680,7 @@ static int prec(Token *tok) {
     if (tok->toktype != TOKTYPE_KEYWORD)
         return -1;
     switch (tok->val.k) {
+    case '[': return 1;
     case '*': case '/': case '%': return 3;
     case '+': case '-': return 4;
     case KEYWORD_EQUAL: return 7;
@@ -716,6 +718,10 @@ static Var *read_comma_expr(ReadContext *ctx) {
     return read_expr1(ctx, read_unary_expr(ctx), 15);
 }
 
+static Var *read_subscript_expr(ReadContext *ctx, Var *var, Token *tok) {
+    return make_var(make_ctype(CTYPE_INT));
+}
+
 static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
     Block *then = make_block();
     Block *els = make_block();
@@ -749,6 +755,10 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         if (prec1 < 0 || prec0 < prec1) {
             unget_token(ctx, tok);
             return v0;
+        }
+        if (IS_KEYWORD(tok, '[')) {
+            v0 = read_subscript_expr(ctx, v0, tok);
+            continue;
         }
         if (IS_KEYWORD(tok, '?')) {
             v0 = read_cond_expr(ctx, v0);

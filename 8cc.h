@@ -447,6 +447,4 @@ extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);
 extern Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v4);
 extern Inst *make_instn(int op, List *args);
 
-extern int add_string(Section *data, String *str);
-
 #endif /* ECC_H */

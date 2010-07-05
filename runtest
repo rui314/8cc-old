@@ -72,7 +72,7 @@ runtest '25' 'int i=2; int j=(i+3)*5; printf("%d", j);'
 #
 # "if" statement
 #
-/bin/echo -e '\nif statement...'
+/bin/echo -e '\nIf statement...'
 runtest 'true'  'int i=1; if (i) { printf("true"); } else { printf("false"); }'
 runtest 'false' 'int i=0; if (i) { printf("true"); } else { printf("false"); }'
 runtest 'true'  'int i=1; if (i)   printf("true");   else   printf("false");'
@@ -80,21 +80,21 @@ runtest 'true'  'int i=1; if (i)   printf("true");   else   printf("false");'
 #
 # "while" statement
 #
-/bin/echo -e '\nwhile statement...'
+/bin/echo -e '\nWhile statement...'
 runtest '54321a' 'int i=5; while (i) { printf("%d", i); i=i-1; } printf("a");'
 runtest '54321a' 'int i=5; while (i)   printf("%d", i), i=i-1;   printf("a");'
 
 #
 # "for" statement
 #
-/bin/echo -e '\nfor statement...'
+/bin/echo -e '\nFor statement...'
 runtest '321' 'int i=0; for (i=3;i;i=i-1) { printf("%d", i); }'
 runtest '321' 'int i=0; for (i=3;i;i=i-1)   printf("%d", i);'
 
 #
 # "do" statement
 #
-/bin/echo -e '\ndo statement...'
+/bin/echo -e '\nDo statement...'
 runtest '321' 'int i=3; do { printf("%d", i); i=i-1;} while (i);'
 runtest '321' 'int i=3; do   printf("%d", i), i=i-1;  while (i);'
 
@@ -120,7 +120,7 @@ runtest '-1' 'int i=0; int j=i?i+1:i-1; printf("%d", j);'
 #
 # "break" and "continue"
 #
-/bin/echo -e '\nbreak and continue...'
+/bin/echo -e '\nBreak and continue...'
 runtest 'bar'  'int i=1; while (1) { if (i) { break; } printf("foo"); } printf("bar");'
 runtest 'aac'  'int i=2; while (i) { if (i) { printf("a"); i=i-1; continue; } printf("b"); } printf("c");'
 runtest '32a'  'int i=0; for (i=3;i;i=i-1) { printf("%d", i); if (i==2) { break; } } printf("a");'
@@ -129,19 +129,19 @@ runtest '321a' 'int i=0; for (i=3;i;i) { if (i) { printf("%d", i); i=i-1; contin
 #
 # "goto" statement
 #
-/bin/echo -e '\ngoto statement...'
+/bin/echo -e '\nGoto statement...'
 runtest 'acbd' 'A: printf("a"); goto C; B: printf("b"); goto D; C: printf("c"); goto B; D: printf("d");'
 
 #
 # "return" statement
 #
-/bin/echo -e '\nreturn statement...'
+/bin/echo -e '\nReturn statement...'
 runtest 'a' 'printf("a"); return 1;'
 
 #
 # Function call
 #
-/bin/echo -e '\nfunction call...'
+/bin/echo -e '\nFunction call...'
 runtest1 'foo' 'main() { bar(); } bar() { printf("foo"); }'
 runtest1 'foo' 'bar() { printf("foo"); } main() { bar(); }'
 runtest1 '17' 'main() { printf("%d", bar()); } bar() { return 17; }'
@@ -149,11 +149,19 @@ runtest1 '17' 'main() { printf("%d", bar()); } bar() { return 17; }'
 #
 # Pointer operations
 #
-/bin/echo -e '\npointer operations...'
+/bin/echo -e '\nPointer operations...'
 runtest '17' 'int i=17; int *j=&i; printf("%d", *j);'
 runtest '17' 'int i=17; int **j=&&i; printf("%d", **j);'
 runtest '42' 'int i=17; int *j=&i; *j=42; printf("%d", *j);'
 runtest '42' 'int i=17; int **j=&&i; **j=42; printf("%d", **j);'
+
+#
+# Array
+#
+# /bin/echo -e '\nArray...'
+# runtest '17' 'int i[20]; printf("17");'
+# runtest '17 42' 'int i[20]; i[0]=17; i[19]=42; printf("%d %d", i[0], i[19]);'
+# runtest '17 42' 'int i[20]; int *p=i; p[0]=17; p[1]=17; printf("%d %d", *p, p[1]);'
 
 rm -f tmp$$ tmp$$.o
 echo
