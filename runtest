@@ -108,6 +108,19 @@ runtest 'true'  'int i=5; int j=5; if (i==j) { printf("true"); } else { printf("
 runtest 'false' 'int i=3; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
 
 #
+# comparison operators
+#
+/bin/echo -e '\nComparison operators...'
+runtest '1' 'int i=3; int j=5; printf("%d", i<j);'
+runtest '0' 'int i=3; int j=5; printf("%d", i>j);'
+runtest '0' 'int i=3; int j=3; printf("%d", i<j);'
+runtest '0' 'int i=3; int j=3; printf("%d", i>j);'
+runtest '1' 'int i=3; int j=5; printf("%d", i<=j);'
+runtest '0' 'int i=3; int j=5; printf("%d", i>=j);'
+runtest '1' 'int i=3; int j=3; printf("%d", i<=j);'
+runtest '1' 'int i=3; int j=3; printf("%d", i>=j);'
+
+#
 # "?:" operator
 #
 /bin/echo -e '\n?: operator...'

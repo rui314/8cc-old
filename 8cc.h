@@ -330,6 +330,8 @@ typedef enum KeywordType {
     KEYWORD_A_AND,
     KEYWORD_A_XOR,
     KEYWORD_A_NOT,
+    KEYWORD_GE,
+    KEYWORD_LE,
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
@@ -420,6 +422,8 @@ typedef struct Var {
 } Var;
 
 enum {
+    OP_LE,
+    OP_LT,
     OP_ADDRESS,
     OP_DEREF,
     OP_ASSIGN,

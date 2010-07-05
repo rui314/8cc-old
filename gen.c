@@ -347,6 +347,44 @@ static void handle_idiv(Context *ctx, Inst *inst) {
     store_rax(ctx, LIST_ELEM(inst->args, 0));
 }
 
+static void emit_cmp(Context *ctx, Inst *inst) {
+    Var *src0 = LIST_ELEM(inst->args, 1);
+    Var *src1 = LIST_ELEM(inst->args, 2);
+    emit_load(ctx, src0);
+    if (src1->stype == VAR_IMM) {
+        // CMP rax, imm
+        o2(ctx->text, 0x3d48);
+        o4(ctx->text, src1->val.i);
+    } else if (src1->stype == VAR_GLOBAL) {
+        int off = var_stack_pos(ctx, src1);
+        // CMP rax, [rbp+off]
+        o3(ctx->text, 0x453b48);
+        o1(ctx->text, off);
+    } else {
+        error("not supported");
+    }
+}
+
+static void handle_less(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    emit_cmp(ctx, inst);
+    // SETL al
+    o3(ctx->text, 0xc09c0f);
+    // MOVZX eax, al
+    o3(ctx->text, 0xc0b60f);
+    store_rax(ctx, dst);
+}
+
+static void handle_less_equal(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    emit_cmp(ctx, inst);
+    // SETLE al
+    o3(ctx->text, 0xc09e0f);
+    // MOVZX eax, al
+    o3(ctx->text, 0xc0b60f);
+    store_rax(ctx, dst);
+}
+
 static void handle_assign(Context *ctx, Inst *inst) {
     Var *var = LIST_ELEM(inst->args, 0);
     Var *val = LIST_ELEM(inst->args, 1);
@@ -375,24 +413,10 @@ static void handle_assign(Context *ctx, Inst *inst) {
 
 static void handle_equal(Context *ctx, Inst *inst) {
     Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
-    emit_load(ctx, src0);
-    if (src1->stype == VAR_IMM) {
-        // CMP rax, imm
-        o2(ctx->text, 0x3d48);
-        o4(ctx->text, src1->val.i);
-    } else if (src1->stype == VAR_GLOBAL) {
-        int off = var_stack_pos(ctx, src1);
-        // CMP rax, [rbp+off]
-        o3(ctx->text, 0x453b48);
-        o1(ctx->text, off);
-    } else {
-        error("not supported");
-    }
+    emit_cmp(ctx, inst);
     // SETE al
-    // MOVZX eax, al
     o3(ctx->text, 0xc0940f);
+    // MOVZX eax, al
     o3(ctx->text, 0xc0b60f);
     store_rax(ctx, dst);
 }
@@ -511,6 +535,12 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case '/':
             handle_idiv(ctx, inst);
+            break;
+        case '<':
+            handle_less(ctx, inst);
+            break;
+        case OP_LE:
+            handle_less_equal(ctx, inst);
             break;
         case OP_FUNC_CALL:
             handle_func_call(ctx, inst);

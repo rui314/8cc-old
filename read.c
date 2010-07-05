@@ -637,7 +637,7 @@ Token *read_token(ReadContext *ctx) {
             unreadc(c1, file);
             // FALL THROUGH
         case '+': case '-': case '*': case '%': case '&':
-        case '^': case '~':
+        case '^': case '~': case '<': case '>':
             c1 = readc(file);
             if (c1 == '=') {
                 r->toktype = TOKTYPE_KEYWORD;
@@ -648,6 +648,8 @@ Token *read_token(ReadContext *ctx) {
                     : c == '%' ? KEYWORD_A_MOD
                     : c == '&' ? KEYWORD_A_AND
                     : c == '^' ? KEYWORD_A_XOR
+                    : c == '<' ? KEYWORD_LE
+                    : c == '>' ? KEYWORD_GE
                     : KEYWORD_A_NOT;
                 return r;
             }
@@ -909,6 +911,8 @@ static int prec(Token *tok) {
     case '[': return 1;
     case '*': case '/': case '%': return 3;
     case '+': case '-': return 4;
+    case '<': case '>': case KEYWORD_GE: case KEYWORD_LE:
+        return 6;
     case KEYWORD_EQUAL: return 7;
     case '?': return 13;
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
@@ -1045,7 +1049,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
 
         v0 = rv(ctx, v0);
         v1 = rv(ctx, v1);
-        Var *tmp;
+        Var *tmp = make_var(make_ctype(CTYPE_INT));
         switch (tok->val.k) {
         case ',':
             v0 = v1;
@@ -1073,6 +1077,20 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case KEYWORD_A_DIV:
             ensure_lvalue(v0);
             emit(ctx, make_inst3('/', v0, v0, v1));
+            break;
+        case '>':
+            SWAP(Var *, v0, v1);
+            // FALL THROUGH
+        case '<':
+            emit(ctx, make_inst3('<', tmp, v0, v1));
+            v0 = tmp;
+            break;
+        case KEYWORD_GE:
+            SWAP(Var *, v0, v1);
+            // FALL THROUGH
+        case KEYWORD_LE:
+            emit(ctx, make_inst3(OP_LE, tmp, v0, v1));
+            v0 = tmp;
             break;
         default:
             error("unsupported operator: %c", tok->val.k);
