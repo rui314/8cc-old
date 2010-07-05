@@ -415,12 +415,14 @@ typedef struct Var {
     Ctype *ctype;
     String *name;
     Cvalue val;  // Immediate value.  Only valid when stype == VAR_IMM
-    bool is_lvalue;
+    struct Var *loc;
 } Var;
 
 enum {
     OP_ADDRESS,
     OP_DEREF,
+    OP_ASSIGN,
+    OP_ASSIGN_DEREF,
     OP_FUNC_CALL = 256,
     OP_IF,
     OP_JMP,

@@ -152,6 +152,8 @@ runtest1 '17' 'main() { printf("%d", bar()); } bar() { return 17; }'
 /bin/echo -e '\npointer operations...'
 runtest '17' 'int i=17; int *j=&i; printf("%d", *j);'
 runtest '17' 'int i=17; int **j=&&i; printf("%d", **j);'
+runtest '42' 'int i=17; int *j=&i; *j=42; printf("%d", *j);'
+runtest '42' 'int i=17; int **j=&&i; **j=42; printf("%d", **j);'
 
 rm -f tmp$$ tmp$$.o
 echo

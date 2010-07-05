@@ -406,6 +406,18 @@ static void handle_deref(Context *ctx, Inst *inst) {
     store_rax(ctx, v);
 }
 
+static void handle_assign_deref(Context *ctx, Inst *inst) {
+    Var *loc = LIST_ELEM(inst->args, 0);
+    Var *v = LIST_ELEM(inst->args, 1);
+    emit_load(ctx, v);
+    // MOV [rbp+off], r11
+    int off = var_stack_pos(ctx, loc);
+    o3(ctx->text, 0x9d8b4c);
+    o4(ctx->text, off);
+    // MOV [r11], rax
+    o3(ctx->text, 0x038949);
+}
+
 static void handle_if(Context *ctx, Inst *inst) {
     Var *cond = LIST_ELEM(inst->args, 0);
     Block *then = LIST_ELEM(inst->args, 1);
@@ -496,9 +508,6 @@ static void handle_block(Context *ctx, Block *block) {
         case OP_IF:
             handle_if(ctx, inst);
             break;
-        case '=':
-            handle_assign(ctx, inst);
-            break;
         case OP_EQUAL:
             handle_equal(ctx, inst);
             break;
@@ -507,6 +516,12 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case OP_DEREF:
             handle_deref(ctx, inst);
+            break;
+        case OP_ASSIGN:
+            handle_assign(ctx, inst);
+            break;
+        case OP_ASSIGN_DEREF:
+            handle_assign_deref(ctx, inst);
             break;
         case OP_JMP:
             handle_jmp(ctx, inst);
@@ -517,6 +532,7 @@ static void handle_block(Context *ctx, Block *block) {
         default:
             error("unknown op\n");
         }
+        o1(ctx->text, 0x90);
     }
 }
 

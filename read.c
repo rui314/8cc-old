@@ -80,47 +80,34 @@ static Ctype *make_ctype_ptr(Ctype *type) {
     return r;
 }
 
-static Var *make_var(int ctype, String *name) {
+static Var *make_var(Ctype *ctype) {
     Var *r = malloc(sizeof(Var));
     r->stype = VAR_GLOBAL;
-    r->ctype = make_ctype(ctype);
-    r->val.i = 0;
-    r->name = name;
-    r->is_lvalue = false;
-    return r;
-}
-
-static Var *make_var1(Ctype *ctype, String *name) {
-    Var *r = make_var(CTYPE_INT, name);
     r->ctype = ctype;
+    r->val.i = 0;
+    r->name = NULL;
+    r->loc = NULL;
     return r;
 }
 
-static Var *make_deref_var(Var *v) {
-    Var *r = malloc(sizeof(Var));
-    *r = *v;
-    if (!r->ctype->ptr)
-        error("Pointer required, but got %s", STRING_BODY(v->name));
-    r->ctype = r->ctype->ptr;
-    return r;
-}
-
-static Var *make_ptr_var(Var *v) {
-    Var *r = malloc(sizeof(Var));
-    *r = *v;
-    r->ctype = make_ctype_ptr(r->ctype);
+static Var *make_lvalue(Var *v) {
+    Var *r = make_var(make_ctype(CTYPE_INT));
+    r->loc = v;
+    if (!v->ctype->ptr)
+        error("pointer required, but got %s", STRING_BODY(v->name));
     return r;
 }
 
 static Var *make_imm(int ctype, Cvalue val) {
-    Var *r = make_var(ctype, NULL);
+    Var *r = make_var(make_ctype(ctype));
     r->stype = VAR_IMM;
     r->val = val;
     return r;
 }
 
 static Var *make_extern(String *name) {
-    Var *r = make_var(CTYPE_INT, name);
+    Var *r = make_var(make_ctype(CTYPE_INT));
+    r->name = name;
     r->stype = VAR_EXTERN;
     return r;
 }
@@ -203,6 +190,16 @@ static Var *find_var(ReadContext *ctx, String *name) {
         }
     }
     return NULL;
+}
+
+static Var *rv(ReadContext *ctx, Var *v) {
+    if (!v->loc)
+        return v;
+    if (!v->loc->ctype->ptr)
+        error("[internal error] pointed variable is not a pointer?");
+    Var *r = make_var(v->loc->ctype->ptr);
+    emit(ctx, make_inst2(OP_DEREF, r, v->loc));
+    return r;
 }
 
 /*============================================================
@@ -567,14 +564,14 @@ static void process_continue(ReadContext *ctx) {
 static Var *read_func_call(ReadContext *ctx, Token *fntok) {
     List *args = make_list();
     list_push(args, make_extern(fntok->val.str));
-    Var *retval = make_var(CTYPE_INT, NULL);
+    Var *retval = make_var(make_ctype(CTYPE_INT));
     list_push(args, retval);
     Token *tok = read_token(ctx);
     if (!IS_KEYWORD(tok, ')')) {
         unget_token(ctx, tok);
         for (;;) {
             Var *v = read_assign_expr(ctx);
-            list_push(args, v);
+            list_push(args, rv(ctx, v));
             Token *sep = read_token(ctx);
             if (sep->toktype != TOKTYPE_KEYWORD)
                 error("line %d:%d: expected ',', or ')', but got '%c'", sep->line, sep->column, sep->val.c);
@@ -624,15 +621,13 @@ static Var *read_unary_expr(ReadContext *ctx) {
             return r;
         }
         if (IS_KEYWORD(tok, '*')) {
-            Var *ptr = read_cast_expr(ctx);
-            Var *v = make_deref_var(ptr);
-            emit(ctx, make_inst2(OP_DEREF, v, ptr));
-            return v;
+            Var *pointed = read_cast_expr(ctx);
+            return make_lvalue(rv(ctx, pointed));
         }
         if (IS_KEYWORD(tok, '&')) {
             Var *v = read_cast_expr(ctx);
-            Var *ptr = make_ptr_var(v);
-            emit(ctx, make_inst2(OP_ADDRESS, ptr, v));
+            Var *ptr = make_var(make_ctype_ptr(v->ctype));
+            emit(ctx, make_inst2(OP_ADDRESS, ptr, rv(ctx, v)));
             return ptr;
         }
         error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
@@ -645,10 +640,10 @@ static Var *read_unary_expr(ReadContext *ctx) {
         Var *var = find_var(ctx, tok->val.str);
         if (!var) {
             warn("'%s' is not defined", STRING_BODY(tok->val.str));
-            var = make_var(CTYPE_INT, tok->val.str);
+            var = make_var(make_ctype(CTYPE_INT));
+            var->name = tok->val.str;
             add_local_var(ctx, tok->val.str, var);
         }
-        var->is_lvalue = true;
         return var;
     }
     default:
@@ -657,8 +652,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
 }
 
 static void ensure_lvalue(Var *var) {
-    if (!var->is_lvalue)
-        error("must be lvalue: '%s'", STRING_BODY(var->name));
+    return;
 }
 
 /*
@@ -726,19 +720,19 @@ static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
     Block *then = make_block();
     Block *els = make_block();
     Block *cont = make_block();
-    Var *r = make_var(CTYPE_INT, NULL);
+    Var *r = make_var(make_ctype(CTYPE_INT));
 
-    emit(ctx, make_inst4(OP_IF, condvar, then, els, cont));
+    emit(ctx, make_inst4(OP_IF, rv(ctx, condvar), then, els, cont));
 
     push_block1(ctx, then);
     Var *v0 = read_logor_expr(ctx);
-    emit(ctx, make_inst2('=', r, v0));
+    emit(ctx, make_inst2(OP_ASSIGN, r, v0));
     pop_block(ctx);
     expect(ctx, ':');
 
     push_block1(ctx, els);
     Var *v1 = read_logor_expr(ctx);
-    emit(ctx, make_inst2('=', r, v1));
+    emit(ctx, make_inst2(OP_ASSIGN, r, v1));
     pop_block(ctx);
 
     replace_block(ctx, cont);
@@ -758,6 +752,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         }
         if (IS_KEYWORD(tok, '?')) {
             v0 = read_cond_expr(ctx, v0);
+            v0 = rv(ctx, v0);
             continue;
         }
         Var *v1 = read_unary_expr(ctx);
@@ -770,22 +765,31 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v1 = read_expr1(ctx, v1, prec2);
         }
 
+        if (IS_KEYWORD(tok, '=')) {
+            ensure_lvalue(v0);
+            if (v0->loc) {
+                emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, rv(ctx, v1)));
+                v0 = rv(ctx, v0);
+            } else {
+                emit(ctx, make_inst2(OP_ASSIGN, v0, rv(ctx, v1)));
+            }
+            continue;
+        }
+
+        v0 = rv(ctx, v0);
+        v1 = rv(ctx, v1);
         Var *tmp;
         switch (tok->val.k) {
         case ',':
             v0 = v1;
             break;
-        case '=':
-            ensure_lvalue(v0);
-            emit(ctx, make_inst2(tok->val.k, v0, v1));
-            break;
         case '+': case '-': case '*': case '/':
-            tmp = make_var(CTYPE_INT, NULL);
+            tmp = make_var(make_ctype(CTYPE_INT));
             emit(ctx, make_inst3(tok->val.k, tmp, v0, v1));
             v0 = tmp;
             break;
         case KEYWORD_EQUAL:
-            tmp = make_var(CTYPE_INT, NULL);
+            tmp = make_var(make_ctype(CTYPE_INT));
             emit(ctx, make_inst3(OP_EQUAL, tmp, v0, v1));
             v0 = tmp;
             break;
@@ -849,8 +853,10 @@ Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
         }
         break;
     }
+    Var *r = make_var(ctype);
     Token *tok = read_ident(ctx);
-    return make_var1(ctype, tok->val.str);
+    r->name = tok->val.str;
+    return r;
 }
 
 Var *read_initializer(ReadContext *ctx) {
@@ -861,9 +867,9 @@ void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *var = read_declarator(ctx, ctype);
     Var *val = next_token_is(ctx, '=')
         ? read_initializer(ctx)
-        : make_var(CTYPE_INT, NULL);
+        : make_var(make_ctype(CTYPE_INT));
     add_local_var(ctx, var->name, var);
-    emit(ctx, make_inst2('=', var, val));
+    emit(ctx, make_inst2(OP_ASSIGN, var, val));
 }
 
 static bool is_type_keyword(Token *tok) {
@@ -909,7 +915,7 @@ static void read_if_stmt(ReadContext *ctx) {
         els = NULL;
     }
     Block *cont = make_block();
-    emit(ctx, make_inst4(OP_IF, cond, then, els, cont));
+    emit(ctx, make_inst4(OP_IF, rv(ctx, cond), then, els, cont));
     replace_block(ctx, cont);
 }
 
