@@ -55,10 +55,14 @@
 #define NOT_SUPPORTED()                                                 \
     do { error("line %d: not supported yet", __LINE__); } while (0)
 
+#define SWAP(type, x, y) do { type tmp_ = x; x = y; y = tmp_; } while (0)
+
 static Var *read_assign_expr(ReadContext *ctx);
 static Var *read_comma_expr(ReadContext *ctx);
 static Var *read_unary_expr(ReadContext *ctx);
+static Var *read_func_call(ReadContext *ctx, Token *fntok);
 static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0);
+static Token *read_ident(ReadContext *ctx);
 static void read_compound_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 
@@ -70,6 +74,7 @@ static Ctype *make_ctype(int type) {
     Ctype *r = malloc(sizeof(Ctype));
     r->type = type;
     r->ptr = NULL;
+    r->size = 0;
     return r;
 }
 
@@ -77,6 +82,15 @@ static Ctype *make_ctype_ptr(Ctype *type) {
     Ctype *r = malloc(sizeof(Ctype));
     r->type = CTYPE_PTR;
     r->ptr = type;
+    r->size = 0;
+    return r;
+}
+
+static Ctype *make_ctype_array(Ctype *type, int size) {
+    Ctype *r = malloc(sizeof(Ctype));
+    r->type = CTYPE_ARRAY;
+    r->ptr = type;
+    r->size = size;
     return r;
 }
 
@@ -193,6 +207,11 @@ static Var *find_var(ReadContext *ctx, String *name) {
 }
 
 static Var *rv(ReadContext *ctx, Var *v) {
+    if (v->ctype->type == CTYPE_ARRAY) {
+        Var *r = make_var(make_ctype_ptr(v->ctype->ptr));
+        emit(ctx, make_inst2(OP_ADDRESS, r, v));
+        return r;
+    }
     if (!v->loc)
         return v;
     if (!v->loc->ctype->ptr)
@@ -200,6 +219,51 @@ static Var *rv(ReadContext *ctx, Var *v) {
     Var *r = make_var(v->loc->ctype->ptr);
     emit(ctx, make_inst2(OP_DEREF, r, v->loc));
     return r;
+}
+
+Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
+    Var *ptr_size = make_imm(CTYPE_INT, (Cvalue)8);
+    switch (op) {
+    case '+': {
+        if (v1->ctype->ptr)
+            SWAP(Var *, v0, v1);
+        if (v0->ctype->ptr) {
+            if (v1->ctype->type != CTYPE_INT)
+                error("arithmetic + is not defined for pointers except integer operand");
+            Var *r = make_var(v0->ctype);
+            Var *tmp = make_var(make_ctype(CTYPE_INT));
+            emit(ctx, make_inst3('*', tmp, v1, ptr_size));
+            emit(ctx, make_inst3('+', r, v0, tmp));
+            return r;
+        }
+        if (v0->ctype->type != CTYPE_INT)
+            NOT_SUPPORTED();
+        Var *r = make_var(make_ctype(CTYPE_INT));
+        emit(ctx, make_inst3('+', r, v0, v1));
+        return r;
+    }
+    case '-':
+        if (v1->ctype->ptr)
+            SWAP(Var *, v0, v1);
+        if (v0->ctype->ptr && v1->ctype->type == CTYPE_INT) {
+            Var *r = make_var(v0->ctype);
+            Var *tmp = make_var(make_ctype(CTYPE_INT));
+            emit(ctx, make_inst3('*', tmp, v1, ptr_size));
+            emit(ctx, make_inst3('-', r, v0, tmp));
+            return r;
+        }
+        Var *r = make_var(make_ctype(CTYPE_INT));
+        emit(ctx, make_inst3('-', r, v0, v1));
+        return r;
+    case '*': // FALL THROUGH
+    case '/': {
+        Var *r = make_var(make_ctype(CTYPE_INT));
+        emit(ctx, make_inst3(op, r, v0, v1));
+        return r;
+    }
+    default:
+        error("[internal error] unsupported operator: %c", op);
+    }
 }
 
 /*============================================================
@@ -671,9 +735,52 @@ static void process_continue(ReadContext *ctx) {
 }
 
 /*
- * function-call:
- *     postfix-expression "(" expression-list? ")"
+ * primary-expression:
+ *     identifier
+ *     constant
+ *     parenthesized-expression
  *
+ * constant:
+ *     integer-constant
+ *     floating-constant
+ *     character-constant
+ *     string-constant
+ */
+Var *read_primary_expr(ReadContext *ctx) {
+    Token *tok = read_token(ctx);
+    switch (tok->toktype) {
+    case TOKTYPE_CHAR:
+        return make_imm(CTYPE_CHAR, (Cvalue)tok->val.c);
+    case TOKTYPE_INT:
+        return make_imm(CTYPE_INT, (Cvalue)tok->val.i);
+    case TOKTYPE_FLOAT:
+        return make_imm(CTYPE_FLOAT, (Cvalue)tok->val.f);
+    case TOKTYPE_STRING: {
+        Section *data = find_section(ctx->elf, ".data");
+        int off = STRING_LEN(data->body);
+        out(data->body, STRING_BODY(tok->val.str), STRING_LEN(tok->val.str));
+        return make_imm(CTYPE_PTR, (Cvalue)off);
+    }
+    case TOKTYPE_IDENT: {
+        Token *tok1 = read_token(ctx);
+        if (IS_KEYWORD(tok1, '('))
+            return read_func_call(ctx, tok);
+        unget_token(ctx, tok1);
+        Var *var = find_var(ctx, tok->val.str);
+        if (!var) {
+            warn("'%s' is not defined", STRING_BODY(tok->val.str));
+            var = make_var(make_ctype(CTYPE_INT));
+            var->name = tok->val.str;
+            add_local_var(ctx, tok->val.str, var);
+        }
+        return var;
+    }
+    default:
+        NOT_SUPPORTED();
+    }
+}
+
+/*
  * postfix-expression:
  *     primary-expression
  *     subscript-expression
@@ -682,6 +789,14 @@ static void process_continue(ReadContext *ctx) {
  *     postincrement-expression
  *     postdecrement-expression
  *     compound-literal
+ */
+Var *read_postfix_expr(ReadContext *ctx) {
+    return read_primary_expr(ctx);
+}
+
+/*
+ * function-call:
+ *     postfix-expression "(" expression-list? ")"
  *
  * expression-list:
  *     assignment-expression
@@ -741,54 +856,26 @@ static Var *read_cast_expr(ReadContext *ctx) {
  */
 static Var *read_unary_expr(ReadContext *ctx) {
     Token *tok = read_token(ctx);
-    switch (tok->toktype) {
-    case TOKTYPE_CHAR:
-        return make_imm(CTYPE_CHAR, (Cvalue)tok->val.c);
-    case TOKTYPE_INT:
-        return make_imm(CTYPE_INT, (Cvalue)tok->val.i);
-    case TOKTYPE_FLOAT:
-        return make_imm(CTYPE_FLOAT, (Cvalue)tok->val.f);
-    case TOKTYPE_STRING: {
-        Section *data = find_section(ctx->elf, ".data");
-        int off = STRING_LEN(data->body);
-        out(data->body, STRING_BODY(tok->val.str), STRING_LEN(tok->val.str));
-        return make_imm(CTYPE_PTR, (Cvalue)off);
+    if (tok->toktype != TOKTYPE_KEYWORD) {
+        unget_token(ctx, tok);
+        return read_postfix_expr(ctx);
     }
-    case TOKTYPE_KEYWORD: {
-        if (IS_KEYWORD(tok, '(')) {
-            Var *r = read_comma_expr(ctx);
-            expect(ctx, ')');
-            return r;
-        }
-        if (IS_KEYWORD(tok, '*')) {
-            Var *pointed = read_cast_expr(ctx);
-            return make_lvalue(rv(ctx, pointed));
-        }
-        if (IS_KEYWORD(tok, '&')) {
-            Var *v = read_cast_expr(ctx);
-            Var *ptr = make_var(make_ctype_ptr(v->ctype));
-            emit(ctx, make_inst2(OP_ADDRESS, ptr, rv(ctx, v)));
-            return ptr;
-        }
-        error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
+    if (IS_KEYWORD(tok, '(')) {
+        Var *r = read_comma_expr(ctx);
+        expect(ctx, ')');
+        return r;
     }
-    case TOKTYPE_IDENT: {
-        Token *tok1 = read_token(ctx);
-        if (IS_KEYWORD(tok1, '('))
-            return read_func_call(ctx, tok);
-        unget_token(ctx, tok1);
-        Var *var = find_var(ctx, tok->val.str);
-        if (!var) {
-            warn("'%s' is not defined", STRING_BODY(tok->val.str));
-            var = make_var(make_ctype(CTYPE_INT));
-            var->name = tok->val.str;
-            add_local_var(ctx, tok->val.str, var);
-        }
-        return var;
+    if (IS_KEYWORD(tok, '*')) {
+        Var *pointed = read_cast_expr(ctx);
+        return make_lvalue(rv(ctx, pointed));
     }
-    default:
-        NOT_SUPPORTED();
+    if (IS_KEYWORD(tok, '&')) {
+        Var *v = read_cast_expr(ctx);
+        Var *ptr = make_var(make_ctype_ptr(v->ctype));
+        emit(ctx, make_inst2(OP_ADDRESS, ptr, rv(ctx, v)));
+        return ptr;
     }
+    error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
 }
 
 static void ensure_lvalue(Var *var) {
@@ -879,8 +966,12 @@ static Var *read_comma_expr(ReadContext *ctx) {
  * subscript-expression:
  *     postfix-expression "[" expression "]"
  */
-static Var *read_subscript_expr(ReadContext *ctx, Var *var, Token *tok) {
-    return make_var(make_ctype(CTYPE_INT));
+static Var *read_subscript_expr(ReadContext *ctx, Var *a) {
+    // a[i] is equivalent to *((a) + (i))
+    Var *i = read_comma_expr(ctx);
+    expect(ctx, ']');
+    Var *ptr = emit_arith(ctx, '+', rv(ctx, a), rv(ctx, i));
+    return make_lvalue(rv(ctx, ptr));
 }
 
 /*
@@ -923,7 +1014,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             return v0;
         }
         if (IS_KEYWORD(tok, '[')) {
-            v0 = read_subscript_expr(ctx, v0, tok);
+            v0 = read_subscript_expr(ctx, v0);
             continue;
         }
         if (IS_KEYWORD(tok, '?')) {
@@ -960,9 +1051,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v0 = v1;
             break;
         case '+': case '-': case '*': case '/':
-            tmp = make_var(make_ctype(CTYPE_INT));
-            emit(ctx, make_inst3(tok->val.k, tmp, v0, v1));
-            v0 = tmp;
+            v0 = emit_arith(ctx, tok->val.k, v0, v1);
             break;
         case KEYWORD_EQUAL:
             tmp = make_var(make_ctype(CTYPE_INT));
@@ -1062,6 +1151,14 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
  *     function-declarator
  *     array-declarator
  *
+ * array-declarator:
+ *     direct-declarator "[" constant-expression? "]"
+ *     direct-declarator "[" array-qualifier* array-size-expression? "]"
+ *     direct-declarator "[" array-qualifier* "*" "]"
+ *
+ * array-qualifier:
+ *     one of: static restrict const volatile
+ *
  * simple-declarator:
  *     identifier
  */
@@ -1077,6 +1174,11 @@ Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *r = make_var(ctype);
     Token *tok = read_ident(ctx);
     r->name = tok->val.str;
+    if (next_token_is(ctx, '[')) {
+        Token *num = read_num(ctx);
+        r->ctype = make_ctype_array(r->ctype, num->val.i);
+        expect(ctx, ']');
+    }
     return r;
 }
 
@@ -1110,8 +1212,8 @@ Var *read_initializer(ReadContext *ctx) {
 void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *var = read_declarator(ctx, ctype);
     Var *val = next_token_is(ctx, '=')
-        ? read_initializer(ctx)
-        : make_var(make_ctype(CTYPE_INT));
+        ? rv(ctx, read_initializer(ctx))
+        : NULL;
     add_local_var(ctx, var->name, var);
     emit(ctx, make_inst2(OP_ASSIGN, var, val));
 }

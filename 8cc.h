@@ -297,12 +297,13 @@ typedef union Cvalue {
 } Cvalue;
 
 typedef enum CtypeEnum {
-    CTYPE_PTR, CTYPE_INT, CTYPE_CHAR, CTYPE_FLOAT,
+    CTYPE_PTR, CTYPE_ARRAY, CTYPE_INT, CTYPE_CHAR, CTYPE_FLOAT,
 } CtypeEnum;
 
 typedef struct Ctype {
     CtypeEnum type;
     struct Ctype *ptr;
+    int size; // valid iff type == CTYPE_ARRAY
 } Ctype;
 
 typedef enum KeywordType {

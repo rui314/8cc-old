@@ -59,6 +59,7 @@ typedef struct Context {
     Dict *stack;
     Dict *tmpvar;
     List *func_tbf;
+    int sp;
 } Context;
 
 Context *make_context(Elf *elf) {
@@ -68,6 +69,7 @@ Context *make_context(Elf *elf) {
     r->stack = make_address_dict();
     r->tmpvar = make_address_dict();
     r->func_tbf = NULL;
+    r->sp = 0;
     return r;
 }
 
@@ -160,10 +162,18 @@ Inst *make_instn(int op, List *args) {
  * Code generator
  */
 
+static int var_size(Ctype *ctype) {
+    if (ctype->type == CTYPE_ARRAY) {
+        return ctype->size * var_size(ctype->ptr);
+    }
+    return 1;
+}
+
 static int var_stack_pos(Context *ctx, Var *var) {
     CompiledVar *cvar = dict_get(ctx->stack, var);
     if (cvar == NULL) {
-        cvar = make_compiled_var((-ctx->stack->nelem - 1) * 8);
+        ctx->sp += var_size(var->ctype);
+        cvar = make_compiled_var(ctx->sp * -8);
         dict_put(ctx->stack, var, cvar);
     }
     return cvar->sp;
@@ -227,6 +237,7 @@ static void handle_func_call(Context *ctx, Inst *inst) {
         case VAR_IMM:
             switch (var->ctype->type) {
             case CTYPE_PTR:
+            case CTYPE_ARRAY:
                 o2(ctx->text, PUSH_ABS[gpr++]);
                 add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_64, var->val.i);
                 o8(ctx->text, 0);
@@ -548,7 +559,7 @@ void assemble1(Context *ctx, Block *entry) {
 
     // Backfill SUB rsp, 0
     string_seek(ctx->text, pos);
-    o4(ctx->text, (ctx->stack->nelem + 1) * 8);
+    o4(ctx->text, (ctx->sp + 1) * 8);
     string_seek(ctx->text, STRING_LEN(ctx->text));
 }
 

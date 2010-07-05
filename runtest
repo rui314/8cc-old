@@ -158,10 +158,10 @@ runtest '42' 'int i=17; int **j=&&i; **j=42; printf("%d", **j);'
 #
 # Array
 #
-# /bin/echo -e '\nArray...'
-# runtest '17' 'int i[20]; printf("17");'
-# runtest '17 42' 'int i[20]; i[0]=17; i[19]=42; printf("%d %d", i[0], i[19]);'
-# runtest '17 42' 'int i[20]; int *p=i; p[0]=17; p[1]=17; printf("%d %d", *p, p[1]);'
+/bin/echo -e '\nArray...'
+runtest '17' 'int i[20]; printf("17");'
+runtest '17 42' 'int i[20]; i[0]=17; i[19]=42; printf("%d %d", i[0], i[19]);'
+runtest '17 42' 'int i[20]; int *p=i; p[0]=17; p[1]=42; printf("%d %d", *p, p[1]);'
 
 rm -f tmp$$ tmp$$.o
 echo
