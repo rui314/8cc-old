@@ -168,13 +168,7 @@ static void pop_scope(ReadContext *ctx) {
     list_pop(ctx->scope);
 }
 
-static Block *push_block(ReadContext *ctx) {
-    Block *r = make_block();
-    list_push(ctx->blockstack, r);
-    return r;
-}
-
-static void push_block1(ReadContext *ctx, Block *block) {
+static void push_block(ReadContext *ctx, Block *block) {
     list_push(ctx->blockstack, block);
 }
 
@@ -998,13 +992,13 @@ static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
 
     emit(ctx, make_inst4(OP_IF, rv(ctx, condvar), then, els, cont));
 
-    push_block1(ctx, then);
+    push_block(ctx, then);
     Var *v0 = read_logor_expr(ctx);
     emit(ctx, make_inst2(OP_ASSIGN, r, v0));
     pop_block(ctx);
     expect(ctx, ':');
 
-    push_block1(ctx, els);
+    push_block(ctx, els);
     Var *v1 = read_logor_expr(ctx);
     emit(ctx, make_inst2(OP_ASSIGN, r, v1));
     pop_block(ctx);
@@ -1286,26 +1280,24 @@ static void read_declaration(ReadContext *ctx) {
  *     "if" "(" expression ")" statement "else" statement
  */
 static void read_if_stmt(ReadContext *ctx) {
-    Block *then, *els;
+    Block *then = make_block();
+    Block *els = make_block();
+    Block *cont = make_block();
     expect(ctx, '(');
     Var *cond = read_comma_expr(ctx);
     expect(ctx, ')');
 
-    push_block(ctx);
-    read_stmt(ctx);
-    then = pop_block(ctx);
-
-    Token *tok = read_token(ctx);
-    if (IS_KEYWORD(tok, KEYWORD_ELSE)) {
-        push_block(ctx);
-        read_stmt(ctx);
-        els = pop_block(ctx);
-    } else {
-        unget_token(ctx, tok);
-        els = NULL;
-    }
-    Block *cont = make_block();
     emit(ctx, make_inst4(OP_IF, rv(ctx, cond), then, els, cont));
+
+    push_block(ctx, then);
+    read_stmt(ctx);
+    pop_block(ctx);
+
+    if (next_token_is(ctx, KEYWORD_ELSE)) {
+        push_block(ctx, els);
+        read_stmt(ctx);
+        pop_block(ctx);
+    }
     replace_block(ctx, cont);
 }
 
@@ -1332,13 +1324,13 @@ static void read_for_stmt(ReadContext *ctx) {
 
     emit(ctx, make_inst1(OP_JMP, cond));
 
-    push_block1(ctx, cond);
+    push_block(ctx, cond);
     Var *condvar = read_comma_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
     pop_block(ctx);
     expect(ctx, ';');
 
-    push_block1(ctx, mod);
+    push_block(ctx, mod);
     read_comma_expr(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_block(ctx);
@@ -1348,7 +1340,7 @@ static void read_for_stmt(ReadContext *ctx) {
     Block *orig_oncontinue = ctx->oncontinue;
     ctx->onbreak = cont;
     ctx->oncontinue = mod;
-    push_block1(ctx, body);
+    push_block(ctx, body);
     read_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, mod));
     pop_block(ctx);
@@ -1370,7 +1362,7 @@ static void read_while_stmt(ReadContext *ctx) {
     emit(ctx, make_inst1(OP_JMP, cond));
 
     expect(ctx, '(');
-    push_block1(ctx, cond);
+    push_block(ctx, cond);
     Var *condvar = read_comma_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
     pop_block(ctx);
@@ -1380,7 +1372,7 @@ static void read_while_stmt(ReadContext *ctx) {
     Block *orig_oncontinue = ctx->oncontinue;
     ctx->oncontinue = cond;
     ctx->onbreak = cont;
-    push_block1(ctx, body);
+    push_block(ctx, body);
     read_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_block(ctx);
@@ -1406,7 +1398,7 @@ static void read_do_stmt(ReadContext *ctx) {
     Block *orig_oncontinue = ctx->oncontinue;
     ctx->oncontinue = body;
     ctx->onbreak = cont;
-    push_block1(ctx, body);
+    push_block(ctx, body);
     read_stmt(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_block(ctx);
@@ -1415,7 +1407,7 @@ static void read_do_stmt(ReadContext *ctx) {
 
     expect(ctx, KEYWORD_WHILE);
     expect(ctx, '(');
-    push_block1(ctx, cond);
+    push_block(ctx, cond);
     Var *condvar = read_comma_expr(ctx);
     emit(ctx, make_inst4(OP_IF, condvar, body, NULL, cont));
     pop_block(ctx);
@@ -1452,7 +1444,7 @@ static void process_label(ReadContext *ctx, Token *tok) {
         return;
     for (int i = 0; i < LIST_LEN(tbf); i++) {
         Block *block = LIST_ELEM(tbf, i);
-        push_block1(ctx, block);
+        push_block(ctx, block);
         emit(ctx, make_inst1(OP_JMP, cont));
         pop_block(ctx);
     }
@@ -1657,7 +1649,7 @@ static Function *read_func_declaration(ReadContext *ctx) {
 
     Block *epilogue = make_block();
     emit(ctx, make_inst1(OP_JMP, epilogue));
-    push_block1(ctx, epilogue);
+    push_block(ctx, epilogue);
     emit(ctx, make_inst1(OP_RETURN, make_imm(CTYPE_INT, (Cvalue)0)));
     pop_block(ctx);
 
