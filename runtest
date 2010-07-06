@@ -129,6 +129,13 @@ runtest '-1 -2' 'printf("%d %d", ~0, ~1);'
 runtest '-1 -2' 'int i=0; int j=1; printf("%d %d", ~i, ~j);'
 
 #
+# "&" operator
+#
+/bin/echo -e '\n& operator...'
+runtest '20' 'printf("%d", 30&21);'
+runtest '20' 'int i=30; i&=21; printf("%d", i);'
+
+#
 # "^" operator
 #
 /bin/echo -e '\n^ operator...'

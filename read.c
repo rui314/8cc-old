@@ -262,6 +262,7 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
         return r;
     case '^':
     case '*':
+    case '&':
     case '/': {
         Var *r = make_var(make_ctype(CTYPE_INT));
         emit(ctx, make_inst3(op, r, v0, v1));
@@ -1017,6 +1018,8 @@ static int prec(Token *tok) {
         return 6;
     case KEYWORD_EQ: case KEYWORD_NE:
         return 7;
+    case '&':
+        return 8;
     case '^':
         return 9;
     case KEYWORD_LOG_AND:
@@ -1173,6 +1176,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v0 = v1;
             break;
         case '+': case '-': case '*': case '/': case '^':
+        case '&':
             v0 = emit_arith(ctx, tok->val.k, v0, v1);
             break;
         case KEYWORD_EQ:
@@ -1192,6 +1196,8 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             op = '*'; goto assign_op;
         case KEYWORD_A_DIV:
             op = '/'; goto assign_op;
+        case KEYWORD_A_AND:
+            op = '&'; goto assign_op;
         case KEYWORD_A_XOR:
             op = '^'; goto assign_op;
         assign_op:

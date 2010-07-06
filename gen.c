@@ -412,6 +412,17 @@ static void handle_neg(Context *ctx, Inst *inst) {
     save_rax(ctx, dst);
 }
 
+static void handle_and(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    Var *src0 = LIST_ELEM(inst->args, 1);
+    Var *src1 = LIST_ELEM(inst->args, 2);
+    load_rax(ctx, src0);
+    load_r11(ctx, src1);
+    // AND rax, r11
+    o3(ctx->text, 0xd8214c);
+    save_rax(ctx, dst);
+}
+
 static void handle_xor(Context *ctx, Inst *inst) {
     Var *dst = LIST_ELEM(inst->args, 0);
     Var *src0 = LIST_ELEM(inst->args, 1);
@@ -578,6 +589,9 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case '~':
             handle_neg(ctx, inst);
+            break;
+        case '&':
+            handle_and(ctx, inst);
             break;
         case OP_LE:
             handle_less_equal(ctx, inst);
