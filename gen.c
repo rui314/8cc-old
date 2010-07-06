@@ -400,6 +400,15 @@ static void handle_less_equal(Context *ctx, Inst *inst) {
     store_rax(ctx, dst);
 }
 
+static void handle_neg(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    Var *src = LIST_ELEM(inst->args, 1);
+    emit_load(ctx, src);
+    // NOT eax
+    o2(ctx->text, 0xd0f7);
+    store_rax(ctx, dst);
+}
+
 static void handle_assign(Context *ctx, Inst *inst) {
     Var *var = LIST_ELEM(inst->args, 0);
     Var *val = LIST_ELEM(inst->args, 1);
@@ -556,6 +565,9 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case '<':
             handle_less(ctx, inst);
+            break;
+        case '~':
+            handle_neg(ctx, inst);
             break;
         case OP_LE:
             handle_less_equal(ctx, inst);

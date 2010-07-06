@@ -686,7 +686,7 @@ Token *read_token(ReadContext *ctx) {
             }
             unreadc(c1, file);
             goto read_equal;
-        case '*': case '%': case '&': case '^': case '~':
+        case '*': case '%': case '&': case '~': case '^':
         case '<': case '>': case '!':
         read_equal:
             c1 = readc(file);
@@ -914,36 +914,46 @@ static Var *read_unary_expr(ReadContext *ctx) {
         unget_token(ctx, tok);
         return read_postfix_expr(ctx);
     }
-    if (IS_KEYWORD(tok, '(')) {
+    switch (tok->val.k) {
+    case '(': {
         Var *r = read_comma_expr(ctx);
         expect(ctx, ')');
         return r;
     }
-    if (IS_KEYWORD(tok, '*')) {
-        Var *pointed = read_cast_expr(ctx);
-        return make_lvalue(rv(ctx, pointed));
+    case '*': {
+        Var *pointed = rv(ctx, read_cast_expr(ctx));
+        return make_lvalue(pointed);
     }
-    if (IS_KEYWORD(tok, '&')) {
-        Var *v = read_cast_expr(ctx);
+    case '&': {
+        Var *v = rv(ctx, read_cast_expr(ctx));
         Var *ptr = make_var(make_ctype_ptr(v->ctype));
-        emit(ctx, make_inst2(OP_ADDRESS, ptr, rv(ctx, v)));
+        emit(ctx, make_inst2(OP_ADDRESS, ptr, v));
         return ptr;
     }
-    if (IS_KEYWORD(tok, '!')) {
-        Var *v = read_cast_expr(ctx);
+    case '!': {
+        Var *v = rv(ctx, read_cast_expr(ctx));
         Var *r = make_var(make_ctype(CTYPE_INT));
-        emit(ctx, make_inst2('!', r, rv(ctx, v)));
+        emit(ctx, make_inst2('!', r, v));
         return r;
     }
-    if (IS_KEYWORD(tok, KEYWORD_INC) || IS_KEYWORD(tok, KEYWORD_DEC)) {
+    case '~': {
+        Var *v = rv(ctx, read_cast_expr(ctx));
+        Var *r = make_var(v->ctype);
+        emit(ctx, make_inst2('~', r, v));
+        return r;
+    }
+    case KEYWORD_INC:
+    case KEYWORD_DEC: {
         Var *v = read_cast_expr(ctx);
         ensure_lvalue(v);
-        char op = IS_KEYWORD(tok, KEYWORD_INC) ? '+' : '-';
+        char op = tok->val.k == KEYWORD_INC ? '+' : '-';
         Var *tmp = emit_arith(ctx, op, rv(ctx, v), make_imm(CTYPE_INT, (Cvalue)1));
         emit_assign(ctx, v, tmp);
         return v;
     }
-    error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
+    default:
+        error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
+    }
 }
 
 /*
@@ -971,7 +981,7 @@ static int prec(Token *tok) {
         return -1;
     switch (tok->val.k) {
     case '[': return 1;
-    case KEYWORD_INC: case KEYWORD_DEC:
+    case KEYWORD_INC: case KEYWORD_DEC: case '~':
         return 2;
     case '*': case '/': case '%': return 3;
     case '+': case '-': return 4;
