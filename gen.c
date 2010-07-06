@@ -349,6 +349,19 @@ static void handle_idiv(Context *ctx, Inst *inst) {
     store_rax(ctx, LIST_ELEM(inst->args, 0));
 }
 
+static void handle_not(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    Var *src = LIST_ELEM(inst->args, 1);
+    emit_load(ctx, src);
+    // TEST eax, eax
+    o2(ctx->text, 0xc085);
+    // SETE al
+    o3(ctx->text, 0xc0940f);
+    // MOVZBL eax, al
+    o3(ctx->text, 0xc0b60f);
+    store_rax(ctx, dst);
+}
+
 static void emit_cmp(Context *ctx, Inst *inst) {
     Var *src0 = LIST_ELEM(inst->args, 1);
     Var *src1 = LIST_ELEM(inst->args, 2);
@@ -537,6 +550,9 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case '/':
             handle_idiv(ctx, inst);
+            break;
+        case '!':
+            handle_not(ctx, inst);
             break;
         case '<':
             handle_less(ctx, inst);

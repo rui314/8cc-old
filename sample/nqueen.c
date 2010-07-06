@@ -13,20 +13,20 @@ print_board(int *board) {
     }
 }
 
-safe(int *board, int row, int col) {
+conflict(int *board, int row, int col) {
     int i;
     for (i = 0; i < row; i++) {
         if (board[i * 8 + col])
-            return 0;
+            return 1;
         int j = row - i;
         if (0 <= (col - j))
             if (board[i * 8 + col - j])
-                return 0;
+                return 1;
         if ((col + j) < 8)
             if (board[i * 8 + col + j])
-                return 0;
+                return 1;
     }
-    return 1;
+    return 0;
 }
 
 solve(int *board, int row) {
@@ -37,7 +37,7 @@ solve(int *board, int row) {
     }
     int i;
     for (i = 0; i < 8; i++) {
-        if (safe(board, row, i)) {
+        if (!conflict(board, row, i)) {
             board[row * 8 + i] = 1;
             solve(board, row + 1);
         }
@@ -48,9 +48,8 @@ solve(int *board, int row) {
 main() {
     int board[64];
     int i;
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < 64; i++)
         board[i] = 0;
-    }
     solve(board, 0);
     return 0;
 }

@@ -928,6 +928,12 @@ static Var *read_unary_expr(ReadContext *ctx) {
         emit(ctx, make_inst2(OP_ADDRESS, ptr, rv(ctx, v)));
         return ptr;
     }
+    if (IS_KEYWORD(tok, '!')) {
+        Var *v = read_cast_expr(ctx);
+        Var *r = make_var(make_ctype(CTYPE_INT));
+        emit(ctx, make_inst2('!', r, rv(ctx, v)));
+        return r;
+    }
     if (IS_KEYWORD(tok, KEYWORD_INC) || IS_KEYWORD(tok, KEYWORD_DEC)) {
         Var *v = read_cast_expr(ctx);
         ensure_lvalue(v);

@@ -6,9 +6,9 @@ fail=0
 
 runtest_int() {
     /bin/echo -En "  $2 ... "
-    echo "$3" | ./8cc - tmp$$.o
-    gcc -o tmp$$ tmp$$.o
-    local result="`./tmp$$`"
+    echo "$3" | ./8cc - tmpTEST$$.o
+    gcc -o tmpTEST$$ tmpTEST$$.o
+    local result="`./tmpTEST$$`"
     if [ "$result" = "$1" ]; then
 	echo $1
     else
@@ -108,6 +108,15 @@ runtest 'true'  'int i=5; int j=5; if (i==j) { printf("true"); } else { printf("
 runtest 'false' 'int i=3; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
 
 #
+# "!" operator
+#
+/bin/echo -e '\n! operator...'
+runtest '1' 'int i=0; printf("%d", !i);'
+runtest '0' 'int i=1; printf("%d", !i);'
+runtest '0' 'int i=0; printf("%d", !!i);'
+runtest '1' 'int i=9; printf("%d", !!i);'
+
+#
 # comparison operators
 #
 /bin/echo -e '\nComparison operators...'
@@ -188,7 +197,7 @@ runtest '17' 'int i[20]; printf("17");'
 runtest '17 42' 'int i[20]; i[0]=17; i[19]=42; printf("%d %d", i[0], i[19]);'
 runtest '17 42' 'int i[20]; int *p=i; p[0]=17; p[1]=42; printf("%d %d", *p, p[1]);'
 
-rm -f tmp$$ tmp$$.o
+rm -f tmpTEST$$ tmpTEST$$.o
 echo
 if [ $fail -gt 0 ]; then
     echo "Test failure(s): $fail";
