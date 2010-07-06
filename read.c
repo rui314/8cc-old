@@ -134,6 +134,10 @@ static Function *make_function(String *name, List *params, Block *entry) {
     return r;
 }
 
+static void ensure_lvalue(Var *var) {
+    return;
+}
+
 /*============================================================
  * Basic block
  */
@@ -222,7 +226,7 @@ static Var *rv(ReadContext *ctx, Var *v) {
     return r;
 }
 
-Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
+static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
     Var *ptr_size = make_imm(CTYPE_INT, (Cvalue)8);
     switch (op) {
     case '+': {
@@ -265,6 +269,33 @@ Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
     default:
         error("[internal error] unsupported operator: %c", op);
     }
+}
+
+static void emit_assign(ReadContext *ctx, Var *v0, Var *v1) {
+    ensure_lvalue(v0);
+    if (v0->loc) {
+        emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, rv(ctx, v1)));
+        v0 = rv(ctx, v0);
+    } else {
+        emit(ctx, make_inst2(OP_ASSIGN, v0, rv(ctx, v1)));
+    }
+}
+
+static Var *emit_post_inc_dec(ReadContext *ctx, Var *var, int op) {
+    ensure_lvalue(var);
+    Var *copy = make_var(var->ctype);
+    emit(ctx, make_inst2(OP_ASSIGN, copy, var));
+    Var *tmp = emit_arith(ctx, op, rv(ctx, var), make_imm(CTYPE_INT, (Cvalue)1));
+    emit_assign(ctx, var, tmp);
+    return copy;
+}
+
+static Var *emit_post_inc(ReadContext *ctx, Var *var) {
+    return emit_post_inc_dec(ctx, var, '+');
+}
+
+static Var *emit_post_dec(ReadContext *ctx, Var *var) {
+    return emit_post_inc_dec(ctx, var, '-');
 }
 
 /*============================================================
@@ -636,9 +667,28 @@ Token *read_token(ReadContext *ctx) {
                 return read_token(ctx);
             }
             unreadc(c1, file);
-            // FALL THROUGH
-        case '+': case '-': case '*': case '%': case '&':
-        case '^': case '~': case '<': case '>':
+            goto read_equal;
+        case '+':
+            c1 = readc(file);
+            if (c1 == '+') {
+                r->toktype = TOKTYPE_KEYWORD;
+                r->val.k = KEYWORD_INC;
+                return r;
+            }
+            unreadc(c1, file);
+            goto read_equal;
+        case '-':
+            c1 = readc(file);
+            if (c1 == '-') {
+                r->toktype = TOKTYPE_KEYWORD;
+                r->val.k = KEYWORD_DEC;
+                return r;
+            }
+            unreadc(c1, file);
+            goto read_equal;
+        case '*': case '%': case '&': case '^': case '~':
+        case '<': case '>':
+        read_equal:
             c1 = readc(file);
             if (c1 == '=') {
                 r->toktype = TOKTYPE_KEYWORD;
@@ -878,11 +928,15 @@ static Var *read_unary_expr(ReadContext *ctx) {
         emit(ctx, make_inst2(OP_ADDRESS, ptr, rv(ctx, v)));
         return ptr;
     }
+    if (IS_KEYWORD(tok, KEYWORD_INC) || IS_KEYWORD(tok, KEYWORD_DEC)) {
+        Var *v = read_cast_expr(ctx);
+        ensure_lvalue(v);
+        char op = IS_KEYWORD(tok, KEYWORD_INC) ? '+' : '-';
+        Var *tmp = emit_arith(ctx, op, rv(ctx, v), make_imm(CTYPE_INT, (Cvalue)1));
+        emit_assign(ctx, v, tmp);
+        return v;
+    }
     error("expected unary, but got '%s'", STRING_BODY(tok->val.str));
-}
-
-static void ensure_lvalue(Var *var) {
-    return;
 }
 
 /*
@@ -910,6 +964,8 @@ static int prec(Token *tok) {
         return -1;
     switch (tok->val.k) {
     case '[': return 1;
+    case KEYWORD_INC: case KEYWORD_DEC:
+        return 2;
     case '*': case '/': case '%': return 3;
     case '+': case '-': return 4;
     case '<': case '>': case KEYWORD_GE: case KEYWORD_LE:
@@ -932,6 +988,7 @@ static bool is_rassoc(Token *tok) {
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
     case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
     case KEYWORD_A_XOR: case KEYWORD_A_NOT: case '=': case '?':
+    case KEYWORD_INC:   case KEYWORD_DEC:
         return true;
     default: return false;
     }
@@ -1022,6 +1079,14 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v0 = read_subscript_expr(ctx, v0);
             continue;
         }
+        if (IS_KEYWORD(tok, KEYWORD_INC)) {
+            v0 = emit_post_inc(ctx, v0);
+            continue;
+        }
+        if (IS_KEYWORD(tok, KEYWORD_DEC)) {
+            v0 = emit_post_dec(ctx, v0);
+            continue;
+        }
         if (IS_KEYWORD(tok, '?')) {
             v0 = read_cond_expr(ctx, v0);
             v0 = rv(ctx, v0);
@@ -1036,15 +1101,8 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             }
             v1 = read_expr1(ctx, v1, prec2);
         }
-
         if (IS_KEYWORD(tok, '=')) {
-            ensure_lvalue(v0);
-            if (v0->loc) {
-                emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, rv(ctx, v1)));
-                v0 = rv(ctx, v0);
-            } else {
-                emit(ctx, make_inst2(OP_ASSIGN, v0, rv(ctx, v1)));
-            }
+            emit_assign(ctx, v0, v1);
             continue;
         }
 

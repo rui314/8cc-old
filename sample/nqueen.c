@@ -1,8 +1,8 @@
 print_board(int *board) {
     int i;
     int j;
-    for (i = 0; i < 8; i = i + 1) {
-        for (j = 0; j < 8; j = j + 1) {
+    for (i = 0; i < 8; i++) {
+        for (j = 0; j < 8; j++) {
             if (board[i * 8 + j]) {
                 printf("Q ");
             } else {
@@ -15,7 +15,7 @@ print_board(int *board) {
 
 safe(int *board, int row, int col) {
     int i;
-    for (i = 0; i < row; i = i + 1) {
+    for (i = 0; i < row; i++) {
         if (board[i * 8 + col])
             return 0;
         int j = row - i;
@@ -36,7 +36,7 @@ solve(int *board, int row) {
         return;
     }
     int i;
-    for (i = 0; i < 8; i = i + 1) {
+    for (i = 0; i < 8; i++) {
         if (safe(board, row, i)) {
             board[row * 8 + i] = 1;
             solve(board, row + 1);
@@ -48,7 +48,7 @@ solve(int *board, int row) {
 main() {
     int board[64];
     int i;
-    for (i = 0; i < 64; i = i + 1) {
+    for (i = 0; i < 64; i++) {
         board[i] = 0;
     }
     solve(board, 0);
