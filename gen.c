@@ -427,6 +427,28 @@ static void handle_and(Context *ctx, Inst *inst) {
     handle_inst3(ctx, inst, 0xd8214c);
 }
 
+static void handle_shift(Context *ctx, Inst *inst, u64 op) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    Var *src0 = LIST_ELEM(inst->args, 1);
+    Var *src1 = LIST_ELEM(inst->args, 2);
+    load_rax(ctx, src1);
+    // MOV ecx, eax
+    o2(ctx->text, 0xc189);
+    load_rax(ctx, src0);
+    o3(ctx->text, op);
+    save_rax(ctx, dst);
+}
+
+static void handle_shl(Context *ctx, Inst *inst) {
+    // SHL rax, cl
+    handle_shift(ctx, inst, 0xe0d348);
+}
+
+static void handle_shr(Context *ctx, Inst *inst) {
+    // SHR rax, cl
+    handle_shift(ctx, inst, 0xe8d348);
+}
+
 static void handle_or(Context *ctx, Inst *inst) {
     // OR rax, r11
     handle_inst3(ctx, inst, 0xd8094c);
@@ -598,6 +620,12 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case '&':
             handle_and(ctx, inst);
+            break;
+        case OP_SHL:
+            handle_shl(ctx, inst);
+            break;
+        case OP_SHR:
+            handle_shr(ctx, inst);
             break;
         case OP_LE:
             handle_less_equal(ctx, inst);

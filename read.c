@@ -699,6 +699,14 @@ Token *read_token(ReadContext *ctx) {
                 return read_token(ctx);
             }
             goto read_equal;
+        case '<':
+            if (next_char_is(ctx->file, '<'))
+                c = KEYWORD_LSH;
+            goto read_equal;
+        case '>':
+            if (next_char_is(ctx->file, '>'))
+                c = KEYWORD_RSH;
+            goto read_equal;
         case '+':
             if (next_char_is(ctx->file, '+'))
                 return make_keyword(ctx, KEYWORD_INC);
@@ -715,8 +723,7 @@ Token *read_token(ReadContext *ctx) {
             if (next_char_is(ctx->file, '|'))
                 return make_keyword(ctx, KEYWORD_LOG_OR);
             goto read_equal;
-        case '*': case '%': case '~': case '^':
-        case '<': case '>': case '!':
+        case '*': case '%': case '~': case '^': case '!':
         read_equal:
             if (next_char_is(ctx->file, '=')) {
                 int k = c == '+' ? KEYWORD_A_ADD
@@ -730,6 +737,8 @@ Token *read_token(ReadContext *ctx) {
                     : c == '<' ? KEYWORD_LE
                     : c == '>' ? KEYWORD_GE
                     : c == '!' ? KEYWORD_NE
+                    : c == KEYWORD_LSH ? KEYWORD_A_LSH
+                    : c == KEYWORD_RSH ? KEYWORD_A_RSH
                     : (error("[internal error] unknown op: %c", c), 1);
                 return make_keyword(ctx, k);
             }
@@ -1013,6 +1022,8 @@ static int prec(Token *tok) {
         return 3;
     case '+': case '-':
         return 4;
+    case KEYWORD_LSH: case KEYWORD_RSH:
+        return 5;
     case '<': case '>': case KEYWORD_GE: case KEYWORD_LE:
         return 6;
     case KEYWORD_EQ: case KEYWORD_NE:
@@ -1031,7 +1042,8 @@ static int prec(Token *tok) {
         return 13;
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
     case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
-    case KEYWORD_A_OR:  case KEYWORD_A_XOR: case '=':
+    case KEYWORD_A_OR:  case KEYWORD_A_XOR: case KEYWORD_A_LSH:
+    case KEYWORD_A_RSH: case '=':
         return 14;
     case ',':
         return 15;
@@ -1170,7 +1182,6 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
 
         v0 = rv(ctx, v0);
         v1 = rv(ctx, v1);
-        Var *tmp = make_var(make_ctype(CTYPE_INT));
         int op;
         switch (tok->val.k) {
         case ',':
@@ -1187,9 +1198,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case KEYWORD_NE:
             op = OP_NE; goto cmp;
         cmp:
-            tmp = make_var(make_ctype(CTYPE_INT));
-            emit(ctx, make_inst3(op, tmp, v0, v1));
-            v0 = tmp;
+            v0 = emit_inst3(ctx, op, v0, v1);
             break;
         case KEYWORD_A_ADD:
             op = '+'; goto assign_arith_op;
@@ -1209,6 +1218,10 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             op = '|'; goto assign_op;
         case KEYWORD_A_XOR:
             op = '^'; goto assign_op;
+        case KEYWORD_A_LSH:
+            op = OP_SHL; goto assign_op;
+        case KEYWORD_A_RSH:
+            op = OP_SHR; goto assign_op;
         assign_op:
             ensure_lvalue(v0);
             emit(ctx, make_inst3(op, v0, v0, v1));
@@ -1217,21 +1230,25 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             SWAP(Var *, v0, v1);
             // FALL THROUGH
         case '<':
-            emit(ctx, make_inst3('<', tmp, v0, v1));
-            v0 = tmp;
+            v0 = emit_inst3(ctx, '<', v0, v1);
             break;
         case KEYWORD_GE:
             SWAP(Var *, v0, v1);
             // FALL THROUGH
         case KEYWORD_LE:
-            emit(ctx, make_inst3(OP_LE, tmp, v0, v1));
-            v0 = tmp;
+            v0 = emit_inst3(ctx, OP_LE, v0, v1);
             break;
         case KEYWORD_LOG_AND:
             v0 = emit_log_and(ctx, v0, v1);
             break;
         case KEYWORD_LOG_OR:
             v0 = emit_log_or(ctx, v0, v1);
+            break;
+        case KEYWORD_LSH:
+            v0 = emit_inst3(ctx, OP_SHL, v0, v1);
+            break;
+        case KEYWORD_RSH:
+            v0 = emit_inst3(ctx, OP_SHR, v0, v1);
             break;
         default:
             error("unsupported operator: %c", tok->val.k);

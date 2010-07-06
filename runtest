@@ -150,6 +150,17 @@ runtest '4' 'printf("%d", 7^3);'
 runtest '7' 'int i=4; i^=3; printf("%d", i);'
 
 #
+# Shift operators
+#
+/bin/echo -e '\nShift operators...'
+runtest '1' 'printf("%d", 1<<0);'
+runtest '4' 'printf("%d", 1<<2);'
+runtest '1' 'printf("%d", 1>>0);'
+runtest '1' 'printf("%d", 4>>2);'
+runtest '16' 'int i=4; i<<=2; printf("%d", i);'
+runtest '2' 'int i=8; i>>=2; printf("%d", i);'
+
+#
 # comparison operators
 #
 /bin/echo -e '\nComparison operators...'

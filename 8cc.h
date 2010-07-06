@@ -330,6 +330,8 @@ typedef enum KeywordType {
     KEYWORD_A_AND,
     KEYWORD_A_OR,
     KEYWORD_A_XOR,
+    KEYWORD_A_LSH,
+    KEYWORD_A_RSH,
     KEYWORD_EQ,
     KEYWORD_NE,
     KEYWORD_GE,
@@ -338,6 +340,8 @@ typedef enum KeywordType {
     KEYWORD_DEC,
     KEYWORD_LOG_AND,
     KEYWORD_LOG_OR,
+    KEYWORD_LSH,
+    KEYWORD_RSH,
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
@@ -445,6 +449,8 @@ enum {
     OP_EQ,
     OP_NE,
     OP_RETURN,
+    OP_SHL,
+    OP_SHR,
 };
 
 typedef struct Inst {
