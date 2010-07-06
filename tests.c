@@ -255,7 +255,7 @@ static void test_read_keywords_int(ReadContext *ctx, int type) {
 }
 
 static void test_read_keywords(void) {
-    FILE *stream = create_file("int float ( ) { } ! = == ++ --");
+    FILE *stream = create_file("int float ( ) { } ! = ^ == ++ --");
     File *file = make_file(stream, "-");
     ReadContext *ctx = make_read_context(file, NULL);
 
@@ -267,6 +267,7 @@ static void test_read_keywords(void) {
     test_read_keywords_int(ctx, '}');
     test_read_keywords_int(ctx, '!');
     test_read_keywords_int(ctx, '=');
+    test_read_keywords_int(ctx, '^');
     test_read_keywords_int(ctx, KEYWORD_EQ);
     test_read_keywords_int(ctx, KEYWORD_INC);
     test_read_keywords_int(ctx, KEYWORD_DEC);

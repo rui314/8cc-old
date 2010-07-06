@@ -260,7 +260,8 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
         Var *r = make_var(make_ctype(CTYPE_INT));
         emit(ctx, make_inst3('-', r, v0, v1));
         return r;
-    case '*': // FALL THROUGH
+    case '^':
+    case '*':
     case '/': {
         Var *r = make_var(make_ctype(CTYPE_INT));
         emit(ctx, make_inst3(op, r, v0, v1));
@@ -989,6 +990,7 @@ static int prec(Token *tok) {
         return 6;
     case KEYWORD_EQ: case KEYWORD_NE:
         return 7;
+    case '^': return 9;
     case '?': return 13;
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
     case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
@@ -1127,35 +1129,36 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         v0 = rv(ctx, v0);
         v1 = rv(ctx, v1);
         Var *tmp = make_var(make_ctype(CTYPE_INT));
+        int op;
         switch (tok->val.k) {
         case ',':
             v0 = v1;
             break;
-        case '+': case '-': case '*': case '/':
+        case '+': case '-': case '*': case '/': case '^':
             v0 = emit_arith(ctx, tok->val.k, v0, v1);
             break;
         case KEYWORD_EQ:
+            op = OP_EQ; goto cmp;
         case KEYWORD_NE:
+            op = OP_NE; goto cmp;
+        cmp:
             tmp = make_var(make_ctype(CTYPE_INT));
-            int op = tok->val.k == KEYWORD_EQ ? OP_EQ : OP_NE;
             emit(ctx, make_inst3(op, tmp, v0, v1));
             v0 = tmp;
             break;
         case KEYWORD_A_ADD:
-            ensure_lvalue(v0);
-            emit(ctx, make_inst3('+', v0, v0, v1));
-            break;
+            op = '+'; goto assign_op;
         case KEYWORD_A_SUB:
-            ensure_lvalue(v0);
-            emit(ctx, make_inst3('-', v0, v0, v1));
-            break;
+            op = '-'; goto assign_op;
         case KEYWORD_A_MUL:
-            ensure_lvalue(v0);
-            emit(ctx, make_inst3('*', v0, v0, v1));
-            break;
+            op = '*'; goto assign_op;
         case KEYWORD_A_DIV:
+            op = '/'; goto assign_op;
+        case KEYWORD_A_XOR:
+            op = '^'; goto assign_op;
+        assign_op:
             ensure_lvalue(v0);
-            emit(ctx, make_inst3('/', v0, v0, v1));
+            emit(ctx, make_inst3(op, v0, v0, v1));
             break;
         case '>':
             SWAP(Var *, v0, v1);

@@ -129,6 +129,13 @@ runtest '-1 -2' 'printf("%d %d", ~0, ~1);'
 runtest '-1 -2' 'int i=0; int j=1; printf("%d %d", ~i, ~j);'
 
 #
+# "^" operator
+#
+/bin/echo -e '\n^ operator...'
+runtest '4' 'printf("%d", 7^3);'
+runtest '7' 'int i=4; i^=3; printf("%d", i);'
+
+#
 # comparison operators
 #
 /bin/echo -e '\nComparison operators...'
