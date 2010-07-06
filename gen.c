@@ -492,10 +492,6 @@ static void handle_if(Context *ctx, Inst *inst) {
     Block *then = LIST_ELEM(inst->args, 1);
     Block *els = LIST_ELEM(inst->args, 2);
     Block *cont = LIST_ELEM(inst->args, 3);
-    if (cond->stype == VAR_IMM) {
-        handle_block(ctx, cond->val.i ? then : els);
-        return;
-    }
     load_rax(ctx, cond);
 
     // TEST rax, rax
@@ -589,9 +585,6 @@ static void handle_block(Context *ctx, Block *block) {
         case OP_FUNC_CALL:
             handle_func_call(ctx, inst);
             break;
-        case OP_IF:
-            handle_if(ctx, inst);
-            break;
         case OP_EQ:
             handle_equal(ctx, inst, true);
             break;
@@ -610,6 +603,9 @@ static void handle_block(Context *ctx, Block *block) {
         case OP_ASSIGN_DEREF:
             handle_assign_deref(ctx, inst);
             break;
+        case OP_IF:
+            handle_if(ctx, inst);
+            return; // return here
         case OP_JMP:
             handle_jmp(ctx, inst);
             return; // return here

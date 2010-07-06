@@ -299,6 +299,26 @@ static Var *emit_post_dec(ReadContext *ctx, Var *var) {
     return emit_post_inc_dec(ctx, var, '-');
 }
 
+static Var *emit_log_or(ReadContext *ctx, Var *v0, Var *v1)  {
+    Block *then = make_block();
+    Block *els = pop_block(ctx);
+    Block *cont = make_block();
+    Var *r = make_var(make_ctype(CTYPE_INT));
+
+    emit(ctx, make_inst4(OP_IF, rv(ctx, v0), then, els, cont));
+
+    push_block(ctx, then);
+    emit(ctx, make_inst2(OP_ASSIGN, r, v0));
+    pop_block(ctx);
+
+    push_block(ctx, els);
+    emit(ctx, make_inst2(OP_ASSIGN, r, v1));
+    pop_block(ctx);
+
+    replace_block(ctx, cont);
+    return r;
+}
+
 /*============================================================
  * Parser
  */
@@ -678,7 +698,11 @@ Token *read_token(ReadContext *ctx) {
             if (next_char_is(ctx->file, '-'))
                 return make_keyword(ctx, KEYWORD_DEC);
             goto read_equal;
-        case '*': case '%': case '&': case '~': case '^':
+        case '|':
+            if (next_char_is(ctx->file, '|'))
+                return make_keyword(ctx, KEYWORD_LOG_OR);
+            goto read_equal;
+        case '*': case '%': case '~': case '&': case '^':
         case '<': case '>': case '!':
         read_equal:
             if (next_char_is(ctx->file, '=')) {
@@ -697,7 +721,7 @@ Token *read_token(ReadContext *ctx) {
             }
             // FALL THROUGH
         case '(': case ')': case ',': case ';': case '[': case ']':
-        case '{': case '}': case '|': case ':': case '?':
+        case '{': case '}': case ':': case '?':
             return make_keyword(ctx, c);
         case EOF:
             return NULL;
@@ -977,6 +1001,7 @@ static int prec(Token *tok) {
     case KEYWORD_EQ: case KEYWORD_NE:
         return 7;
     case '^': return 9;
+    case KEYWORD_LOG_OR: return 12;
     case '?': return 13;
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
     case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
@@ -1098,6 +1123,9 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v0 = rv(ctx, v0);
             continue;
         }
+        if (IS_KEYWORD(tok, KEYWORD_LOG_OR)) {
+            push_block(ctx, make_block());
+        }
         Var *v1 = read_unary_expr(ctx);
         for (;;) {
             Token *tok1 = peek_token(ctx);
@@ -1159,6 +1187,9 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case KEYWORD_LE:
             emit(ctx, make_inst3(OP_LE, tmp, v0, v1));
             v0 = tmp;
+            break;
+        case KEYWORD_LOG_OR:
+            v0 = emit_log_or(ctx, v0, v1);
             break;
         default:
             error("unsupported operator: %c", tok->val.k);

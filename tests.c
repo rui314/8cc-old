@@ -169,6 +169,7 @@ static void test_file_next_char_is(void) {
     FILE *stream = create_file("ab");
     File *file = make_file(stream, "-");
     EQ(false, next_char_is(file, 'b'));
+    EQ(false, next_char_is(file, 'b'));
     EQ(true,  next_char_is(file, 'a'));
     EQ(false, next_char_is(file, 'a'));
     EQ(true,  next_char_is(file, 'b'));
@@ -265,7 +266,7 @@ static void test_read_char(void) {
     } while (0)
 
 static void test_read_keywords(void) {
-    FILE *stream = create_file("int float ( ) { } ! = ^ == ++ --");
+    FILE *stream = create_file("int float ( ) { } ! = ^ == ++ -- ||");
     File *file = make_file(stream, "-");
     ReadContext *ctx = make_read_context(file, NULL);
 
@@ -281,6 +282,7 @@ static void test_read_keywords(void) {
     TEST_READ_KEYWORDS(ctx, KEYWORD_EQ);
     TEST_READ_KEYWORDS(ctx, KEYWORD_INC);
     TEST_READ_KEYWORDS(ctx, KEYWORD_DEC);
+    TEST_READ_KEYWORDS(ctx, KEYWORD_LOG_OR);
 }
 
 static void test_read_unget_token(void) {
