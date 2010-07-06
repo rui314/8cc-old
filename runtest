@@ -136,6 +136,13 @@ runtest '20' 'printf("%d", 30&21);'
 runtest '20' 'int i=30; i&=21; printf("%d", i);'
 
 #
+# "|" operator
+#
+/bin/echo -e '\n| operator...'
+runtest '30' 'printf("%d", 20|26);'
+runtest '30' 'int i=20; i|=26; printf("%d", i);'
+
+#
 # "^" operator
 #
 /bin/echo -e '\n^ operator...'

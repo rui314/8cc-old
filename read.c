@@ -260,17 +260,15 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
         Var *r = make_var(make_ctype(CTYPE_INT));
         emit(ctx, make_inst3('-', r, v0, v1));
         return r;
-    case '^':
-    case '*':
-    case '&':
-    case '/': {
-        Var *r = make_var(make_ctype(CTYPE_INT));
-        emit(ctx, make_inst3(op, r, v0, v1));
-        return r;
-    }
     default:
         error("[internal error] unsupported operator: %c", op);
     }
+}
+
+static Var *emit_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
+    Var *r = make_var(make_ctype(CTYPE_INT));
+    emit(ctx, make_inst3(op, r, v0, v1));
+    return r;
 }
 
 static void emit_assign(ReadContext *ctx, Var *v0, Var *v1) {
@@ -727,6 +725,7 @@ Token *read_token(ReadContext *ctx) {
                     : c == '/' ? KEYWORD_A_DIV
                     : c == '%' ? KEYWORD_A_MOD
                     : c == '&' ? KEYWORD_A_AND
+                    : c == '|' ? KEYWORD_A_OR
                     : c == '^' ? KEYWORD_A_XOR
                     : c == '<' ? KEYWORD_LE
                     : c == '>' ? KEYWORD_GE
@@ -1022,6 +1021,8 @@ static int prec(Token *tok) {
         return 8;
     case '^':
         return 9;
+    case '|':
+        return 10;
     case KEYWORD_LOG_AND:
         return 11;
     case KEYWORD_LOG_OR:
@@ -1030,7 +1031,7 @@ static int prec(Token *tok) {
         return 13;
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
     case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
-    case KEYWORD_A_XOR: case '=':
+    case KEYWORD_A_OR:  case KEYWORD_A_XOR: case '=':
         return 14;
     case ',':
         return 15;
@@ -1175,9 +1176,11 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case ',':
             v0 = v1;
             break;
-        case '+': case '-': case '*': case '/': case '^':
-        case '&':
+        case '+': case '-':
             v0 = emit_arith(ctx, tok->val.k, v0, v1);
+            break;
+        case '*': case '/': case '^': case '&': case '|':
+            v0 = emit_inst3(ctx, tok->val.k, v0, v1);
             break;
         case KEYWORD_EQ:
             op = OP_EQ; goto cmp;
@@ -1189,15 +1192,21 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v0 = tmp;
             break;
         case KEYWORD_A_ADD:
-            op = '+'; goto assign_op;
+            op = '+'; goto assign_arith_op;
         case KEYWORD_A_SUB:
-            op = '-'; goto assign_op;
+            op = '-'; goto assign_arith_op;
+        assign_arith_op:
+            ensure_lvalue(v0);
+            emit_assign(ctx, v0, emit_arith(ctx, op, v0, v1));
+            break;
         case KEYWORD_A_MUL:
             op = '*'; goto assign_op;
         case KEYWORD_A_DIV:
             op = '/'; goto assign_op;
         case KEYWORD_A_AND:
             op = '&'; goto assign_op;
+        case KEYWORD_A_OR:
+            op = '|'; goto assign_op;
         case KEYWORD_A_XOR:
             op = '^'; goto assign_op;
         assign_op:

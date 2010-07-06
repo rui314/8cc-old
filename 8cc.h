@@ -328,6 +328,7 @@ typedef enum KeywordType {
     KEYWORD_A_DIV,
     KEYWORD_A_MOD,
     KEYWORD_A_AND,
+    KEYWORD_A_OR,
     KEYWORD_A_XOR,
     KEYWORD_EQ,
     KEYWORD_NE,

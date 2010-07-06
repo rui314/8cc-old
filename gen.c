@@ -412,26 +412,29 @@ static void handle_neg(Context *ctx, Inst *inst) {
     save_rax(ctx, dst);
 }
 
-static void handle_and(Context *ctx, Inst *inst) {
+static void handle_inst3(Context *ctx, Inst *inst, u64 op) {
     Var *dst = LIST_ELEM(inst->args, 0);
     Var *src0 = LIST_ELEM(inst->args, 1);
     Var *src1 = LIST_ELEM(inst->args, 2);
     load_rax(ctx, src0);
     load_r11(ctx, src1);
-    // AND rax, r11
-    o3(ctx->text, 0xd8214c);
+    o3(ctx->text, op);
     save_rax(ctx, dst);
 }
 
+static void handle_and(Context *ctx, Inst *inst) {
+    // AND rax, r11
+    handle_inst3(ctx, inst, 0xd8214c);
+}
+
+static void handle_or(Context *ctx, Inst *inst) {
+    // OR rax, r11
+    handle_inst3(ctx, inst, 0xd8094c);
+}
+
 static void handle_xor(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
-    load_rax(ctx, src0);
-    load_r11(ctx, src1);
-    // XOR eax, r11
-    o3(ctx->text, 0xd8314c);
-    save_rax(ctx, dst);
+    // XOR rax, r11
+    handle_inst3(ctx, inst, 0xd8314c);
 }
 
 static void handle_assign(Context *ctx, Inst *inst) {
@@ -580,6 +583,9 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case '!':
             handle_not(ctx, inst);
+            break;
+        case '|':
+            handle_or(ctx, inst);
             break;
         case '^':
             handle_xor(ctx, inst);
