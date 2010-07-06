@@ -159,14 +159,24 @@ runtest '0' 'int i=1; int j=i-1?i+1:i-1; printf("%d", j);'
 runtest '-1' 'int i=0; int j=i?i+1:i-1; printf("%d", j);'
 
 #
+# && operator
+#
+/bin/echo -e '\n&& operator...'
+runtest 'ab' '1 && printf("a"); printf("b");'
+runtest 'b' '0 && printf("a"); printf("b");'
+runtest '3' 'int i = 1 && 3; printf("%d", i);'
+runtest '0' 'int i = 5 && 3 && 0; printf("%d", i);'
+runtest '0' 'int i = 0 && 0; printf("%d", i);'
+
+#
 # || operator
 #
 /bin/echo -e '\n|| operator...'
 runtest 'b' '1 || printf("a"); printf("b");'
 runtest 'ab' '0 || printf("a"); printf("b");'
-runtest '1' 'int i= 1 || 3; printf("%d", i);'
-runtest '3' 'int i= 0 || 3 || 5; printf("%d", 3);'
-runtest '0' 'int i= 0 || 0; printf("%d", i);'
+runtest '1' 'int i = 1 || 3; printf("%d", i);'
+runtest '3' 'int i = 0 || 3 || 5; printf("%d", i);'
+runtest '0' 'int i = 0 || 0; printf("%d", i);'
 
 #
 # "++" and "--" operators

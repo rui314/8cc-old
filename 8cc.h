@@ -335,6 +335,7 @@ typedef enum KeywordType {
     KEYWORD_LE,
     KEYWORD_INC,
     KEYWORD_DEC,
+    KEYWORD_LOG_AND,
     KEYWORD_LOG_OR,
 } KeywordType;
 

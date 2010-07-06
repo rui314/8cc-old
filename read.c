@@ -299,13 +299,11 @@ static Var *emit_post_dec(ReadContext *ctx, Var *var) {
     return emit_post_inc_dec(ctx, var, '-');
 }
 
-static Var *emit_log_or(ReadContext *ctx, Var *v0, Var *v1)  {
-    Block *then = make_block();
-    Block *els = pop_block(ctx);
+static Var *emit_log_and_or(ReadContext *ctx, Var *condvar, Var *v0, Var *v1, Block *then, Block *els) {
     Block *cont = make_block();
     Var *r = make_var(make_ctype(CTYPE_INT));
 
-    emit(ctx, make_inst4(OP_IF, rv(ctx, v0), then, els, cont));
+    emit(ctx, make_inst4(OP_IF, rv(ctx, condvar), then, els, cont));
 
     push_block(ctx, then);
     emit(ctx, make_inst2(OP_ASSIGN, r, v0));
@@ -317,6 +315,18 @@ static Var *emit_log_or(ReadContext *ctx, Var *v0, Var *v1)  {
 
     replace_block(ctx, cont);
     return r;
+}
+
+static Var *emit_log_and(ReadContext *ctx, Var *v0, Var *v1) {
+    Block *then = pop_block(ctx);
+    Block *els = make_block();
+    return emit_log_and_or(ctx, v0, v1, v0, then, els);
+}
+
+static Var *emit_log_or(ReadContext *ctx, Var *v0, Var *v1) {
+    Block *then = make_block();
+    Block *els = pop_block(ctx);
+    return emit_log_and_or(ctx, v0, v0, v1, then, els);
 }
 
 /*============================================================
@@ -698,11 +708,15 @@ Token *read_token(ReadContext *ctx) {
             if (next_char_is(ctx->file, '-'))
                 return make_keyword(ctx, KEYWORD_DEC);
             goto read_equal;
+        case '&':
+            if (next_char_is(ctx->file, '&'))
+                return make_keyword(ctx, KEYWORD_LOG_AND);
+            goto read_equal;
         case '|':
             if (next_char_is(ctx->file, '|'))
                 return make_keyword(ctx, KEYWORD_LOG_OR);
             goto read_equal;
-        case '*': case '%': case '~': case '&': case '^':
+        case '*': case '%': case '~': case '^':
         case '<': case '>': case '!':
         read_equal:
             if (next_char_is(ctx->file, '=')) {
@@ -991,24 +1005,34 @@ static int prec(Token *tok) {
     if (tok->toktype != TOKTYPE_KEYWORD)
         return -1;
     switch (tok->val.k) {
-    case '[': return 1;
+    case '[':
+        return 1;
     case KEYWORD_INC: case KEYWORD_DEC: case '~':
         return 2;
-    case '*': case '/': case '%': return 3;
-    case '+': case '-': return 4;
+    case '*': case '/': case '%':
+        return 3;
+    case '+': case '-':
+        return 4;
     case '<': case '>': case KEYWORD_GE: case KEYWORD_LE:
         return 6;
     case KEYWORD_EQ: case KEYWORD_NE:
         return 7;
-    case '^': return 9;
-    case KEYWORD_LOG_OR: return 12;
-    case '?': return 13;
+    case '^':
+        return 9;
+    case KEYWORD_LOG_AND:
+        return 11;
+    case KEYWORD_LOG_OR:
+        return 12;
+    case '?':
+        return 13;
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
     case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
     case KEYWORD_A_XOR: case '=':
         return 14;
-    case ',': return 15;
-    default: return -1;
+    case ',':
+        return 15;
+    default:
+        return -1;
     }
 }
 
@@ -1123,7 +1147,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v0 = rv(ctx, v0);
             continue;
         }
-        if (IS_KEYWORD(tok, KEYWORD_LOG_OR)) {
+        if (IS_KEYWORD(tok, KEYWORD_LOG_AND) || IS_KEYWORD(tok, KEYWORD_LOG_OR)) {
             push_block(ctx, make_block());
         }
         Var *v1 = read_unary_expr(ctx);
@@ -1187,6 +1211,9 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case KEYWORD_LE:
             emit(ctx, make_inst3(OP_LE, tmp, v0, v1));
             v0 = tmp;
+            break;
+        case KEYWORD_LOG_AND:
+            v0 = emit_log_and(ctx, v0, v1);
             break;
         case KEYWORD_LOG_OR:
             v0 = emit_log_or(ctx, v0, v1);

@@ -19,12 +19,10 @@ conflict(int *board, int row, int col) {
         if (board[i * 8 + col])
             return 1;
         int j = row - i;
-        if (0 <= (col - j))
-            if (board[i * 8 + col - j])
-                return 1;
-        if ((col + j) < 8)
-            if (board[i * 8 + col + j])
-                return 1;
+        if (0 <= (col - j) && board[i * 8 + col - j])
+            return 1;
+        if ((col + j) < 8 && board[i * 8 + col + j])
+            return 1;
     }
     return 0;
 }
