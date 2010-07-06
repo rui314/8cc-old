@@ -649,7 +649,7 @@ Token *read_token(ReadContext *ctx) {
             c1 = readc(file);
             if (c1 == '=') {
                 r->toktype = TOKTYPE_KEYWORD;
-                r->val.k = KEYWORD_EQUAL;
+                r->val.k = KEYWORD_EQ;
                 return r;
             }
             unreadc(c1, file);
@@ -687,7 +687,7 @@ Token *read_token(ReadContext *ctx) {
             unreadc(c1, file);
             goto read_equal;
         case '*': case '%': case '&': case '^': case '~':
-        case '<': case '>':
+        case '<': case '>': case '!':
         read_equal:
             c1 = readc(file);
             if (c1 == '=') {
@@ -701,13 +701,14 @@ Token *read_token(ReadContext *ctx) {
                     : c == '^' ? KEYWORD_A_XOR
                     : c == '<' ? KEYWORD_LE
                     : c == '>' ? KEYWORD_GE
-                    : KEYWORD_A_NOT;
+                    : c == '!' ? KEYWORD_NE
+                    : (error("[internal error] unknown op: %c", c), 1);
                 return r;
             }
             unreadc(c1, file);
             // FALL THROUGH
-        case '!': case '(': case ')': case ',': case ';': case '[':
-        case ']': case '{': case '}': case '|': case ':': case '?':
+        case '(': case ')': case ',': case ';': case '[': case ']':
+        case '{': case '}': case '|': case ':': case '?':
             r->toktype = TOKTYPE_KEYWORD;
             r->val.k = c;
             return r;
@@ -976,11 +977,12 @@ static int prec(Token *tok) {
     case '+': case '-': return 4;
     case '<': case '>': case KEYWORD_GE: case KEYWORD_LE:
         return 6;
-    case KEYWORD_EQUAL: return 7;
+    case KEYWORD_EQ: case KEYWORD_NE:
+        return 7;
     case '?': return 13;
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
     case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
-    case KEYWORD_A_XOR: case KEYWORD_A_NOT: case '=':
+    case KEYWORD_A_XOR: case '=':
         return 14;
     case ',': return 15;
     default: return -1;
@@ -993,8 +995,8 @@ static bool is_rassoc(Token *tok) {
     switch (tok->val.k) {
     case KEYWORD_A_ADD: case KEYWORD_A_SUB: case KEYWORD_A_MUL:
     case KEYWORD_A_DIV: case KEYWORD_A_MOD: case KEYWORD_A_AND:
-    case KEYWORD_A_XOR: case KEYWORD_A_NOT: case '=': case '?':
-    case KEYWORD_INC:   case KEYWORD_DEC:
+    case KEYWORD_A_XOR: case KEYWORD_INC:   case KEYWORD_DEC:
+    case '=': case '?':
         return true;
     default: return false;
     }
@@ -1122,9 +1124,11 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case '+': case '-': case '*': case '/':
             v0 = emit_arith(ctx, tok->val.k, v0, v1);
             break;
-        case KEYWORD_EQUAL:
+        case KEYWORD_EQ:
+        case KEYWORD_NE:
             tmp = make_var(make_ctype(CTYPE_INT));
-            emit(ctx, make_inst3(OP_EQUAL, tmp, v0, v1));
+            int op = tok->val.k == KEYWORD_EQ ? OP_EQ : OP_NE;
+            emit(ctx, make_inst3(op, tmp, v0, v1));
             v0 = tmp;
             break;
         case KEYWORD_A_ADD:

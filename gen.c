@@ -426,11 +426,11 @@ static void handle_assign(Context *ctx, Inst *inst) {
     }
 }
 
-static void handle_equal(Context *ctx, Inst *inst) {
+static void handle_equal(Context *ctx, Inst *inst, bool eq) {
     Var *dst = LIST_ELEM(inst->args, 0);
     emit_cmp(ctx, inst);
-    // SETE al
-    o3(ctx->text, 0xc0940f);
+    // SETE al or SETNE al
+    o3(ctx->text, eq ? 0xc0940f : 0xc0950f);
     // MOVZX eax, al
     o3(ctx->text, 0xc0b60f);
     store_rax(ctx, dst);
@@ -566,8 +566,11 @@ static void handle_block(Context *ctx, Block *block) {
         case OP_IF:
             handle_if(ctx, inst);
             break;
-        case OP_EQUAL:
-            handle_equal(ctx, inst);
+        case OP_EQ:
+            handle_equal(ctx, inst, true);
+            break;
+        case OP_NE:
+            handle_equal(ctx, inst, false);
             break;
         case OP_ADDRESS:
             handle_address(ctx, inst);

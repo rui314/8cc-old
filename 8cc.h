@@ -317,7 +317,6 @@ typedef enum KeywordType {
     KEYWORD_FOR,
     KEYWORD_WHILE,
     KEYWORD_DO,
-    KEYWORD_EQUAL,
     KEYWORD_BREAK,
     KEYWORD_CONTINUE,
     KEYWORD_GOTO,
@@ -329,7 +328,8 @@ typedef enum KeywordType {
     KEYWORD_A_MOD,
     KEYWORD_A_AND,
     KEYWORD_A_XOR,
-    KEYWORD_A_NOT,
+    KEYWORD_EQ,
+    KEYWORD_NE,
     KEYWORD_GE,
     KEYWORD_LE,
     KEYWORD_INC,
@@ -438,7 +438,8 @@ enum {
     OP_FUNC_CALL = 256,
     OP_IF,
     OP_JMP,
-    OP_EQUAL,
+    OP_EQ,
+    OP_NE,
     OP_RETURN,
 };
 

@@ -99,13 +99,18 @@ runtest '321' 'int i=3; do { printf("%d", i); i=i-1;} while (i);'
 runtest '321' 'int i=3; do   printf("%d", i), i=i-1;  while (i);'
 
 #
-# "==" operator
+# "==" and "!=" operators
 #
-/bin/echo -e '\n== operator...'
+/bin/echo -e '\n== and != operators...'
 runtest '1' 'int i=5; int j=5; int k=i==j; printf("%d", k);'
 runtest '0' 'int i=3; int j=5; int k=i==j; printf("%d", k);'
 runtest 'true'  'int i=5; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
 runtest 'false' 'int i=3; int j=5; if (i==j) { printf("true"); } else { printf("false"); }'
+# "!="
+runtest '0' 'int i=5; int j=5; int k=i!=j; printf("%d", k);'
+runtest '1' 'int i=3; int j=5; int k=i!=j; printf("%d", k);'
+runtest 'false' 'int i=5; int j=5; if (i!=j) { printf("true"); } else { printf("false"); }'
+runtest 'true'  'int i=3; int j=5; if (i!=j) { printf("true"); } else { printf("false"); }'
 
 #
 # "!" operator
