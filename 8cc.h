@@ -285,6 +285,7 @@ extern File *make_file(FILE *stream, char *filename);
 extern File *open_file(char *path);
 extern void unreadc(int c, File *file);
 extern int readc(File *file);
+extern bool next_char_is(File *file, int c);
 
 /*
  * Parser

@@ -6,3 +6,5 @@ tmp*
 *#
 .#*
 nqueen
+*.orig
+*.rej

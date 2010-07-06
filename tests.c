@@ -165,6 +165,15 @@ static void test_file_unreadc(void) {
     EQ(1, file->column);
 }
 
+static void test_file_next_char_is(void) {
+    FILE *stream = create_file("ab");
+    File *file = make_file(stream, "-");
+    EQ(false, next_char_is(file, 'b'));
+    EQ(true,  next_char_is(file, 'a'));
+    EQ(false, next_char_is(file, 'a'));
+    EQ(true,  next_char_is(file, 'b'));
+}
+
 static void test_file_simple(void) {
     char *data = "ab\nc\r\r\nd\r";
     FILE *stream = create_file(data);
@@ -248,29 +257,30 @@ static void test_read_char(void) {
     EQ('\x3f', read_token(ctx)->val.c);
 }
 
-static void test_read_keywords_int(ReadContext *ctx, int type) {
-    Token *tok = read_token(ctx);
-    EQ(TOKTYPE_KEYWORD, tok->toktype);
-    EQ(tok->val.k, type);
-}
+#define TEST_READ_KEYWORDS(ctx_, type_)    \
+    do {                                   \
+        Token *tok = read_token(ctx_);     \
+        EQ(TOKTYPE_KEYWORD, tok->toktype); \
+        EQ(tok->val.k, type_);             \
+    } while (0)
 
 static void test_read_keywords(void) {
     FILE *stream = create_file("int float ( ) { } ! = ^ == ++ --");
     File *file = make_file(stream, "-");
     ReadContext *ctx = make_read_context(file, NULL);
 
-    test_read_keywords_int(ctx, KEYWORD_INT);
-    test_read_keywords_int(ctx, KEYWORD_FLOAT);
-    test_read_keywords_int(ctx, '(');
-    test_read_keywords_int(ctx, ')');
-    test_read_keywords_int(ctx, '{');
-    test_read_keywords_int(ctx, '}');
-    test_read_keywords_int(ctx, '!');
-    test_read_keywords_int(ctx, '=');
-    test_read_keywords_int(ctx, '^');
-    test_read_keywords_int(ctx, KEYWORD_EQ);
-    test_read_keywords_int(ctx, KEYWORD_INC);
-    test_read_keywords_int(ctx, KEYWORD_DEC);
+    TEST_READ_KEYWORDS(ctx, KEYWORD_INT);
+    TEST_READ_KEYWORDS(ctx, KEYWORD_FLOAT);
+    TEST_READ_KEYWORDS(ctx, '(');
+    TEST_READ_KEYWORDS(ctx, ')');
+    TEST_READ_KEYWORDS(ctx, '{');
+    TEST_READ_KEYWORDS(ctx, '}');
+    TEST_READ_KEYWORDS(ctx, '!');
+    TEST_READ_KEYWORDS(ctx, '=');
+    TEST_READ_KEYWORDS(ctx, '^');
+    TEST_READ_KEYWORDS(ctx, KEYWORD_EQ);
+    TEST_READ_KEYWORDS(ctx, KEYWORD_INC);
+    TEST_READ_KEYWORDS(ctx, KEYWORD_DEC);
 }
 
 static void test_read_unget_token(void) {
@@ -285,9 +295,9 @@ static void test_read_unget_token(void) {
     unget_token(ctx, t1);
     unget_token(ctx, t0);
 
-    test_read_keywords_int(ctx, KEYWORD_INT);
-    test_read_keywords_int(ctx, KEYWORD_FLOAT);
-    test_read_keywords_int(ctx, '(');
+    TEST_READ_KEYWORDS(ctx, KEYWORD_INT);
+    TEST_READ_KEYWORDS(ctx, KEYWORD_FLOAT);
+    TEST_READ_KEYWORDS(ctx, '(');
 }
 
 /*
@@ -304,6 +314,7 @@ int main(int argc, char **argv) {
 
     test_file_simple();
     test_file_unreadc();
+    test_file_next_char_is();
     test_file_backslash_at_eol();
 
     test_read_comment();

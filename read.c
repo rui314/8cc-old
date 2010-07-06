@@ -311,6 +311,24 @@ static Token *make_token(ReadContext *ctx) {
     return r;
 }
 
+static Token *make_token1(ReadContext *ctx, TokType toktype, TokenValue val) {
+    Token *r = malloc(sizeof(Token));
+    r->toktype = toktype;
+    r->val = val;
+    r->line = ctx->file->line;
+    r->column = ctx->file->column;
+    return r;
+}
+
+static Token *make_keyword(ReadContext *ctx, int k) {
+    Token *r = malloc(sizeof(Token));
+    r->toktype = TOKTYPE_KEYWORD;
+    r->val.k = k;
+    r->line = ctx->file->line;
+    r->column = ctx->file->column;
+    return r;
+}
+
 static void skip_comment(File *file) {
     int line = file->line;
     int column = file->column;
@@ -587,7 +605,6 @@ void unget_token(ReadContext *ctx, Token *tok) {
 }
 
 Token *read_token(ReadContext *ctx) {
-    Token *r = make_token(ctx);
     if (!LIST_IS_EMPTY(ctx->ungotten))
         return list_pop(ctx->ungotten);
 
@@ -604,13 +621,10 @@ Token *read_token(ReadContext *ctx) {
             unreadc(c, file);
             return read_num(ctx);
         case '"':
-            r->toktype = TOKTYPE_STRING;
-            r->val.str = read_str(file);
-            return r;
+            return make_token1(ctx, TOKTYPE_STRING, (TokenValue)read_str(file));
         case '\'': {
-            r->toktype = TOKTYPE_CHAR;
-            r->val.c = read_char(file);
-            int c1 = read_char(file);
+            Token *r = make_token1(ctx, TOKTYPE_CHAR, (TokenValue)read_char(file));
+            c1 = read_char(file);
             if (c1 != '\'')
                 error("single quote expected, but got %c", c1);
             return r;
@@ -624,11 +638,9 @@ Token *read_token(ReadContext *ctx) {
         case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W':
         case 'X': case 'Y': case 'Z': case '_':
             str = read_word(file, c);
-#define KEYWORD(type_, val_)                                    \
-            if (!strcmp(STRING_BODY(str), (type_))) {           \
-                r->toktype = TOKTYPE_KEYWORD;                   \
-                r->val.k = (val_);                              \
-                return r;                                       \
+#define KEYWORD(type_, val_)                                            \
+            if (!strcmp(STRING_BODY(str), (type_))) {                   \
+                return make_keyword(ctx, (val_)); \
             }
             KEYWORD("const", KEYWORD_CONST);
             KEYWORD("int",   KEYWORD_INT);
@@ -643,57 +655,34 @@ Token *read_token(ReadContext *ctx) {
             KEYWORD("goto",  KEYWORD_GOTO);
             KEYWORD("return", KEYWORD_RETURN);
 #undef KEYWORD
-            r->toktype = TOKTYPE_IDENT;
-            r->val.str = str;
-            return r;
+            return make_token1(ctx, TOKTYPE_IDENT, (TokenValue)str);
         case '=':
-            c1 = readc(file);
-            if (c1 == '=') {
-                r->toktype = TOKTYPE_KEYWORD;
-                r->val.k = KEYWORD_EQ;
-                return r;
-            }
-            unreadc(c1, file);
-            r->toktype = TOKTYPE_KEYWORD;
-            r->val.k = '=';
-            return r;
+            if (next_char_is(ctx->file, '='))
+                return make_keyword(ctx, KEYWORD_EQ);
+            return make_keyword(ctx, '=');
         case '/':
-            c1 = readc(file);
-            if (c1 == '*') {
+            if (next_char_is(ctx->file, '*')) {
                 skip_comment(file);
                 return read_token(ctx);
             }
-            if (c1 == '/') {
+            if (next_char_is(ctx->file, '/')) {
                 skip_line_comment(file);
                 return read_token(ctx);
             }
-            unreadc(c1, file);
             goto read_equal;
         case '+':
-            c1 = readc(file);
-            if (c1 == '+') {
-                r->toktype = TOKTYPE_KEYWORD;
-                r->val.k = KEYWORD_INC;
-                return r;
-            }
-            unreadc(c1, file);
+            if (next_char_is(ctx->file, '+'))
+                return make_keyword(ctx, KEYWORD_INC);
             goto read_equal;
         case '-':
-            c1 = readc(file);
-            if (c1 == '-') {
-                r->toktype = TOKTYPE_KEYWORD;
-                r->val.k = KEYWORD_DEC;
-                return r;
-            }
-            unreadc(c1, file);
+            if (next_char_is(ctx->file, '-'))
+                return make_keyword(ctx, KEYWORD_DEC);
             goto read_equal;
         case '*': case '%': case '&': case '~': case '^':
         case '<': case '>': case '!':
         read_equal:
-            c1 = readc(file);
-            if (c1 == '=') {
-                r->toktype = TOKTYPE_KEYWORD;
-                r->val.k = c == '+' ? KEYWORD_A_ADD
+            if (next_char_is(ctx->file, '=')) {
+                int k = c == '+' ? KEYWORD_A_ADD
                     : c == '-' ? KEYWORD_A_SUB
                     : c == '*' ? KEYWORD_A_MUL
                     : c == '/' ? KEYWORD_A_DIV
@@ -704,15 +693,12 @@ Token *read_token(ReadContext *ctx) {
                     : c == '>' ? KEYWORD_GE
                     : c == '!' ? KEYWORD_NE
                     : (error("[internal error] unknown op: %c", c), 1);
-                return r;
+                return make_keyword(ctx, k);
             }
-            unreadc(c1, file);
             // FALL THROUGH
         case '(': case ')': case ',': case ';': case '[': case ']':
         case '{': case '}': case '|': case ':': case '?':
-            r->toktype = TOKTYPE_KEYWORD;
-            r->val.k = c;
-            return r;
+            return make_keyword(ctx, c);
         case EOF:
             return NULL;
         default:

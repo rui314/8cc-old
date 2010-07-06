@@ -72,6 +72,17 @@ void unreadc(int c, File *file) {
     file->eof_flag = false;
 }
 
+/*
+ * Consume next character iff the same as a given charcter.
+ */
+bool next_char_is(File *file, int c) {
+    int c1 = readc(file);
+    if (c == c1)
+        return true;
+    unreadc(c1, file);
+    return false;
+}
+
 static void next_line(File *file, int c) {
     file->line++;
     file->last_column = file->column;
