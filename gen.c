@@ -79,7 +79,7 @@ Section *find_section(Elf *elf, char *name) {
         if (!strcmp(sect->name, name))
             return sect;
     }
-    error("cannot find section '%s'", name);
+    panic("cannot find section '%s'", name);
     return NULL;
 }
 
@@ -247,7 +247,7 @@ static void handle_func_call(Context *ctx, Inst *inst) {
                 o4(ctx->text, off);
                 break;
             }
-            error("unsupported type: %d", var->ctype->type);
+            panic("unsupported type: %d", var->ctype->type);
         case VAR_IMM:
             switch (var->ctype->type) {
             case CTYPE_PTR:
@@ -269,10 +269,12 @@ static void handle_func_call(Context *ctx, Inst *inst) {
                 double tmp = var->val.f;
                 o8(data->body, *(u64 *)&tmp);
                 break;
+            default:
+                panic("unsupported ctype: %d\n", var->ctype->type);
             }
             break;
         default:
-            error("unsupported var type: %c\n", var->stype);
+            panic("unsupported var type: %c\n", var->stype);
         }
     }
     if (!dict_get(ctx->elf->syms, fn->name)) {

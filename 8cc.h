@@ -120,11 +120,18 @@
 #define R_X86_64_8 14
 #define R_X86_64_PC8 15
 
+#ifdef __GNUC__
+# define ATTRIBUTE(x) __attribute__(x)
+#else
+# define ATTRIBUTE(x)
+#endif
+
 /*
  * Common
  */
-extern __attribute__((noreturn)) void error(char *format, ...);
+extern ATTRIBUTE((noreturn)) void error(char *format, ...);
 extern void warn(char *format, ...);
+#define panic(fmt, ...) (error("[INTERNAL ERROR] Line %d: " fmt, __LINE__, ##__VA_ARGS__), 1)
 
 /*
  * Byte String
@@ -298,7 +305,15 @@ typedef union Cvalue {
 } Cvalue;
 
 typedef enum CtypeEnum {
-    CTYPE_PTR, CTYPE_ARRAY, CTYPE_INT, CTYPE_CHAR, CTYPE_FLOAT,
+    CTYPE_PTR,
+    CTYPE_ARRAY,
+    CTYPE_LLONG,
+    CTYPE_LONG,
+    CTYPE_INT,
+    CTYPE_SHORT,
+    CTYPE_CHAR,
+    CTYPE_DOUBLE,
+    CTYPE_FLOAT,
 } CtypeEnum;
 
 typedef struct Ctype {

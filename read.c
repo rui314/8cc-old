@@ -188,7 +188,7 @@ static Block *replace_block(ReadContext *ctx, Block *block) {
 
 static void emit(ReadContext *ctx, Inst *inst) {
     if (LIST_LEN(ctx->blockstack) == 0)
-        error("[internal error] control block stack is empty");
+        panic("control block stack is empty");
     Block *block = LIST_BOTTOM(ctx->blockstack);
     list_push(block->code, inst);
 }
@@ -220,7 +220,7 @@ static Var *rv(ReadContext *ctx, Var *v) {
     if (!v->loc)
         return v;
     if (!v->loc->ctype->ptr)
-        error("[internal error] pointed variable is not a pointer?");
+        panic("pointed variable is not a pointer?");
     Var *r = make_var(v->loc->ctype->ptr);
     emit(ctx, make_inst2(OP_DEREF, r, v->loc));
     return r;
@@ -261,7 +261,7 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
         emit(ctx, make_inst3('-', r, v0, v1));
         return r;
     default:
-        error("[internal error] unsupported operator: %c", op);
+        panic("unsupported operator: %c", op);
     }
 }
 
@@ -739,7 +739,7 @@ Token *read_token(ReadContext *ctx) {
                     : c == '!' ? KEYWORD_NE
                     : c == KEYWORD_LSH ? KEYWORD_A_LSH
                     : c == KEYWORD_RSH ? KEYWORD_A_RSH
-                    : (error("[internal error] unknown op: %c", c), 1);
+                    : panic("unknown op: %c", c);
                 return make_keyword(ctx, k);
             }
             // FALL THROUGH
@@ -797,7 +797,7 @@ String *token_to_string(Token *tok) {
         ostr(r, buf);
         break;
     case TOKTYPE_INVALID:
-        error("[internal error] got TOKTYPE_INVALID");
+        panic("got TOKTYPE_INVALID");
     }
     return r;
 }
