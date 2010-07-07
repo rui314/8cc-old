@@ -131,7 +131,7 @@
  */
 extern ATTRIBUTE((noreturn)) void error(char *format, ...);
 extern void warn(char *format, ...);
-#define panic(fmt, ...) (error("[INTERNAL ERROR] Line %d: " fmt, __LINE__, ##__VA_ARGS__), 1)
+#define panic(fmt, ...) (error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__), 1)
 
 /*
  * Byte String
@@ -301,10 +301,12 @@ extern bool next_char_is(File *file, int c);
 typedef union Cvalue {
     char c;
     int i;
+    long l;
     float f;
 } Cvalue;
 
 typedef enum CtypeEnum {
+    CTYPE_INVALID,
     CTYPE_PTR,
     CTYPE_ARRAY,
     CTYPE_LLONG,
@@ -312,9 +314,21 @@ typedef enum CtypeEnum {
     CTYPE_INT,
     CTYPE_SHORT,
     CTYPE_CHAR,
+    CTYPE_ULLONG,
+    CTYPE_ULONG,
+    CTYPE_UINT,
+    CTYPE_USHORT,
+    CTYPE_UCHAR,
     CTYPE_DOUBLE,
     CTYPE_FLOAT,
 } CtypeEnum;
+
+#define UNSIGNED_TYPE(ctype_)                   \
+    ((ctype_)->type == CTYPE_ULLONG             \
+     || (ctype_)->type == CTYPE_ULONG           \
+     || (ctype_)->type == CTYPE_UINT            \
+     || (ctype_)->type == CTYPE_USHORT          \
+     || (ctype_)->type == CTYPE_CHAR)
 
 typedef struct Ctype {
     CtypeEnum type;
@@ -325,7 +339,12 @@ typedef struct Ctype {
 typedef enum KeywordType {
     KEYWORD_TYPE_BEGIN = 256,
     KEYWORD_CONST,
+    KEYWORD_SIGNED,
+    KEYWORD_UNSIGNED,
+    KEYWORD_CHAR,
+    KEYWORD_SHORT,
     KEYWORD_INT,
+    KEYWORD_LONG,
     KEYWORD_FLOAT,
     KEYWORD_TYPE_END,
     KEYWORD_IF,
@@ -484,5 +503,6 @@ extern Inst *make_inst2(int op, void *v0, void *v1);
 extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);
 extern Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v4);
 extern Inst *make_instn(int op, List *args);
+extern int type_bits(Ctype *ctype);
 
 #endif /* ECC_H */

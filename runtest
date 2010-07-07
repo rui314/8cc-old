@@ -29,6 +29,7 @@ runtest1() {
 # Basic tests
 #
 /bin/echo -e '\nBasic tests...'
+runtest '' '-1;'
 runtest 'Hello, world!' 'printf("Hello, world!");'
 runtest 'Hello, world!' 'printf("Hello, %s", "world!");'
 runtest '12.34 56.78 42' 'printf("%2.2f %2.2f %d", 12.34, 56.78, 42);'
@@ -172,6 +173,10 @@ runtest '1' 'int i=3; int j=5; printf("%d", i<=j);'
 runtest '0' 'int i=3; int j=5; printf("%d", i>=j);'
 runtest '1' 'int i=3; int j=3; printf("%d", i<=j);'
 runtest '1' 'int i=3; int j=3; printf("%d", i>=j);'
+runtest '0' 'printf("%d", 0<=-1);'
+runtest '1' 'printf("%d", -1<=0);'
+runtest '0' 'printf("%d", -1>=0);'
+runtest '1' 'printf("%d", 0>=-1);'
 
 #
 # "?:" operator
@@ -248,10 +253,10 @@ runtest1 '17 42' 'main() { int p[3]; p[0]=17; p[1]=42; bar(p); } bar(int *p) { p
 # Pointer operations
 #
 /bin/echo -e '\nPointer operations...'
-runtest '17' 'int i=17; int *j=&i; printf("%d", *j);'
-runtest '17' 'int i=17; int *j=&i; int **k=&j; printf("%d", **k);'
-runtest '42' 'int i=17; int *j=&i; *j=42; printf("%d", *j);'
-runtest '42' 'int i=17; int *j=&i; int **k=&j; **k=42; printf("%d", **k);'
+runtest '17' 'long i=17; long *j=&i; printf("%d", *j);'
+runtest '17' 'long i=17; long *j=&i; long **k=&j; printf("%d", **k);'
+runtest '42' 'long i=17; long *j=&i; *j=42; printf("%d", *j);'
+runtest '42' 'long i=17; long *j=&i; long **k=&j; **k=42; printf("%d", **k);'
 
 #
 # Array
@@ -260,6 +265,12 @@ runtest '42' 'int i=17; int *j=&i; int **k=&j; **k=42; printf("%d", **k);'
 runtest '17' 'int i[20]; printf("17");'
 runtest '17 42' 'int i[20]; i[0]=17; i[19]=42; printf("%d %d", i[0], i[19]);'
 runtest '17 42' 'int i[20]; int *p=i; p[0]=17; p[1]=42; printf("%d %d", *p, p[1]);'
+
+#
+# Pointer arithmetic
+#
+/bin/echo -e '\nPointer arithmetic...'
+runtest '17 42' 'int i[20]; i[0]=17; i[1]=42; int *j=i; printf("%d ", *j); j++; printf("%d", *j);'
 
 rm -f tmpTEST$$ tmpTEST$$.o
 echo

@@ -184,6 +184,20 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
     list_push(text->rels, rel);
 }
 
+
+int type_bits(Ctype *ctype) {
+    switch (ctype->type) {
+    case CTYPE_FLOAT: return 64;
+    case CTYPE_PTR:   return 64;
+    case CTYPE_ARRAY: return 64;
+    case CTYPE_LONG:  return 64;
+    case CTYPE_INT:   return 32;
+    case CTYPE_SHORT: return 16;
+    case CTYPE_CHAR:  return  8;
+    default: panic("unknown type: %d", ctype->type);
+    }
+}
+
 // MOV rdi/rsi/rdx/rcx/r8/r9, imm
 static u16 push_arg_imm[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
 
@@ -202,11 +216,33 @@ static void load_rax(Context *ctx, Var *var) {
         // MOV rax, imm
         o2(ctx->text, 0xb848);
         o8(ctx->text, var->val.i);
-    } else {
-        // MOV rax, [rbp+off]
-        int off = var_stack_pos(ctx, var);
-        o3(ctx->text, 0x858b48);
-        o4(ctx->text, off);
+        return;
+    }
+    int off = var_stack_pos(ctx, var);
+    int bits = type_bits(var->ctype);
+    // MOV rax/eax, [rbp+off]
+    if (bits == 64)
+        o1(ctx->text, 0x48);
+    o2(ctx->text, 0x858b);
+    o4(ctx->text, off);
+
+    if (UNSIGNED_TYPE(var->ctype))
+        return;
+    if (bits == 8) {
+        // MOVSX/MOVZX eax, al
+        if (UNSIGNED_TYPE(var->ctype))
+            o4(ctx->text, 0xc0be0f48);
+        else
+            o3(ctx->text, 0xc0b60f);
+    } else if (bits == 16) {
+        // MOVSXd/MOVZX eax, ax
+        if (UNSIGNED_TYPE(var->ctype))
+            o4(ctx->text, 0xc0bf0f48);
+        else
+            o3(ctx->text, 0xc0b70f);
+    } else if (bits == 32) {
+        // MOVSXD rax, eax
+        o3(ctx->text, 0xc06348);
     }
 }
 
@@ -215,18 +251,41 @@ static void load_r11(Context *ctx, Var *var) {
         // MOV r11, imm
         o2(ctx->text, 0xbb49);
         o8(ctx->text, var->val.i);
-    } else {
-        // MOV r11, [rbp+off]
-        int off = var_stack_pos(ctx, var);
-        o3(ctx->text, 0x9d8b4c);
-        o4(ctx->text, off);
+        return;
+    }
+    // MOV r11d, [rbp+off]
+    int off = var_stack_pos(ctx, var);
+    int bits = type_bits(var->ctype);
+    o1(ctx->text, (bits == 64) ? 0x4c : 0x44);
+    o2(ctx->text, 0x9d8b);
+    o4(ctx->text, off);
+
+    if (UNSIGNED_TYPE(var->ctype))
+        return;
+    if (bits == 8) {
+        // MOVSX/MOVZX r11d, r11b
+        o4(ctx->text, UNSIGNED_TYPE(var->ctype) ? 0xdbb60f45 : 0xdbbe0f4d);
+    } else if (bits == 16) {
+        // MOVSXD/MOVZX r11d, r11w
+        o4(ctx->text, UNSIGNED_TYPE(var->ctype) ? 0xdbb70f45 : 0xdbbf0f4d);
+    } else if (bits == 32) {
+        o3(ctx->text, 0xdb634d);
     }
 }
 
 static void save_rax(Context *ctx, Var *dst) {
     int off = var_stack_pos(ctx, dst);
-    // MOV [rbp+off], rax
-    o3(ctx->text, 0x858948);
+    int bits = type_bits(dst->ctype);
+    // MOV [rbp+off], rax/eax/ax/al
+    if (bits >= 64)
+        o3(ctx->text, 0x858948);
+    else if (bits == 32)
+        o2(ctx->text, 0x8589);
+    else if (bits == 16)
+        o3(ctx->text, 0x858966);
+    else if (bits == 8)
+        o2(ctx->text, 0x8588);
+    else panic("unknown variable size: %d", bits);
     o4(ctx->text, off);
 }
 
@@ -241,13 +300,19 @@ static void handle_func_call(Context *ctx, Inst *inst) {
         Var *var = LIST_ELEM(inst->args, i);
         switch (var->stype) {
         case VAR_GLOBAL:
-            if (var->ctype->type == CTYPE_INT || var->ctype->type == CTYPE_PTR) {
+            switch (var->ctype->type) {
+            case CTYPE_INT:
+            case CTYPE_LONG:
+            case CTYPE_PTR: {
                 int off = var_stack_pos(ctx, var);
                 o3(ctx->text, push_arg[gpr++]);
                 o4(ctx->text, off);
                 break;
             }
-            panic("unsupported type: %d", var->ctype->type);
+            default:
+                panic("unsupported type: %d", var->ctype->type);
+            }
+            break;
         case VAR_IMM:
             switch (var->ctype->type) {
             case CTYPE_PTR:
@@ -257,9 +322,10 @@ static void handle_func_call(Context *ctx, Inst *inst) {
                 o8(ctx->text, 0);
                 break;
             case CTYPE_INT:
+            case CTYPE_LONG:
             case CTYPE_CHAR:
                 o2(ctx->text, push_arg_imm[gpr++]);
-                o8(ctx->text, var->val.i);
+                o8(ctx->text, var->val.l);
                 break;
             case CTYPE_FLOAT:
                 align(data->body, 8);
@@ -309,19 +375,12 @@ static void finish_func_call(Elf *elf, Dict *func, List *tbf) {
 }
 
 static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
-    Var *v0 = LIST_ELEM(inst->args, 1);
-    load_rax(ctx, v0);
-    Var *v1 = LIST_ELEM(inst->args, 2);
-    if (v1->stype == VAR_IMM) {
-        // ADD/SUB rax, imm
-        o2(ctx->text, add ? 0x0548 : 0x2d48);
-        o4(ctx->text, v1->val.i);
-    } else {
-        int off = var_stack_pos(ctx, v1);
-        // ADD/SUB rax, [rbp-v1]
-        o3(ctx->text, add ? 0x850348 : 0x852b48);
-        o4(ctx->text, off);
-    }
+    Var *src0 = LIST_ELEM(inst->args, 1);
+    Var *src1 = LIST_ELEM(inst->args, 2);
+    load_rax(ctx, src0);
+    load_r11(ctx, src1);
+    // ADD/SUB rax, r11
+    o3(ctx->text, add ? 0xd8014c : 0xd8294c);
     save_rax(ctx, LIST_ELEM(inst->args, 0));
 }
 
@@ -329,16 +388,9 @@ static void handle_imul(Context *ctx, Inst *inst) {
     Var *src0 = LIST_ELEM(inst->args, 1);
     Var *src1 = LIST_ELEM(inst->args, 2);
     load_rax(ctx, src0);
-    if (src1->stype == VAR_IMM) {
-        // IMUL rax, imm, rax
-        o3(ctx->text, 0xc06948);
-        o4(ctx->text, src1->val.i);
-    } else {
-        int off = var_stack_pos(ctx, src1);
-        // IMUL rax, [rbp+off]
-        o4(ctx->text, 0x85af0f48);
-        o4(ctx->text, off);
-    }
+    load_r11(ctx, src1);
+    // IMUL rax, r11
+    o4(ctx->text, 0xc3af0f49);
     save_rax(ctx, LIST_ELEM(inst->args, 0));
 }
 
@@ -371,18 +423,9 @@ static void emit_cmp(Context *ctx, Inst *inst) {
     Var *src0 = LIST_ELEM(inst->args, 1);
     Var *src1 = LIST_ELEM(inst->args, 2);
     load_rax(ctx, src0);
-    if (src1->stype == VAR_IMM) {
-        // CMP rax, imm
-        o2(ctx->text, 0x3d48);
-        o4(ctx->text, src1->val.i);
-    } else if (src1->stype == VAR_GLOBAL) {
-        int off = var_stack_pos(ctx, src1);
-        // CMP rax, [rbp+off]
-        o3(ctx->text, 0x453b48);
-        o1(ctx->text, off);
-    } else {
-        error("not supported");
-    }
+    load_r11(ctx, src1);
+    // CMP rax, r11
+    o3(ctx->text, 0xd8394c);
 }
 
 static void handle_less(Context *ctx, Inst *inst) {
@@ -468,23 +511,8 @@ static void handle_assign(Context *ctx, Inst *inst) {
         var_stack_pos(ctx, var);
         return;
     }
-    int off = var_stack_pos(ctx, var);
-    if (val->stype == VAR_IMM) {
-        // MOV [rbp-off*8], inst->val.i
-        o3(ctx->text, 0x85c748);
-        o4(ctx->text, off);
-        o4(ctx->text, val->val.i);
-    } else if (val->stype == VAR_GLOBAL) {
-        // MOV rax, [rbp-val]
-        // MOV [rbp-var], rax
-        int off1 = var_stack_pos(ctx, val);
-        o3(ctx->text, 0x858b48);
-        o4(ctx->text, off1);
-        o3(ctx->text, 0x858948);
-        o4(ctx->text, off);
-    } else {
-        error("not supported");
-    }
+    load_rax(ctx, val);
+    save_rax(ctx, var);
 }
 
 static void handle_equal(Context *ctx, Inst *inst, bool eq) {
@@ -682,12 +710,14 @@ void save_params(Context *ctx, Function *func) {
 void assemble1(Context *ctx, Function *func) {
     o1(ctx->text, 0x55); // PUSH rbp
     o3(ctx->text, 0xe58948); // MOV rbp, rsp
-    save_params(ctx, func);
 
     // SUB rsp, 0
     o3(ctx->text, 0xec8148);
     int pos = STRING_LEN(ctx->text);
     o4(ctx->text, 0); // filled later
+
+    save_params(ctx, func);
+
     handle_block(ctx, func->entry);
 
     // Backfill SUB rsp, 0
