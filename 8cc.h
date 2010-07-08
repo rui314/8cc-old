@@ -326,49 +326,15 @@ typedef struct Ctype {
 } Ctype;
 
 typedef enum KeywordType {
-    KEYWORD_TYPE_BEGIN = 256,
-    KEYWORD_CONST,
-    KEYWORD_SIGNED,
-    KEYWORD_UNSIGNED,
-    KEYWORD_CHAR,
-    KEYWORD_SHORT,
-    KEYWORD_INT,
-    KEYWORD_LONG,
-    KEYWORD_FLOAT,
-    KEYWORD_TYPE_END,
-    KEYWORD_IF,
-    KEYWORD_ELSE,
-    KEYWORD_FOR,
-    KEYWORD_WHILE,
-    KEYWORD_DO,
-    KEYWORD_BREAK,
-    KEYWORD_CONTINUE,
-    KEYWORD_GOTO,
-    KEYWORD_RETURN,
-    KEYWORD_A_ADD,
-    KEYWORD_A_SUB,
-    KEYWORD_A_MUL,
-    KEYWORD_A_DIV,
-    KEYWORD_A_MOD,
-    KEYWORD_A_AND,
-    KEYWORD_A_OR,
-    KEYWORD_A_XOR,
-    KEYWORD_A_LSH,
-    KEYWORD_A_RSH,
-    KEYWORD_EQ,
-    KEYWORD_NE,
-    KEYWORD_GE,
-    KEYWORD_LE,
-    KEYWORD_INC,
-    KEYWORD_DEC,
-    KEYWORD_LOG_AND,
-    KEYWORD_LOG_OR,
-    KEYWORD_LSH,
-    KEYWORD_RSH,
+    KEYWORD_NON_ONE_CHAR_BEGIN = 255,
+#define KEYWORD(k, s) k,
+#define OP(k) k,
+# include "keyword.h"
+#undef OP
+#undef KEYWORD
 } KeywordType;
 
 #define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
-#define IS_TYPE_KEYWORD(k) (KEYWORD_TYPE_BEGIN < (k) && (k) < KEYWORD_TYPE_END)
 
 typedef union TokenValue {
     char c;
@@ -438,6 +404,7 @@ typedef struct ReadContext {
     Dict *label_tbf;
 } ReadContext;
 
+extern void parser_init(); // for testing
 extern List *parse(File *file, Elf *elf);
 extern Token *read_token(ReadContext *ctx);
 extern void unget_token(ReadContext *ctx, Token *tok);

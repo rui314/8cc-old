@@ -309,6 +309,8 @@ static void test_read_unget_token(void) {
 int main(int argc, char **argv) {
     printf("Running unit tests... ");
     fflush(stdout);
+    parser_init();
+
     test_string();
 
     test_dict();
