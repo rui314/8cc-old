@@ -170,6 +170,8 @@ static int var_size(Ctype *ctype) {
 }
 
 static int var_stack_pos(Context *ctx, Var *var) {
+    if (var->stype == VAR_ALIAS)
+        return var_stack_pos(ctx, var->loc);
     CompiledVar *cvar = dict_get(ctx->stack, var);
     if (cvar == NULL) {
         ctx->sp += var_size(var->ctype);
@@ -205,11 +207,11 @@ static u16 push_arg_imm[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
 static u32 push_arg_xmm_imm[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
                                   0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
 
-// MOV rdi/rsi/rdx/rcx/r8/r9, [rbp+off]
-static u32 push_arg[] = { 0xbd8b48, 0xb58b48, 0x958b48, 0x8d8b48, 0x858b4c, 0x8d8b4c };
+// MOV rdi/rsi/rdx/rcx/r8/r9, rax
+static u32 push_arg[] = { 0xc78948, 0xc68948, 0xc28948, 0xc18948, 0xc08949, 0xc18949 };
 
-// MOV [rbp+off], rdi/rsi/rdx/rcx/r8/r9
-static u32 pop_arg[] = { 0xbd8948, 0xb58948, 0x958948, 0x8d8948, 0x85894c, 0x8d894c };
+// MOV rax, rdi/rsi/rdx/rcx/r8/r9
+static u32 pop_arg[] = { 0xf88948, 0xf08948, 0xd08948, 0xc88948, 0xc0894c, 0xc8894c };
 
 static void load_rax(Context *ctx, Var *var) {
     if (var->stype == VAR_IMM) {
@@ -226,23 +228,16 @@ static void load_rax(Context *ctx, Var *var) {
     o2(ctx->text, 0x858b);
     o4(ctx->text, off);
 
-    if (UNSIGNED_TYPE(var->ctype))
-        return;
     if (bits == 8) {
         // MOVSX/MOVZX eax, al
-        if (UNSIGNED_TYPE(var->ctype))
-            o4(ctx->text, 0xc0be0f48);
-        else
-            o3(ctx->text, 0xc0b60f);
+        o4(ctx->text, var->ctype->signedp ? 0xc0be0f48 : 0xc0b60f48);
     } else if (bits == 16) {
-        // MOVSXd/MOVZX eax, ax
-        if (UNSIGNED_TYPE(var->ctype))
-            o4(ctx->text, 0xc0bf0f48);
-        else
-            o3(ctx->text, 0xc0b70f);
+        // MOVSX/MOVZX eax, ax
+        o4(ctx->text, var->ctype->signedp ? 0xc0bf0f48 : 0xc0b70f48);
     } else if (bits == 32) {
-        // MOVSXD rax, eax
-        o3(ctx->text, 0xc06348);
+        // MOVSX rax, eax
+        if (var->ctype->signedp)
+            o3(ctx->text, 0xc06348);
     }
 }
 
@@ -260,16 +255,16 @@ static void load_r11(Context *ctx, Var *var) {
     o2(ctx->text, 0x9d8b);
     o4(ctx->text, off);
 
-    if (UNSIGNED_TYPE(var->ctype))
-        return;
     if (bits == 8) {
-        // MOVSX/MOVZX r11d, r11b
-        o4(ctx->text, UNSIGNED_TYPE(var->ctype) ? 0xdbb60f45 : 0xdbbe0f4d);
+        // MOVSX/MOVZX r11, r11b
+        o4(ctx->text, var->ctype->signedp ? 0xdbbe0f4d : 0xdbb60f4d);
     } else if (bits == 16) {
-        // MOVSXD/MOVZX r11d, r11w
-        o4(ctx->text, UNSIGNED_TYPE(var->ctype) ? 0xdbb70f45 : 0xdbbf0f4d);
+        // MOVSX/MOVZX r11, r11w
+        o4(ctx->text, var->ctype->signedp ? 0xdbbf0f4d : 0xdbb70f4d);
     } else if (bits == 32) {
-        o3(ctx->text, 0xdb634d);
+        // MOVSX r11, r11d
+        if (var->ctype->signedp)
+            o3(ctx->text, 0xdb634d);
     }
 }
 
@@ -298,15 +293,17 @@ static void handle_func_call(Context *ctx, Inst *inst) {
 
     for (int i = 2; i < LIST_LEN(inst->args); i++) {
         Var *var = LIST_ELEM(inst->args, i);
+        while (var->stype == VAR_ALIAS)
+            var = var->loc;
         switch (var->stype) {
         case VAR_GLOBAL:
             switch (var->ctype->type) {
+            case CTYPE_CHAR:
             case CTYPE_INT:
             case CTYPE_LONG:
             case CTYPE_PTR: {
-                int off = var_stack_pos(ctx, var);
+                load_rax(ctx, var);
                 o3(ctx->text, push_arg[gpr++]);
-                o4(ctx->text, off);
                 break;
             }
             default:
@@ -701,9 +698,8 @@ static void handle_block(Context *ctx, Block *block) {
 void save_params(Context *ctx, Function *func) {
     for (int i = 0; i < LIST_LEN(func->params); i++) {
         Var *param = LIST_ELEM(func->params, i);
-        int off = var_stack_pos(ctx, param);
         o3(ctx->text, pop_arg[i]);
-        o4(ctx->text, off);
+        save_rax(ctx, param);
     }
 }
 

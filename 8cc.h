@@ -314,24 +314,13 @@ typedef enum CtypeEnum {
     CTYPE_INT,
     CTYPE_SHORT,
     CTYPE_CHAR,
-    CTYPE_ULLONG,
-    CTYPE_ULONG,
-    CTYPE_UINT,
-    CTYPE_USHORT,
-    CTYPE_UCHAR,
     CTYPE_DOUBLE,
     CTYPE_FLOAT,
 } CtypeEnum;
 
-#define UNSIGNED_TYPE(ctype_)                   \
-    ((ctype_)->type == CTYPE_ULLONG             \
-     || (ctype_)->type == CTYPE_ULONG           \
-     || (ctype_)->type == CTYPE_UINT            \
-     || (ctype_)->type == CTYPE_USHORT          \
-     || (ctype_)->type == CTYPE_CHAR)
-
 typedef struct Ctype {
     CtypeEnum type;
+    bool signedp;
     struct Ctype *ptr;
     int size; // valid iff type == CTYPE_ARRAY
 } Ctype;
@@ -461,6 +450,8 @@ extern ReadContext *make_read_context(File *file, Elf *elf);
 #define VAR_IMM    0
 #define VAR_EXTERN 1
 #define VAR_GLOBAL 2
+#define VAR_LVALUE 3
+#define VAR_ALIAS  4
 
 typedef struct Var {
     int stype;

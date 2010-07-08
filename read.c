@@ -76,6 +76,7 @@ static Ctype *make_ctype(int type) {
     r->type = type;
     r->ptr = NULL;
     r->size = 0;
+    r->signedp = true;
     return r;
 }
 
@@ -109,6 +110,7 @@ static Var *make_lvalue(Var *v) {
     if (!v->ctype->ptr)
         error("pointer required, but got %s", STRING_BODY(v->name));
     Var *r = make_var(make_ctype(CTYPE_INVALID));
+    r->stype = VAR_LVALUE;
     r->loc = v;
     return r;
 }
@@ -218,7 +220,7 @@ static Var *rv(ReadContext *ctx, Var *v) {
         emit(ctx, make_inst2(OP_ADDRESS, r, v));
         return r;
     }
-    if (!v->loc)
+    if (v->stype != VAR_LVALUE)
         return v;
     if (!v->loc->ctype->ptr)
         panic("pointed variable is not a pointer?");
@@ -234,7 +236,8 @@ Var *unary_type_conv(ReadContext *ctx, Var *var) {
     if (type_bits(var->ctype) >= 32)
         return var;
     Var *r = make_var(make_ctype(CTYPE_INT));
-    emit_assign(ctx, r, var);
+    r->stype = VAR_ALIAS;
+    r->loc = var;
     return r;
 }
 
@@ -299,6 +302,8 @@ static Var *emit_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
 }
 
 static void emit_assign(ReadContext *ctx, Var *v0, Var *v1) {
+    while (v0->stype == VAR_ALIAS)
+        v0 = v0->loc;
     ensure_lvalue(v0);
     if (v0->loc) {
         emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, rv(ctx, v1)));
@@ -700,7 +705,8 @@ Token *read_token(ReadContext *ctx) {
             }
             KEYWORD("const", KEYWORD_CONST);
             KEYWORD("singed", KEYWORD_SIGNED);
-            KEYWORD("unsinged", KEYWORD_UNSIGNED);
+            KEYWORD("unsigned", KEYWORD_UNSIGNED);
+            KEYWORD("char",  KEYWORD_CHAR);
             KEYWORD("int",   KEYWORD_INT);
             KEYWORD("long",  KEYWORD_LONG);
             KEYWORD("float", KEYWORD_FLOAT);
@@ -1321,8 +1327,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
 Ctype *read_declaration_spec(ReadContext *ctx) {
     Ctype *r = NULL;
     Token *tok;
-    bool signedp = false;
-    bool unsignedp = false;
+    enum { NONE, SIGNED, UNSIGNED } sign = NONE;
     for (;;) {
         tok = read_token(ctx);
         if (tok->toktype != TOKTYPE_KEYWORD)
@@ -1332,40 +1337,40 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
             // ignore the type specifier for now.
             break;
         case KEYWORD_SIGNED:
-            if (signedp)
+            if (sign == SIGNED)
                 error("Line %d:%d: 'signed' specified twice", tok->line, tok->column);
-            if (unsignedp)
+            if (sign == UNSIGNED)
                 goto sign_error;
-            signedp = true;
+            sign = UNSIGNED;
             break;
         case KEYWORD_UNSIGNED:
-            if (unsignedp)
+            if (sign == UNSIGNED)
                 error("Line %d:%d: 'unsigned' specified twice", tok->line, tok->column);
-            if (signedp)
+            if (sign == SIGNED)
                 goto sign_error;
-            unsignedp = true;
+            sign = UNSIGNED;
             break;
 #define CHECK_DUP()                                                     \
             if (r) error("Line %d:%d: two or more data types in declaration specifiers", tok->line, tok->column);
         case KEYWORD_CHAR:
             CHECK_DUP();
-            r = make_ctype(unsignedp ? CTYPE_UCHAR : CTYPE_CHAR);
+            r = make_ctype(CTYPE_CHAR);
             break;
         case KEYWORD_SHORT:
             CHECK_DUP();
-            r = make_ctype(unsignedp ? CTYPE_USHORT : CTYPE_SHORT);
+            r = make_ctype(CTYPE_SHORT);
             break;
         case KEYWORD_INT:
             CHECK_DUP();
-            r = make_ctype(unsignedp ? CTYPE_UINT : CTYPE_INT);
+            r = make_ctype(CTYPE_INT);
             break;
         case KEYWORD_LONG:
             CHECK_DUP();
-            r = make_ctype(unsignedp ? CTYPE_ULONG : CTYPE_LONG);
+            r = make_ctype(CTYPE_LONG);
             break;
         case KEYWORD_FLOAT:
             CHECK_DUP();
-            if (signedp || unsignedp)
+            if (sign != NONE)
                 error("Line %d:%d: float cannot be signed nor unsigned", tok->line, tok->column);
             r = make_ctype(CTYPE_FLOAT);
             break;
@@ -1375,6 +1380,7 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
         }
     }
  end:
+    r->signedp = (sign != UNSIGNED);
     unget_token(ctx, tok);
     return r ? r : make_ctype(CTYPE_INT);
  sign_error:

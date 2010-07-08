@@ -272,6 +272,15 @@ runtest '17 42' 'int i[20]; int *p=i; p[0]=17; p[1]=42; printf("%d %d", *p, p[1]
 /bin/echo -e '\nPointer arithmetic...'
 runtest '17 42' 'int i[20]; i[0]=17; i[1]=42; int *j=i; printf("%d ", *j); j++; printf("%d", *j);'
 
+#
+# Char type
+#
+/bin/echo -e '\nChar type...'
+runtest '3 257' 'char c=3; int i=c+254; printf("%d %d", c, i);'
+runtest '2' 'char c=255+3; printf("%d", c);'
+runtest '-1' 'char c=255; printf("%d", c);'
+runtest '255' 'unsigned char c=255; printf("%d", c);'
+
 rm -f tmpTEST$$ tmpTEST$$.o
 echo
 if [ $fail -gt 0 ]; then
