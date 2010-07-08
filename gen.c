@@ -162,6 +162,12 @@ Inst *make_instn(int op, List *args) {
  * Code generator
  */
 
+static void emit1(Context *ctx, u8 b)  { o1(ctx->text, b); }
+static void emit2(Context *ctx, u16 w) { o2(ctx->text, w); }
+static void emit3(Context *ctx, u32 d) { o3(ctx->text, d); }
+static void emit4(Context *ctx, u32 d) { o4(ctx->text, d); }
+static void emit8(Context *ctx, u64 q) { o8(ctx->text, q); }
+
 static int var_size(Ctype *ctype) {
     if (ctype->type == CTYPE_ARRAY) {
         return ctype->size * var_size(ctype->ptr);
@@ -216,55 +222,55 @@ static u32 pop_arg[] = { 0xf88948, 0xf08948, 0xd08948, 0xc88948, 0xc0894c, 0xc88
 static void load_rax(Context *ctx, Var *var) {
     if (var->stype == VAR_IMM) {
         // MOV rax, imm
-        o2(ctx->text, 0xb848);
-        o8(ctx->text, var->val.i);
+        emit2(ctx, 0xb848);
+        emit8(ctx, var->val.i);
         return;
     }
     int off = var_stack_pos(ctx, var);
     int bits = type_bits(var->ctype);
     // MOV rax/eax, [rbp+off]
     if (bits == 64)
-        o1(ctx->text, 0x48);
-    o2(ctx->text, 0x858b);
-    o4(ctx->text, off);
+        emit1(ctx, 0x48);
+    emit2(ctx, 0x858b);
+    emit4(ctx, off);
 
     if (bits == 8) {
         // MOVSX/MOVZX eax, al
-        o4(ctx->text, var->ctype->signedp ? 0xc0be0f48 : 0xc0b60f48);
+        emit4(ctx, var->ctype->signedp ? 0xc0be0f48 : 0xc0b60f48);
     } else if (bits == 16) {
         // MOVSX/MOVZX eax, ax
-        o4(ctx->text, var->ctype->signedp ? 0xc0bf0f48 : 0xc0b70f48);
+        emit4(ctx, var->ctype->signedp ? 0xc0bf0f48 : 0xc0b70f48);
     } else if (bits == 32) {
         // MOVSX rax, eax
         if (var->ctype->signedp)
-            o3(ctx->text, 0xc06348);
+            emit3(ctx, 0xc06348);
     }
 }
 
 static void load_r11(Context *ctx, Var *var) {
     if (var->stype == VAR_IMM) {
         // MOV r11, imm
-        o2(ctx->text, 0xbb49);
-        o8(ctx->text, var->val.i);
+        emit2(ctx, 0xbb49);
+        emit8(ctx, var->val.i);
         return;
     }
     // MOV r11d, [rbp+off]
     int off = var_stack_pos(ctx, var);
     int bits = type_bits(var->ctype);
-    o1(ctx->text, (bits == 64) ? 0x4c : 0x44);
-    o2(ctx->text, 0x9d8b);
-    o4(ctx->text, off);
+    emit1(ctx, (bits == 64) ? 0x4c : 0x44);
+    emit2(ctx, 0x9d8b);
+    emit4(ctx, off);
 
     if (bits == 8) {
         // MOVSX/MOVZX r11, r11b
-        o4(ctx->text, var->ctype->signedp ? 0xdbbe0f4d : 0xdbb60f4d);
+        emit4(ctx, var->ctype->signedp ? 0xdbbe0f4d : 0xdbb60f4d);
     } else if (bits == 16) {
         // MOVSX/MOVZX r11, r11w
-        o4(ctx->text, var->ctype->signedp ? 0xdbbf0f4d : 0xdbb70f4d);
+        emit4(ctx, var->ctype->signedp ? 0xdbbf0f4d : 0xdbb70f4d);
     } else if (bits == 32) {
         // MOVSX r11, r11d
         if (var->ctype->signedp)
-            o3(ctx->text, 0xdb634d);
+            emit3(ctx, 0xdb634d);
     }
 }
 
@@ -273,15 +279,15 @@ static void save_rax(Context *ctx, Var *dst) {
     int bits = type_bits(dst->ctype);
     // MOV [rbp+off], rax/eax/ax/al
     if (bits >= 64)
-        o3(ctx->text, 0x858948);
+        emit3(ctx, 0x858948);
     else if (bits == 32)
-        o2(ctx->text, 0x8589);
+        emit2(ctx, 0x8589);
     else if (bits == 16)
-        o3(ctx->text, 0x858966);
+        emit3(ctx, 0x858966);
     else if (bits == 8)
-        o2(ctx->text, 0x8588);
+        emit2(ctx, 0x8588);
     else panic("unknown variable size: %d", bits);
-    o4(ctx->text, off);
+    emit4(ctx, off);
 }
 
 static void handle_func_call(Context *ctx, Inst *inst) {
@@ -303,7 +309,7 @@ static void handle_func_call(Context *ctx, Inst *inst) {
             case CTYPE_LONG:
             case CTYPE_PTR: {
                 load_rax(ctx, var);
-                o3(ctx->text, push_arg[gpr++]);
+                emit3(ctx, push_arg[gpr++]);
                 break;
             }
             default:
@@ -314,21 +320,21 @@ static void handle_func_call(Context *ctx, Inst *inst) {
             switch (var->ctype->type) {
             case CTYPE_PTR:
             case CTYPE_ARRAY:
-                o2(ctx->text, push_arg_imm[gpr++]);
+                emit2(ctx, push_arg_imm[gpr++]);
                 add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_64, var->val.i);
-                o8(ctx->text, 0);
+                emit8(ctx, 0);
                 break;
             case CTYPE_INT:
             case CTYPE_LONG:
             case CTYPE_CHAR:
-                o2(ctx->text, push_arg_imm[gpr++]);
-                o8(ctx->text, var->val.l);
+                emit2(ctx, push_arg_imm[gpr++]);
+                emit8(ctx, var->val.l);
                 break;
             case CTYPE_FLOAT:
                 align(data->body, 8);
-                o4(ctx->text, push_arg_xmm_imm[xmm++]);
+                emit4(ctx, push_arg_xmm_imm[xmm++]);
                 add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_PC32, STRING_LEN(data->body) - 4);
-                o4(ctx->text, 0);
+                emit4(ctx, 0);
                 double tmp = var->val.f;
                 o8(data->body, *(u64 *)&tmp);
                 break;
@@ -344,12 +350,12 @@ static void handle_func_call(Context *ctx, Inst *inst) {
         Symbol *sym = make_symbol(fn->name, text, 0, STB_GLOBAL, STT_NOTYPE, 0);
         dict_put(ctx->elf->syms, fn->name, sym);
     }
-    o1(ctx->text, 0xb8); // MOV eax
-    o4(ctx->text, xmm);
-    o1(ctx->text, 0xe8); // CALL
+    emit1(ctx, 0xb8); // MOV eax
+    emit4(ctx, xmm);
+    emit1(ctx, 0xe8); // CALL
     list_push(ctx->func_tbf, fn->name);
     list_push(ctx->func_tbf, (void *)(intptr)STRING_LEN(ctx->text));
-    o4(ctx->text, 0);
+    emit4(ctx, 0);
 
     // Save function return value to the stack;
     Var *rval = LIST_ELEM(inst->args, 1);
@@ -377,7 +383,7 @@ static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // ADD/SUB rax, r11
-    o3(ctx->text, add ? 0xd8014c : 0xd8294c);
+    emit3(ctx, add ? 0xd8014c : 0xd8294c);
     save_rax(ctx, LIST_ELEM(inst->args, 0));
 }
 
@@ -387,7 +393,7 @@ static void handle_imul(Context *ctx, Inst *inst) {
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // IMUL rax, r11
-    o4(ctx->text, 0xc3af0f49);
+    emit4(ctx, 0xc3af0f49);
     save_rax(ctx, LIST_ELEM(inst->args, 0));
 }
 
@@ -397,9 +403,9 @@ static void handle_idiv(Context *ctx, Inst *inst) {
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // XOR edx, edx
-    o2(ctx->text, 0xd231);
+    emit2(ctx, 0xd231);
     // IDIV r11
-    o3(ctx->text, 0xfbf749);
+    emit3(ctx, 0xfbf749);
     save_rax(ctx, LIST_ELEM(inst->args, 0));
 }
 
@@ -408,11 +414,11 @@ static void handle_not(Context *ctx, Inst *inst) {
     Var *src = LIST_ELEM(inst->args, 1);
     load_rax(ctx, src);
     // TEST eax, eax
-    o2(ctx->text, 0xc085);
+    emit2(ctx, 0xc085);
     // SETE al
-    o3(ctx->text, 0xc0940f);
+    emit3(ctx, 0xc0940f);
     // MOVZBL eax, al
-    o3(ctx->text, 0xc0b60f);
+    emit3(ctx, 0xc0b60f);
     save_rax(ctx, dst);
 }
 
@@ -422,16 +428,16 @@ static void emit_cmp(Context *ctx, Inst *inst) {
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // CMP rax, r11
-    o3(ctx->text, 0xd8394c);
+    emit3(ctx, 0xd8394c);
 }
 
 static void handle_less(Context *ctx, Inst *inst) {
     Var *dst = LIST_ELEM(inst->args, 0);
     emit_cmp(ctx, inst);
     // SETL al
-    o3(ctx->text, 0xc09c0f);
+    emit3(ctx, 0xc09c0f);
     // MOVZX eax, al
-    o3(ctx->text, 0xc0b60f);
+    emit3(ctx, 0xc0b60f);
     save_rax(ctx, dst);
 }
 
@@ -439,9 +445,9 @@ static void handle_less_equal(Context *ctx, Inst *inst) {
     Var *dst = LIST_ELEM(inst->args, 0);
     emit_cmp(ctx, inst);
     // SETLE al
-    o3(ctx->text, 0xc09e0f);
+    emit3(ctx, 0xc09e0f);
     // MOVZX eax, al
-    o3(ctx->text, 0xc0b60f);
+    emit3(ctx, 0xc0b60f);
     save_rax(ctx, dst);
 }
 
@@ -450,7 +456,7 @@ static void handle_neg(Context *ctx, Inst *inst) {
     Var *src = LIST_ELEM(inst->args, 1);
     load_rax(ctx, src);
     // NOT eax
-    o2(ctx->text, 0xd0f7);
+    emit2(ctx, 0xd0f7);
     save_rax(ctx, dst);
 }
 
@@ -460,7 +466,7 @@ static void handle_inst3(Context *ctx, Inst *inst, u64 op) {
     Var *src1 = LIST_ELEM(inst->args, 2);
     load_rax(ctx, src0);
     load_r11(ctx, src1);
-    o3(ctx->text, op);
+    emit3(ctx, op);
     save_rax(ctx, dst);
 }
 
@@ -475,9 +481,9 @@ static void handle_shift(Context *ctx, Inst *inst, u64 op) {
     Var *src1 = LIST_ELEM(inst->args, 2);
     load_rax(ctx, src1);
     // MOV ecx, eax
-    o2(ctx->text, 0xc189);
+    emit2(ctx, 0xc189);
     load_rax(ctx, src0);
-    o3(ctx->text, op);
+    emit3(ctx, op);
     save_rax(ctx, dst);
 }
 
@@ -516,9 +522,9 @@ static void handle_equal(Context *ctx, Inst *inst, bool eq) {
     Var *dst = LIST_ELEM(inst->args, 0);
     emit_cmp(ctx, inst);
     // SETE al or SETNE al
-    o3(ctx->text, eq ? 0xc0940f : 0xc0950f);
+    emit3(ctx, eq ? 0xc0940f : 0xc0950f);
     // MOVZX eax, al
-    o3(ctx->text, 0xc0b60f);
+    emit3(ctx, 0xc0b60f);
     save_rax(ctx, dst);
 }
 
@@ -527,8 +533,8 @@ static void handle_address(Context *ctx, Inst *inst) {
     Var *v = LIST_ELEM(inst->args, 1);
     int off = var_stack_pos(ctx, v);
     // LEA rax, [ebp+off]
-    o3(ctx->text, 0x858d48);
-    o4(ctx->text, off);
+    emit3(ctx, 0x858d48);
+    emit4(ctx, off);
     save_rax(ctx, p);
 }
 
@@ -537,7 +543,7 @@ static void handle_deref(Context *ctx, Inst *inst) {
     Var *p = LIST_ELEM(inst->args, 1);
     load_rax(ctx, p);
     // MOV rax, [rax]
-    o3(ctx->text, 0x008b48);
+    emit3(ctx, 0x008b48);
     save_rax(ctx, v);
 }
 
@@ -547,7 +553,7 @@ static void handle_assign_deref(Context *ctx, Inst *inst) {
     load_rax(ctx, v);
     load_r11(ctx, loc);
     // MOV [r11], rax
-    o3(ctx->text, 0x038949);
+    emit3(ctx, 0x038949);
 }
 
 static void handle_if(Context *ctx, Inst *inst) {
@@ -558,19 +564,19 @@ static void handle_if(Context *ctx, Inst *inst) {
     load_rax(ctx, cond);
 
     // TEST rax, rax
-    o2(ctx->text, 0xc085);
+    emit2(ctx, 0xc085);
 
     // JE offset
-    o2(ctx->text, 0x840f);
-    o4(ctx->text, 0); // filled later
+    emit2(ctx, 0x840f);
+    emit4(ctx, 0); // filled later
     int pos0 = STRING_LEN(ctx->text);
     handle_block(ctx, then);
 
     int pos1;
     if (els) {
         // JMP offset
-        o1(ctx->text, 0xe9);
-        o4(ctx->text, 0); // filled later
+        emit1(ctx, 0xe9);
+        emit4(ctx, 0); // filled later
         pos1 = STRING_LEN(ctx->text);
         handle_block(ctx, els);
     }
@@ -579,11 +585,11 @@ static void handle_if(Context *ctx, Inst *inst) {
     int save = STRING_LEN(ctx->text);
     string_seek(ctx->text, pos0 - 4);
     if (els) {
-        o4(ctx->text, pos1 - pos0);
+        emit4(ctx, pos1 - pos0);
         string_seek(ctx->text, pos1 - 4);
-        o4(ctx->text, save - pos1);
+        emit4(ctx, save - pos1);
     } else {
-        o4(ctx->text, save - pos0);
+        emit4(ctx, save - pos0);
     }
     string_seek(ctx->text, save);
 
@@ -592,8 +598,8 @@ static void handle_if(Context *ctx, Inst *inst) {
 
 static void jump_to(Context *ctx, int pos) {
     // JMP offset
-    o1(ctx->text, 0xe9);
-    o4(ctx->text, pos - STRING_LEN(ctx->text) - 4);
+    emit1(ctx, 0xe9);
+    emit4(ctx, pos - STRING_LEN(ctx->text) - 4);
 }
 
 static void handle_jmp(Context *ctx, Inst *inst) {
@@ -608,8 +614,8 @@ static void handle_jmp(Context *ctx, Inst *inst) {
 void handle_return(Context *ctx, Inst *inst) {
     Var *retval = LIST_ELEM(inst->args, 0);
     load_rax(ctx, retval);
-    o1(ctx->text, 0xc9); // LEAVE
-    o1(ctx->text, 0xc3); // RET
+    emit1(ctx, 0xc9); // LEAVE
+    emit1(ctx, 0xc3); // RET
 }
 
 static void handle_block(Context *ctx, Block *block) {
@@ -691,34 +697,33 @@ static void handle_block(Context *ctx, Block *block) {
             error("unknown op\n");
         }
         // NOP
-        o1(ctx->text, 0x90);
+        emit1(ctx, 0x90);
     }
 }
 
 void save_params(Context *ctx, Function *func) {
     for (int i = 0; i < LIST_LEN(func->params); i++) {
         Var *param = LIST_ELEM(func->params, i);
-        o3(ctx->text, pop_arg[i]);
+        emit3(ctx, pop_arg[i]);
         save_rax(ctx, param);
     }
 }
 
 void assemble1(Context *ctx, Function *func) {
-    o1(ctx->text, 0x55); // PUSH rbp
-    o3(ctx->text, 0xe58948); // MOV rbp, rsp
+    emit1(ctx, 0x55); // PUSH rbp
+    emit3(ctx, 0xe58948); // MOV rbp, rsp
 
     // SUB rsp, 0
-    o3(ctx->text, 0xec8148);
+    emit3(ctx, 0xec8148);
     int pos = STRING_LEN(ctx->text);
-    o4(ctx->text, 0); // filled later
+    emit4(ctx, 0); // filled later
 
     save_params(ctx, func);
-
     handle_block(ctx, func->entry);
 
     // Backfill SUB rsp, 0
     string_seek(ctx->text, pos);
-    o4(ctx->text, (ctx->sp + 1) * 8);
+    emit4(ctx, (ctx->sp + 1) * 8);
     string_seek(ctx->text, STRING_LEN(ctx->text));
 }
 
