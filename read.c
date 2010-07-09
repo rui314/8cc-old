@@ -274,8 +274,6 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
     }
     case '-':
         // C:ARM p.230 7.6.2 Subtraction.
-        if (v1->ctype->ptr)
-            SWAP(Var *, v0, v1);
         if (v0->ctype->type == CTYPE_PTR && v1->ctype->type == CTYPE_INT) {
             Var *ptr_size = make_imm(CTYPE_INT, (Cvalue)(type_bits(v0->ctype->ptr) / 8));
             Var *r = make_var(v0->ctype);
@@ -284,9 +282,11 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
             emit(ctx, make_inst3('-', r, v0, tmp));
             return r;
         } else if (v0->ctype->type == CTYPE_PTR && v1->ctype->type == CTYPE_PTR) {
+            Var *ptr_size = make_imm(CTYPE_INT, (Cvalue)(type_bits(v0->ctype->ptr) / 8));
             // [TODO] CTYPE_LONG should be ptrdiff_t.  See C:ARM p.231.
             Var *r = make_var(make_ctype(CTYPE_LONG));
             emit(ctx, make_inst3('-', r, v0, v1));
+            emit(ctx, make_inst3('/', r, r, ptr_size));
             return r;
         } else if (v0->ctype->type == CTYPE_PTR) {
             error("arithmetic - is not defined for pointer and type %d", v1->ctype->type);
