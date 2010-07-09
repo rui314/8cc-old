@@ -260,33 +260,38 @@ void write_elf(FILE *outfile, Elf *elf) {
     add_reloc(elf);
     add_shstrtab(elf);
 
-    String *header = make_string();
-    int numsect = LIST_LEN(elf->sections) + 1;
-    out(header, elf_ident, sizeof(elf_ident));
-    o2(header, 2);  // e_type = ET_EXEC
-    o2(header, 62); // e_machine = EM_X86_64
-    o4(header, 1);  // e_version = EV_CURRENT
-    o8(header, 0);  // e_entry
-    o8(header, 0);  // e_phoff
-    o8(header, 64); // e_shoff
-    o4(header, 0);  // e_flags
-    o2(header, 64); // e_ehsize
-    o2(header, 0);  // e_phentsize
-    o2(header, 0);  // e_phnum
-    o2(header, 64); // e_shentsize
-    o2(header, numsect);  // e_shnum
-    o2(header, elf->shnum);  // e_shstrndx
-
-    // null section
+    // Section header
+    String *sh = make_string();
     for (int i = 0; i < 64; i++)
-        o1(header, 0);
+        o1(sh, 0); // NULL section header
 
+    // Body
     String *content = make_string();
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        write_section(header, content, LIST_ELEM(elf->sections, i), (numsect + 1) * 64);
+        write_section(sh, content, LIST_ELEM(elf->sections, i), 64);
     }
+    align(content, 16);
 
-    fwrite(STRING_BODY(header), STRING_LEN(header), 1, outfile);
+    // ELF header
+    String *eh = make_string();
+    int numsect = LIST_LEN(elf->sections) + 1;
+    out(eh, elf_ident, sizeof(elf_ident));
+    o2(eh, 1);  // e_type = ET_REL
+    o2(eh, 62); // e_machine = EM_X86_64
+    o4(eh, 1);  // e_version = EV_CURRENT
+    o8(eh, 0);  // e_entry
+    o8(eh, 0);  // e_phoff
+    o8(eh, STRING_LEN(content) + 64);  // e_shoff;
+    o4(eh, 0);  // e_flags
+    o2(eh, 64); // e_ehsize
+    o2(eh, 0);  // e_phentsize
+    o2(eh, 0);  // e_phnum
+    o2(eh, 64); // e_shentsize
+    o2(eh, numsect);  // e_shnum
+    o2(eh, elf->shnum);  // e_shstrndx
+
+    fwrite(STRING_BODY(eh), STRING_LEN(eh), 1, outfile);
     fwrite(STRING_BODY(content), STRING_LEN(content), 1, outfile);
+    fwrite(STRING_BODY(sh), STRING_LEN(sh), 1, outfile);
     fclose(outfile);
 }
