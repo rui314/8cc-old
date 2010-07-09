@@ -115,11 +115,15 @@ static Var *make_lvalue(Var *v) {
     return r;
 }
 
-static Var *make_imm(int ctype, Cvalue val) {
-    Var *r = make_var(make_ctype(ctype));
+static Var *make_imm1(Ctype *type, Cvalue val) {
+    Var *r = make_var(type);
     r->stype = VAR_IMM;
     r->val = val;
     return r;
+}
+
+static Var *make_imm(int ctype, Cvalue val) {
+    return make_imm1(make_ctype(ctype), val);
 }
 
 static Var *make_extern(String *name) {
@@ -864,10 +868,23 @@ Var *read_primary_expr(ReadContext *ctx) {
     case TOKTYPE_FLOAT:
         return make_imm(CTYPE_FLOAT, (Cvalue)tok->val.f);
     case TOKTYPE_STRING: {
-        Section *data = find_section(ctx->elf, ".data");
-        int off = STRING_LEN(data->body);
-        out(data->body, STRING_BODY(tok->val.str), STRING_LEN(tok->val.str));
-        return make_imm(CTYPE_PTR, (Cvalue)off);
+        String *b;
+        Token *tok1 = read_token(ctx);
+        if (tok1->toktype == TOKTYPE_STRING) {
+            b = make_string();
+            out(b, STRING_BODY(tok->val.str), STRING_LEN(tok->val.str) - 1);
+            do {
+                out(b, STRING_BODY(tok1->val.str), STRING_LEN(tok1->val.str) - 1);
+                tok1 = read_token(ctx);
+            } while (tok1->toktype == TOKTYPE_STRING);
+            unget_token(ctx, tok1);
+            o1(b, 0);
+        } else {
+            unget_token(ctx, tok1);
+            b = tok->val.str;
+        }
+        Ctype *type = make_ctype_array(make_ctype(CTYPE_CHAR), STRING_LEN(b));
+        return make_imm1(type, (Cvalue)b);
     }
     case TOKTYPE_IDENT: {
         Token *tok1 = read_token(ctx);

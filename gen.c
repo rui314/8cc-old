@@ -44,12 +44,12 @@
  */
 
 typedef struct CompiledVar {
-    int sp;
+    int off;
 } CompiledVar;
 
-CompiledVar *make_compiled_var(int sp) {
+CompiledVar *make_compiled_var(int off) {
     CompiledVar *r = malloc(sizeof(CompiledVar));
-    r->sp = sp;
+    r->off = off;
     return r;
 }
 
@@ -57,7 +57,7 @@ typedef struct Context {
     Elf *elf;
     String *text;
     Dict *stack;
-    Dict *tmpvar;
+    Dict *global;
     List *func_tbf;
     int sp;
 } Context;
@@ -67,7 +67,7 @@ Context *make_context(Elf *elf) {
     r->elf = elf;
     r->text = find_section(elf, ".text")->body;
     r->stack = make_address_dict();
-    r->tmpvar = make_address_dict();
+    r->global = make_address_dict();
     r->func_tbf = NULL;
     r->sp = 0;
     return r;
@@ -175,16 +175,34 @@ static int var_size(Ctype *ctype) {
     return 1;
 }
 
+static Var *resolve_alias(Var *var) {
+    while (var->stype == VAR_ALIAS)
+        var = var->loc;
+    return var;
+}
+
+static int var_abs_pos(Context *ctx, Var *var) {
+    assert(var->stype == VAR_IMM);
+    assert(var->ctype->type == CTYPE_ARRAY);
+    CompiledVar *cvar = dict_get(ctx->global, var);
+    if (!cvar) {
+        Section *data = find_section(ctx->elf, ".data");
+        cvar = make_compiled_var(STRING_LEN(data->body));
+        out(data->body, STRING_BODY(var->val.s), STRING_LEN(var->val.s));
+        dict_put(ctx->global, var, cvar);
+    }
+    return cvar->off;
+}
+
 static int var_stack_pos(Context *ctx, Var *var) {
-    if (var->stype == VAR_ALIAS)
-        return var_stack_pos(ctx, var->loc);
+    var = resolve_alias(var);
     CompiledVar *cvar = dict_get(ctx->stack, var);
     if (cvar == NULL) {
         ctx->sp += var_size(var->ctype);
         cvar = make_compiled_var(ctx->sp * -8);
         dict_put(ctx->stack, var, cvar);
     }
-    return cvar->sp;
+    return cvar->off;
 }
 
 static void add_reloc(Section *text, long off, char *sym, char *section, int type, u64 addend) {
@@ -207,11 +225,11 @@ int type_bits(Ctype *ctype) {
 }
 
 // MOV rdi/rsi/rdx/rcx/r8/r9, imm
-static u16 push_arg_imm[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
+// static u16 push_arg_imm[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
 
 // MOVSD xmm0/xmm1/xmm2/xmm3/xmm4/xmm5/xmm6/xmm7, imm
-static u32 push_arg_xmm_imm[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
-                                  0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
+// static u32 push_arg_xmm_imm[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
+//                                   0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
 
 // MOV rdi/rsi/rdx/rcx/r8/r9, rax
 static u32 push_arg[] = { 0xc78948, 0xc68948, 0xc28948, 0xc18948, 0xc08949, 0xc18949 };
@@ -219,13 +237,32 @@ static u32 push_arg[] = { 0xc78948, 0xc68948, 0xc28948, 0xc18948, 0xc08949, 0xc1
 // MOV rax, rdi/rsi/rdx/rcx/r8/r9
 static u32 pop_arg[] = { 0xf88948, 0xf08948, 0xd08948, 0xc88948, 0xc0894c, 0xc8894c };
 
-static void load_rax(Context *ctx, Var *var) {
-    if (var->stype == VAR_IMM) {
-        // MOV rax, imm
-        emit2(ctx, 0xb848);
+static void load_imm(Context *ctx, Var *var, u16 op) {
+    if (var->ctype->type == CTYPE_INT) {
+        // MOV rax/r11, imm
+        emit2(ctx, op);
         emit8(ctx, var->val.i);
         return;
     }
+    if (var->ctype->type == CTYPE_ARRAY) {
+        Section *text = find_section(ctx->elf, ".text");
+        // MOV rax/r11, imm
+        emit2(ctx, op);
+        int off = var_abs_pos(ctx, var);
+        add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_64, off);
+        emit8(ctx, 0);
+        return;
+    }
+    panic("unsupported IMM ctype: %d", var->ctype->type);
+}
+
+static void load_rax(Context *ctx, Var *var) {
+    if (var->stype == VAR_IMM) {
+        load_imm(ctx, var, 0xb848);
+        return;
+    }
+
+    var = resolve_alias(var);
     int off = var_stack_pos(ctx, var);
     int bits = type_bits(var->ctype);
     // MOV rax/eax, [rbp+off]
@@ -249,14 +286,14 @@ static void load_rax(Context *ctx, Var *var) {
 
 static void load_r11(Context *ctx, Var *var) {
     if (var->stype == VAR_IMM) {
-        // MOV r11, imm
-        emit2(ctx, 0xbb49);
-        emit8(ctx, var->val.i);
+        load_imm(ctx, var, 0xbb49);
         return;
     }
-    // MOV r11d, [rbp+off]
+
+    var = resolve_alias(var);
     int off = var_stack_pos(ctx, var);
     int bits = type_bits(var->ctype);
+    // MOV r11d, [rbp+off]
     emit1(ctx, (bits == 64) ? 0x4c : 0x44);
     emit2(ctx, 0x9d8b);
     emit4(ctx, off);
@@ -293,58 +330,13 @@ static void save_rax(Context *ctx, Var *dst) {
 static void handle_func_call(Context *ctx, Inst *inst) {
     Var *fn = LIST_ELEM(inst->args, 0);
     Section *text = find_section(ctx->elf, ".text");
-    Section *data = find_section(ctx->elf, ".data");
     int gpr = 0;
     int xmm = 0;
 
     for (int i = 2; i < LIST_LEN(inst->args); i++) {
         Var *var = LIST_ELEM(inst->args, i);
-        while (var->stype == VAR_ALIAS)
-            var = var->loc;
-        switch (var->stype) {
-        case VAR_GLOBAL:
-            switch (var->ctype->type) {
-            case CTYPE_CHAR:
-            case CTYPE_INT:
-            case CTYPE_LONG:
-            case CTYPE_PTR: {
-                load_rax(ctx, var);
-                emit3(ctx, push_arg[gpr++]);
-                break;
-            }
-            default:
-                panic("unsupported type: %d", var->ctype->type);
-            }
-            break;
-        case VAR_IMM:
-            switch (var->ctype->type) {
-            case CTYPE_PTR:
-            case CTYPE_ARRAY:
-                emit2(ctx, push_arg_imm[gpr++]);
-                add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_64, var->val.i);
-                emit8(ctx, 0);
-                break;
-            case CTYPE_INT:
-            case CTYPE_LONG:
-            case CTYPE_CHAR:
-                emit2(ctx, push_arg_imm[gpr++]);
-                emit8(ctx, var->val.l);
-                break;
-            case CTYPE_FLOAT:
-                align(data->body, 8);
-                emit4(ctx, push_arg_xmm_imm[xmm++]);
-                add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_PC32, STRING_LEN(data->body) - 4);
-                emit4(ctx, 0);
-                double tmp = var->val.f;
-                o8(data->body, *(u64 *)&tmp);
-                break;
-            default:
-                panic("unsupported ctype: %d\n", var->ctype->type);
-            }
-            break;
-        default:
-            panic("unsupported var type: %c\n", var->stype);
-        }
+        load_rax(ctx, var);
+        emit3(ctx, push_arg[gpr++]);
     }
     if (!dict_get(ctx->elf->syms, fn->name)) {
         Symbol *sym = make_symbol(fn->name, text, 0, STB_GLOBAL, STT_NOTYPE, 0);
@@ -531,10 +523,14 @@ static void handle_equal(Context *ctx, Inst *inst, bool eq) {
 static void handle_address(Context *ctx, Inst *inst) {
     Var *p = LIST_ELEM(inst->args, 0);
     Var *v = LIST_ELEM(inst->args, 1);
-    int off = var_stack_pos(ctx, v);
-    // LEA rax, [ebp+off]
-    emit3(ctx, 0x858d48);
-    emit4(ctx, off);
+    if (v->stype == VAR_IMM && v->ctype->type == CTYPE_ARRAY) {
+        load_rax(ctx, v);
+    } else {
+        int off = var_stack_pos(ctx, v);
+        // LEA rax, [ebp+off]
+        emit3(ctx, 0x858d48);
+        emit4(ctx, off);
+    }
     save_rax(ctx, p);
 }
 

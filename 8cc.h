@@ -41,6 +41,7 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <assert.h>
 
 /*
  * Primitive data types
@@ -303,6 +304,7 @@ typedef union Cvalue {
     int i;
     long l;
     float f;
+    String *s;
 } Cvalue;
 
 typedef enum CtypeEnum {

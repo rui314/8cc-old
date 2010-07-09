@@ -32,7 +32,6 @@ runtest1() {
 runtest '' '-1;'
 runtest 'Hello, world!' 'printf("Hello, world!");'
 runtest 'Hello, world!' 'printf("Hello, %s", "world!");'
-runtest '12.34 56.78 42' 'printf("%2.2f %2.2f %d", 12.34, 56.78, 42);'
 runtest '3' 'int i=3; printf("%d", i);'
 runtest '6' 'int i=3; int j=0; j=i+3; printf("%d", j);'
 runtest '50' 'int i=atoi("50"); int j = i; printf("%d", j);'
@@ -280,6 +279,13 @@ runtest '3 257' 'char c=3; int i=c+254; printf("%d %d", c, i);'
 runtest '2' 'char c=255+3; printf("%d", c);'
 runtest '-1' 'char c=255; printf("%d", c);'
 runtest '255' 'unsigned char c=255; printf("%d", c);'
+
+#
+# Literal string
+#
+/bin/echo -e '\nChar type...'
+runtest 'Hello' 'char *p="Hello"; printf("%s", p);'
+runtest 'Hello world' 'char *p="Hello " "world"; printf("%s", p);'
 
 rm -f tmpTEST$$ tmpTEST$$.o
 echo
