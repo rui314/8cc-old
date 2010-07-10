@@ -71,6 +71,29 @@ static void test_string(void) {
 }
 
 /*
+ * List
+ */
+
+static void test_list(void) {
+    List *list = make_list();
+    EQ(0, LIST_LEN(list));
+
+    list_push(list, (void *)17);
+    list_push(list, (void *)42);
+    EQ(2, (intptr)LIST_LEN(list));
+    EQ(17, (intptr)LIST_ELEM(list, 0));
+    EQ(42, (intptr)LIST_ELEM(list, 1));
+    EQ(42, (intptr)list_pop(list));
+    EQ(17, (intptr)list_pop(list));
+    EQ(0, LIST_LEN(list));
+
+    list_push(list, (void *)17);
+    list_push(list, (void *)42);
+    EQ(17, (intptr)list_unshift(list));
+    EQ(42, (intptr)list_unshift(list));
+}
+
+/*
  * Dictionary
  */
 
@@ -312,7 +335,7 @@ int main(int argc, char **argv) {
     parser_init();
 
     test_string();
-
+    test_list();
     test_dict();
     test_dict_iter();
 

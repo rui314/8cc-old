@@ -185,6 +185,7 @@ extern List *make_list(void);
 extern void list_push(List *list, void *e);
 extern void list_push(List *list, void *e);
 extern void *list_pop(List *list);
+extern void *list_unshift(List *list);
 extern List *sublist(List *orig, int off);
 
 /*

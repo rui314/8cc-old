@@ -66,6 +66,16 @@ void *list_pop(List *list) {
     return r;
 }
 
+void *list_unshift(List *list) {
+    if (list->len == 0)
+        panic("list empty");
+    void *r = list->elems[0];
+    for (int i = 1; i < list->len; i++)
+        list->elems[i - 1] = list->elems[i];
+    list->len--;
+    return r;
+}
+
 List *sublist(List *orig, int off) {
     List *r = malloc(sizeof(List));
     r->elems = orig->elems + off;
