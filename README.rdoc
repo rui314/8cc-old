@@ -1,0 +1,61 @@
+= 8cc C compiler
+
+This is my hobby project to make a comprephensive, C99-compliant C compiler that
+supports precise garbage collection.  My ultimate goal is to make it a drop-in
+replacement for GCC for projects using Boehm's conservative GC.
+
+I started developing the compiler May 2010, and as of July 2010, it can compile
+non-trivial programs, such as 8 queen problem solver.  Still a lot of features
+are missing, like C preprocessor, floating point numbers, declarations,
+multi-dimensional arrays, etc.
+
+= Architecture
+
+8cc is currently two pass compiler.  The first pass parses C source code with
+hand-written recursive-descent parser and operator-precedence parser, and
+compile it into IL (intermediate langauge).  IL is a list of object representing
+instruction code and zero-or-more operands.  Here is a partial list of
+instructions:
+
+* + dst src0 src1 (addition)
+* = dst src (assignment)
+* ADDRESS dst src (pointer arithmetic "&")
+* IF var then-block else-block continue-block
+
+The operands of IF instruction are basic blocks, which don't contain any branch
+instructions in the middle of it.  All branch instructions jump to the beginning
+of basic block.  IF instruction, for example, is compiled to the machine codes
+tha jumps either then-block or else-block, depending on the value of variable
+"var".  "for" and "while" loops in C are also implemented using IF operator.
+The program in IL consists of the entry basic block and all basic blocks
+reachable from the entry.
+
+The point of the first pass is that flattens nested C expressions.  For example,
+C expression "A + B + C" is compiled to something like "T0 = A + B" and "T1 = T0
++ C" (the result of the expression is T1.)  No AST (abstract syntax tree) would
+be created.  This should contributes compilation speed and simplifies the code
+by eliminating extra pass to convert AST to IL.
+
+The second pass reads ILs and emits x86-64 machine instructions.  At the moment,
+all variables are assigned on the stack, and registers are used only as scratch
+memories.  For instance, "A = B + C" is compiled to (1) loads the value for
+variable B in stack to resgister RAX, (2) loads C to register R11, (3) addd
+them, and (4) stores the result in RAX to varaible A.  It always copies values
+from the resgister to the stack even if the value will be used just after the
+current instruction.
+
+8cc directly outputs ELF object file, like TCC but unlike most other ccompilers.
+No assembler is needed.
+
+At last, GCC would be invoked to link an object file to make an executable.
+
+= Future plans
+
+I'm implementing C99 features, including integrated C preprocessor.  After that,
+I want to go with copying GC.  Because compiler knows precise type, runtime can
+do precise GC as long as comipler retains type information to a binary in the
+form that is accessible from runtime.  Type of heap-allocated objects would be
+detected by recognizing the special form in source code, malloc(sizeof(type) *
+size).  Once that's done, I'd implement flow analysis and SSA conversion, and
+then implement efficient register algorithm, such as Linear Scan Register
+Allocation to improve performance.
