@@ -158,6 +158,10 @@ Inst *make_instn(int op, List *args) {
     return r;
 }
 
+bool is_flonum(Ctype *ctype) {
+    return ctype->type == CTYPE_FLOAT || ctype->type == CTYPE_DOUBLE;
+}
+
 /*
  * Code generator
  */
@@ -210,18 +214,17 @@ int type_bits(Ctype *ctype) {
     }
 }
 
-// MOV rdi/rsi/rdx/rcx/r8/r9, imm
-// static u16 push_arg_imm[] = { 0xbf48, 0xbe48, 0xba48, 0xb948, 0xb849, 0xb949 };
-
-// MOVSD xmm0/xmm1/xmm2/xmm3/xmm4/xmm5/xmm6/xmm7, imm
-// static u32 push_arg_xmm_imm[] = { 0x05100ff2, 0x0d100ff2, 0x15100ff2, 0x1d100ff2,
-//                                   0x25100ff2, 0x2d100ff2, 0x35100ff2, 0x3d100ff2 };
-
 // MOV rdi/rsi/rdx/rcx/r8/r9, rax
 static u32 push_arg[] = { 0xc78948, 0xc68948, 0xc28948, 0xc18948, 0xc08949, 0xc18949 };
 
 // MOV rax, rdi/rsi/rdx/rcx/r8/r9
 static u32 pop_arg[] = { 0xf88948, 0xf08948, 0xd08948, 0xc88948, 0xc0894c, 0xc8894c };
+
+// MOVSD xmm[0-7], xmm7
+static u32 push_xmm_arg[] = {
+    0xc7100ff2, 0xcf100ff2, 0xd7100ff2, 0xdf100ff2,
+    0xe7100ff2, 0xef100ff2, 0xf7100ff2, 0xff100ff2,
+};
 
 static void load_imm(Context *ctx, Var *var, u16 op) {
     if (var->ctype->type == CTYPE_INT) {
@@ -309,6 +312,82 @@ static void save_rax(Context *ctx, Var *dst) {
     emit4(ctx, off);
 }
 
+static u64 flonum_to_u64(double d) {
+    u64 *p = (u64 *)&d;
+    return *p;
+}
+
+static void load_xmm_imm(Context *ctx, Var *var, u16 movss) {
+    assert(is_flonum(var->ctype));
+    // SUB rsp, 8
+    emit3(ctx, 0xec8148);
+    emit4(ctx, 8);
+    // MOV rax, imm
+    emit2(ctx, 0xb848);
+    emit8(ctx, flonum_to_u64(var->val.f));
+    // MOV [rsp], rax
+    emit4(ctx, 0x24048948);
+    // MOVSD xmm0, [rsp]
+    emit3(ctx, 0x100ff2);
+    emit2(ctx, movss);
+    // ADD rsp, 8
+    emit3(ctx, 0xc48148);
+    emit4(ctx, 8);
+}
+
+static void load_xmm0(Context *ctx, Var *var) {
+    if (var->stype == VAR_IMM) {
+        load_xmm_imm(ctx, var, 0x2404);
+        return;
+    }
+    int off = var_stack_pos(ctx, var);
+    if (var->ctype->type == CTYPE_FLOAT) {
+        // MOVSS xmm0, [rbp+off]
+        emit4(ctx, 0x85100ff2);
+        emit4(ctx, off);
+        // CVTPS2PD xmm0, xmm0
+        emit3(ctx, 0xc05a0f);
+    } else {
+        // MOVSD off, xmm0
+        emit4(ctx, 0x85100ff2);
+        emit4(ctx, off);
+    }
+}
+
+static void load_xmm7(Context *ctx, Var *var) {
+    if (var->stype == VAR_IMM) {
+        load_xmm_imm(ctx, var, 0x243c);
+        return;
+    }
+    int off = var_stack_pos(ctx, var);
+    if (var->ctype->type == CTYPE_FLOAT) {
+        // MOVSS xmm7, [rbp+off]
+        emit4(ctx, 0xbd100ff3);
+        emit4(ctx, off);
+        // CVTPS2PD xmm7, xmm7
+        emit3(ctx, 0xff5a0f);
+    } else {
+        // MOVSD off, xmm7
+        emit4(ctx, 0xbd100ff2);
+        emit4(ctx, off);
+    }
+}
+
+static void save_xmm0(Context *ctx, Var *var) {
+    assert(is_flonum(var->ctype));
+    if (var->ctype->type == CTYPE_FLOAT) {
+        // CVTPD2PS xmm0, xmm0
+        emit4(ctx, 0xc05a0f66);
+        // MOVSS off, xmm0
+        emit4(ctx, 0x85110ff3);
+    } else {
+        // MOVSD off, xmm0
+        emit4(ctx, 0x85110ff2);
+    }
+    int off = var_stack_pos(ctx, var);
+    emit4(ctx, off);
+}
+
 static void handle_func_call(Context *ctx, Inst *inst) {
     Var *fn = LIST_ELEM(inst->args, 0);
     Section *text = find_section(ctx->elf, ".text");
@@ -317,8 +396,13 @@ static void handle_func_call(Context *ctx, Inst *inst) {
 
     for (int i = 2; i < LIST_LEN(inst->args); i++) {
         Var *var = LIST_ELEM(inst->args, i);
-        load_rax(ctx, var);
-        emit3(ctx, push_arg[gpr++]);
+        if (is_flonum(var->ctype)) {
+            load_xmm7(ctx, var);
+            emit4(ctx, push_xmm_arg[xmm++]);
+        } else {
+            load_rax(ctx, var);
+            emit3(ctx, push_arg[gpr++]);
+        }
     }
     if (!dict_get(ctx->elf->syms, fn->name)) {
         Symbol *sym = make_symbol(fn->name, text, 0, STB_GLOBAL, STT_NOTYPE, 0);
@@ -352,28 +436,55 @@ static void finish_func_call(Elf *elf, Dict *func, List *tbf) {
 }
 
 static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
+    Var *dst = LIST_ELEM(inst->args, 0);
     Var *src0 = LIST_ELEM(inst->args, 1);
     Var *src1 = LIST_ELEM(inst->args, 2);
+    if (is_flonum(src0->ctype)) {
+        load_xmm0(ctx, src0);
+        load_xmm7(ctx, src1);
+        // ADDSD/SUBSD xmm0, xmm7
+        emit4(ctx, add ? 0xc7580ff2 : 0xc75c0ff2);
+        save_xmm0(ctx, dst);
+        return;
+    }
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // ADD/SUB rax, r11
     emit3(ctx, add ? 0xd8014c : 0xd8294c);
-    save_rax(ctx, LIST_ELEM(inst->args, 0));
+    save_rax(ctx, dst);
 }
 
 static void handle_imul(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
     Var *src0 = LIST_ELEM(inst->args, 1);
     Var *src1 = LIST_ELEM(inst->args, 2);
+    if (is_flonum(src0->ctype)) {
+        load_xmm0(ctx, src0);
+        load_xmm7(ctx, src1);
+        // MULSD xmm0 xmm7
+        emit4(ctx, 0xc7590ff2);
+        save_xmm0(ctx, dst);
+        return;
+    }
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // IMUL rax, r11
     emit4(ctx, 0xc3af0f49);
-    save_rax(ctx, LIST_ELEM(inst->args, 0));
+    save_rax(ctx, dst);
 }
 
 static void handle_idiv(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
     Var *src0 = LIST_ELEM(inst->args, 1);
     Var *src1 = LIST_ELEM(inst->args, 2);
+    if (is_flonum(src0->ctype)) {
+        load_xmm0(ctx, src0);
+        load_xmm7(ctx, src1);
+        // DIVSD xmm0, xmm7
+        emit4(ctx, 0xc75e0ff2);
+        save_xmm0(ctx, dst);
+        return;
+    }
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // XOR edx, edx
@@ -396,33 +507,58 @@ static void handle_not(Context *ctx, Inst *inst) {
     save_rax(ctx, dst);
 }
 
-static void emit_cmp(Context *ctx, Inst *inst) {
+static void emit_cmp(Context *ctx, Inst *inst, u32 op) {
+    Var *dst = LIST_ELEM(inst->args, 0);
     Var *src0 = LIST_ELEM(inst->args, 1);
     Var *src1 = LIST_ELEM(inst->args, 2);
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // CMP rax, r11
     emit3(ctx, 0xd8394c);
+    emit3(ctx, op);
+    // MOVZX eax, al
+    emit3(ctx, 0xc0b60f);
+    save_rax(ctx, dst);
+}
+
+static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    Var *src0 = LIST_ELEM(inst->args, 1);
+    Var *src1 = LIST_ELEM(inst->args, 2);
+    emit1(ctx, 0x90);
+    emit1(ctx, 0x90);
+    load_xmm0(ctx, src0);
+    load_xmm7(ctx, src1);
+    // UCOMISD xmm0, xmm7
+    emit4(ctx, 0xc72e0f66);
+    emit3(ctx, op);
+    // MOVZX eax, al
+    emit3(ctx, 0xc0b60f);
+    save_rax(ctx, dst);
 }
 
 static void handle_less(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    emit_cmp(ctx, inst);
-    // SETL al
-    emit3(ctx, 0xc09c0f);
-    // MOVZX eax, al
-    emit3(ctx, 0xc0b60f);
-    save_rax(ctx, dst);
+    if (is_flonum(((Var *)LIST_ELEM(inst->args, 1))->ctype)) {
+        // SETL al
+        emit_cmp(ctx, inst, 0xc09c0f);
+    } else {
+        // SETL al
+        emit_cmp(ctx, inst, 0xc09c0f);
+    }
 }
 
 static void handle_less_equal(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    emit_cmp(ctx, inst);
-    // SETLE al
-    emit3(ctx, 0xc09e0f);
-    // MOVZX eax, al
-    emit3(ctx, 0xc0b60f);
-    save_rax(ctx, dst);
+    if (is_flonum(((Var *)LIST_ELEM(inst->args, 1))->ctype)) {
+        // SETA al
+        // emit_fcmp(ctx, inst, 0xc0970f);
+        // SETLE al
+        // emit_fcmp(ctx, inst, 0xc09e0f);
+        // SETBE al
+        emit_fcmp(ctx, inst, 0xc0960f);
+    } else {
+        // SETLE al
+        emit_cmp(ctx, inst, 0xc09e0f);
+    }
 }
 
 static void handle_neg(Context *ctx, Inst *inst) {
@@ -486,18 +622,22 @@ static void handle_assign(Context *ctx, Inst *inst) {
     Var *val = LIST_ELEM(inst->args, 1);
     assert(var->ctype->type != CTYPE_ARRAY);
     assert(val);
-    load_rax(ctx, val);
-    save_rax(ctx, var);
+    if (is_flonum(((Var *)LIST_ELEM(inst->args, 1))->ctype)) {
+        load_xmm0(ctx, val);
+        save_xmm0(ctx, var);
+    } else {
+        load_rax(ctx, val);
+        save_rax(ctx, var);
+    }
 }
 
 static void handle_equal(Context *ctx, Inst *inst, bool eq) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    emit_cmp(ctx, inst);
     // SETE al or SETNE al
-    emit3(ctx, eq ? 0xc0940f : 0xc0950f);
-    // MOVZX eax, al
-    emit3(ctx, 0xc0b60f);
-    save_rax(ctx, dst);
+    if (is_flonum(((Var *)LIST_ELEM(inst->args, 1))->ctype)) {
+        emit_fcmp(ctx, inst, eq ? 0xc0940f : 0xc0950f);
+    } else {
+        emit_cmp(ctx, inst, eq ? 0xc0940f : 0xc0950f);
+    }
 }
 
 static void handle_address(Context *ctx, Inst *inst) {
@@ -701,13 +841,15 @@ void assemble1(Context *ctx, Function *func) {
     emit3(ctx, 0xec8148);
     int pos = STRING_LEN(ctx->text);
     emit4(ctx, 0); // filled later
+    emit1(ctx, 0x90); // NOP
 
     save_params(ctx, func);
     handle_block(ctx, func->entry);
 
     // Backfill SUB rsp, 0
+    int off = ((ctx->sp + 2) & ~1) * 8; // need to be 16-byte aligned
     string_seek(ctx->text, pos);
-    emit4(ctx, (ctx->sp + 1) * 8);
+    emit4(ctx, off);
     string_seek(ctx->text, STRING_LEN(ctx->text));
 }
 

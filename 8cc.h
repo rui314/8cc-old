@@ -317,8 +317,8 @@ typedef enum CtypeEnum {
     CTYPE_INT,
     CTYPE_SHORT,
     CTYPE_CHAR,
-    CTYPE_DOUBLE,
     CTYPE_FLOAT,
+    CTYPE_DOUBLE,
 } CtypeEnum;
 
 typedef struct Ctype {
@@ -432,7 +432,6 @@ typedef struct Var {
 
 enum {
     OP_LE,
-    OP_LT,
     OP_ADDRESS,
     OP_DEREF,
     OP_ASSIGN,
@@ -464,5 +463,6 @@ extern Inst *make_inst2(int op, void *v0, void *v1);
 extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);
 extern Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v4);
 extern Inst *make_instn(int op, List *args);
+extern bool is_flonum(Ctype *ctype);
 
 #endif /* ECC_H */

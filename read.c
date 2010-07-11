@@ -277,6 +277,8 @@ static Var *unary_conv(ReadContext *ctx, Var *var) {
  * See C:ARM p.198 6.3.4 The Usual Binary Conversions.
  */
 Ctype *binary_type_conv(Var *v0, Var *v1) {
+    if (is_flonum(v0->ctype) || is_flonum(v1->ctype))
+        return make_ctype(CTYPE_FLOAT);
     return (ctype_sizeof(v0->ctype) < ctype_sizeof(v1->ctype)) ? v1->ctype : v0->ctype;
 }
 
@@ -327,8 +329,14 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
     }
 }
 
-static Var *emit_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
+static Var *emit_arith_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
     Var *r = make_var(binary_type_conv(v0, v1));
+    emit(ctx, make_inst3(op, r, v0, v1));
+    return r;
+}
+
+static Var *emit_log_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
+    Var *r = make_var(make_ctype(CTYPE_INT));
     emit(ctx, make_inst3(op, r, v0, v1));
     return r;
 }
@@ -1020,8 +1028,11 @@ static Var *read_unary_expr(ReadContext *ctx) {
     case '-': {
         Var *v = read_cast_expr(ctx);
         Var *tmp = unary_conv(ctx, v);
-        Var *r = make_var(tmp->ctype);
-        emit(ctx, make_inst3(tok->val.k, r, make_imm(CTYPE_INT, (Cvalue)0), tmp));
+        Var *zero = is_flonum(tmp->ctype)
+            ? make_imm(CTYPE_FLOAT, (Cvalue)0.0f)
+            : make_imm(CTYPE_INT, (Cvalue)0);
+        Var *r = make_var(binary_type_conv(zero, tmp));
+        emit(ctx, make_inst3(tok->val.k, r, zero, tmp));
         return r;
     }
     case '*': {
@@ -1262,15 +1273,37 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case '+': case '-':
             v0 = emit_arith(ctx, tok->val.k, v0, v1);
             break;
-        case '*': case '/': case '^': case '&': case '|':
-            v0 = emit_inst3(ctx, tok->val.k, v0, v1);
+        case '*':
+        case '/': {
+            v0 = emit_arith_inst3(ctx, tok->val.k, v0, v1);
             break;
+        }
+        case '^':
+        case '&':
+        case '|': {
+            Var *tmp = make_var(binary_type_conv(v0, v1));
+            if (is_flonum(tmp->ctype))
+                error("invalid operand to binary '%c'", tok->val.k);
+            emit(ctx, make_inst3(tok->val.k, tmp, v0, v1));
+            v0 = tmp;
+            break;
+        }
         case KEYWORD_EQ:
             op = OP_EQ; goto cmp;
         case KEYWORD_NE:
             op = OP_NE; goto cmp;
+        case '>':
+            SWAP(Var *, v0, v1);
+            // FALL THROUGH
+        case '<':
+            op = '<'; goto cmp;
+        case KEYWORD_GE:
+            SWAP(Var *, v0, v1);
+            // FALL THROUGH
+        case KEYWORD_LE:
+            op = OP_LE; goto cmp;
         cmp:
-            v0 = emit_inst3(ctx, op, v0, v1);
+            v0 = emit_log_inst3(ctx, op, v0, v1);
             break;
         case KEYWORD_A_ADD:
             op = '+'; goto assign_arith_op;
@@ -1298,18 +1331,6 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             ensure_lvalue(v0);
             emit(ctx, make_inst3(op, v0, v0, v1));
             break;
-        case '>':
-            SWAP(Var *, v0, v1);
-            // FALL THROUGH
-        case '<':
-            v0 = emit_inst3(ctx, '<', v0, v1);
-            break;
-        case KEYWORD_GE:
-            SWAP(Var *, v0, v1);
-            // FALL THROUGH
-        case KEYWORD_LE:
-            v0 = emit_inst3(ctx, OP_LE, v0, v1);
-            break;
         case KEYWORD_LOG_AND:
             v0 = emit_log_and(ctx, v0, v1);
             break;
@@ -1317,10 +1338,10 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v0 = emit_log_or(ctx, v0, v1);
             break;
         case KEYWORD_LSH:
-            v0 = emit_inst3(ctx, OP_SHL, v0, v1);
+            v0 = emit_arith_inst3(ctx, OP_SHL, v0, v1);
             break;
         case KEYWORD_RSH:
-            v0 = emit_inst3(ctx, OP_SHR, v0, v1);
+            v0 = emit_arith_inst3(ctx, OP_SHR, v0, v1);
             break;
         default:
             error("unsupported operator: %c", tok->val.k);
