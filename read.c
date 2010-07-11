@@ -1192,13 +1192,13 @@ static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
     emit(ctx, make_inst4(OP_IF, unary_conv(ctx, condvar), then, els, cont));
 
     push_block(ctx, then);
-    Var *v0 = read_logor_expr(ctx);
+    Var *v0 = unary_conv(ctx, read_logor_expr(ctx));
     emit(ctx, make_inst2(OP_ASSIGN, r, v0));
     pop_block(ctx);
     expect(ctx, ':');
 
     push_block(ctx, els);
-    Var *v1 = read_logor_expr(ctx);
+    Var *v1 = unary_conv(ctx, read_logor_expr(ctx));
     emit(ctx, make_inst2(OP_ASSIGN, r, v1));
     pop_block(ctx);
 

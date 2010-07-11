@@ -283,6 +283,7 @@ runtest '17 42' 'int i[20]; int *p=i; p[0]=17; p[1]=42; printf("%d %d", *p, p[1]
 runtest '5' 'int i[20]; int *p=i; int *q=p+5; printf("%d", q-p);'
 runtest '123'       'int a[3][3]; a[0][1]=1; a[2][0]=2; a[2][2]=3; printf("%d%d%d", a[0][1], a[2][0], a[2][2]);'
 runtest '012345678' 'int a[3][3]; for (int i=0;i<3;i++) for (int j=0;j<3;j++) a[i][j]=i*3+j; for (int i=0;i<9;i++) printf("%d",*(*a+i));'
+runtest "bx" 'printf(0 ? "a" : "b"); printf(1 ? "x" : "y");'
 
 #
 # Aray and pointer arithmetic
