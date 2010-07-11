@@ -65,6 +65,7 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok);
 static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0);
 static Token *read_ident(ReadContext *ctx);
 static void read_compound_stmt(ReadContext *ctx);
+static void read_decl_or_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 
 /*============================================================
@@ -215,7 +216,7 @@ static void emit(ReadContext *ctx, Inst *inst) {
 }
 
 static void add_local_var(ReadContext *ctx, String *name, Var *var) {
-    List *current_scope = LIST_TOP(ctx->scope);
+    List *current_scope = LIST_BOTTOM(ctx->scope);
     list_push(current_scope, name);
     list_push(current_scope, var);
 }
@@ -1601,10 +1602,11 @@ static void read_for_stmt(ReadContext *ctx) {
     Block *mod = make_block();
     Block *body = make_block();
     Block *cont = make_block();
+    push_scope(ctx);
 
     expect(ctx, '(');
-    read_comma_expr(ctx);
-    expect(ctx, ';');
+    if (!next_token_is(ctx, ';'))
+        read_decl_or_stmt(ctx);
 
     emit(ctx, make_inst1(OP_JMP, cond));
 
@@ -1625,12 +1627,15 @@ static void read_for_stmt(ReadContext *ctx) {
     ctx->onbreak = cont;
     ctx->oncontinue = mod;
     push_block(ctx, body);
+    push_scope(ctx);
     read_stmt(ctx);
+    pop_scope(ctx);
     emit(ctx, make_inst1(OP_JMP, mod));
     pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
     ctx->onbreak = orig_onbreak;
 
+    pop_scope(ctx);
     replace_block(ctx, cont);
 }
 
@@ -1657,7 +1662,9 @@ static void read_while_stmt(ReadContext *ctx) {
     ctx->oncontinue = cond;
     ctx->onbreak = cont;
     push_block(ctx, body);
+    push_scope(ctx);
     read_stmt(ctx);
+    pop_scope(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
@@ -1683,7 +1690,9 @@ static void read_do_stmt(ReadContext *ctx) {
     ctx->oncontinue = body;
     ctx->onbreak = cont;
     push_block(ctx, body);
+    push_scope(ctx);
     read_stmt(ctx);
+    pop_scope(ctx);
     emit(ctx, make_inst1(OP_JMP, cond));
     pop_block(ctx);
     ctx->oncontinue = orig_oncontinue;
