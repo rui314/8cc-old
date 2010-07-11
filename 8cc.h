@@ -437,6 +437,7 @@ enum {
     OP_DEREF,
     OP_ASSIGN,
     OP_ASSIGN_DEREF,
+    OP_ALLOC,
     OP_FUNC_CALL = 256,
     OP_IF,
     OP_JMP,

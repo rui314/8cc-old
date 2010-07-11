@@ -7,7 +7,7 @@ replacement for GCC for projects using Boehm's conservative GC.
 I started developing the compiler May 2010, and as of July 2010, it can compile
 non-trivial programs, such as 8 queen problem solver.  Still a lot of features
 are missing, like C preprocessor, floating point numbers, declarations,
-multi-dimensional arrays, etc.
+miscellaneous operators, etc.
 
 = Architecture
 
@@ -51,11 +51,11 @@ At last, GCC would be invoked to link an object file to make an executable.
 
 = Future plans
 
-I'm implementing C99 features, including integrated C preprocessor.  After that,
-I want to go with copying GC.  Because compiler knows precise type, runtime can
-do precise GC as long as comipler retains type information to a binary in the
-form that is accessible from runtime.  Type of heap-allocated objects would be
-detected by recognizing the special form in source code, malloc(sizeof(type) *
-size).  Once that's done, I'd implement flow analysis and SSA conversion, and
-then implement efficient register algorithm, such as Linear Scan Register
-Allocation to improve performance.
+All C99 features will be implemented, including integrated C preprocessor.
+After that, I want to go with copying GC.  Because compiler knows precise type,
+runtime can do precise GC as long as comipler retains type information to a
+binary in the form that is accessible from runtime.  Type of heap-allocated
+objects would be detected by recognizing the special form in source code,
+malloc(sizeof(type) * size).  Once that's done, I'd implement flow analysis and
+SSA conversion, and then implement efficient register algorithm, such as Linear
+Scan Register Allocation to improve performance.

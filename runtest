@@ -269,10 +269,17 @@ runtest '123'       'int a[3][3]; a[0][1]=1; a[2][0]=2; a[2][2]=3; printf("%d%d%
 runtest '012345678' 'int a[3][3]; int i; int j; for (i=0;i<3;i++) for (j=0;j<3;j++) a[i][j]=i*3+j; for (i=0;i<9;i++) printf("%d",*(*a+i));'
 
 #
-# Pointer arithmetic
+# Aray and pointer arithmetic
 #
 /bin/echo -e '\nPointer arithmetic...'
 runtest '17 42' 'int i[20]; i[0]=17; i[1]=42; int *j=i; printf("%d ", *j); j++; printf("%d", *j);'
+
+#
+# Array and function parameter
+#
+/bin/echo -e '\nArray and function parameter...'
+runtest1 '012345678' 'main() { int a[9]; int i; for (i=0;i<9;i++) a[i]=i; f(a); } f(int a[][3]) { int i; int j; for (i=0;i<3;i++) for (j=0;j<3;j++) printf("%d", a[i][j]); }'
+runtest1 '012345678' 'main() { int a[9]; int i; for (i=0;i<9;i++) a[i]=i; f(a); } f(int *a[3])  { int i; int j; for (i=0;i<3;i++) for (j=0;j<3;j++) printf("%d", a[i][j]); }'
 
 #
 # Char type

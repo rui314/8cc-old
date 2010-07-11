@@ -484,10 +484,8 @@ static void handle_xor(Context *ctx, Inst *inst) {
 static void handle_assign(Context *ctx, Inst *inst) {
     Var *var = LIST_ELEM(inst->args, 0);
     Var *val = LIST_ELEM(inst->args, 1);
-    if (!val) {
-        var_stack_pos(ctx, var);
-        return;
-    }
+    assert(var->ctype->type != CTYPE_ARRAY);
+    assert(val);
     load_rax(ctx, val);
     save_rax(ctx, var);
 }
@@ -572,6 +570,11 @@ static void handle_if(Context *ctx, Inst *inst) {
     string_seek(ctx->text, save);
 
     handle_block(ctx, cont);
+}
+
+static void handle_alloc(Context *ctx, Inst *inst) {
+    Var *v = LIST_ELEM(inst->args, 0);
+    var_stack_pos(ctx, v);
 }
 
 static void jump_to(Context *ctx, int pos) {
@@ -661,6 +664,9 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case OP_ASSIGN_DEREF:
             handle_assign_deref(ctx, inst);
+            break;
+        case OP_ALLOC:
+            handle_alloc(ctx, inst);
             break;
         case OP_IF:
             handle_if(ctx, inst);

@@ -1425,16 +1425,6 @@ Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
 }
 
 /*
- * declarator:
- *     pointer-declarator
- *     direct-declarator
- *
- * pointer-declarator:
- *     pointer direct-declarator
- *
- * pointer:
- *     "*" type-qualifier* pointer?
- *
  * direct-declarator:
  *     simple-declarator
  *     "(" declarator ")"
@@ -1452,21 +1442,40 @@ Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
  * simple-declarator:
  *     identifier
  */
-Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
-    for (;;) {
-        if (next_token_is(ctx, '*')) {
-            // TODO: implement type-qualifier-list here
-            ctype = make_ctype_ptr(ctype);
-            continue;
-        }
-        break;
-    }
+Var *read_direct_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *r = make_var(ctype);
     Token *tok = read_ident(ctx);
     r->name = tok->val.str;
     if (next_token_is(ctx, '['))
         r->ctype = read_array_dimensions(ctx, r->ctype);
     return r;
+}
+
+/*
+ * pointer-declarator:
+ *     pointer direct-declarator
+ *
+ * pointer:
+ *     "*" type-qualifier* pointer?
+ */
+Var *read_pointer_declarator(ReadContext *ctx, Ctype *ctype) {
+    Var *r = next_token_is(ctx, '*')
+        ? read_pointer_declarator(ctx, ctype)
+        : read_direct_declarator(ctx, ctype);
+    r->ctype = make_ctype_ptr(r->ctype);
+    return r;
+}
+
+/*
+ * declarator:
+ *     pointer-declarator
+ *     direct-declarator
+ */
+Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
+    if (next_token_is(ctx, '*')) {
+        return read_pointer_declarator(ctx, ctype);
+    }
+    return read_direct_declarator(ctx, ctype);
 }
 
 /*
@@ -1498,11 +1507,13 @@ Var *read_initializer(ReadContext *ctx) {
  */
 void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *var = read_declarator(ctx, ctype);
-    Var *val = next_token_is(ctx, '=')
-        ? rv(ctx, read_initializer(ctx))
-        : NULL;
     add_local_var(ctx, var->name, var);
-    emit(ctx, make_inst2(OP_ASSIGN, var, val));
+    if (next_token_is(ctx, '=')) {
+        Var *val = rv(ctx, read_initializer(ctx));
+        emit(ctx, make_inst2(OP_ASSIGN, var, val));
+        return;
+    }
+    emit(ctx, make_inst1(OP_ALLOC, var));
 }
 
 static bool is_type_keyword(Token *tok) {
@@ -1882,6 +1893,8 @@ static List *read_param_type_list(ReadContext *ctx) {
     for (;;) {
         Ctype *type = read_declaration_spec(ctx);
         Var *param = read_declarator(ctx, type);
+        if (param->ctype->type == CTYPE_ARRAY)
+            param->ctype = make_ctype_ptr(param->ctype->ptr);
         add_local_var(ctx, param->name, param);
         list_push(params, param);
         if (next_token_is(ctx, ')'))
