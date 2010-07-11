@@ -239,6 +239,21 @@ runtest 'acbd' 'A: printf("a"); goto C; B: printf("b"); goto D; C: printf("c"); 
 runtest 'a' 'printf("a"); return 1;'
 
 #
+# Sizeof
+#
+/bin/echo -e '\nSizeof...'
+runtest '1'  'char x;      printf("%d", sizeof x);'
+runtest '2'  'short x;     printf("%d", sizeof x);'
+runtest '4'  'int x;       printf("%d", sizeof x);'
+runtest '8'  'long x;      printf("%d", sizeof x);'
+runtest '8'  'int *x;      printf("%d", sizeof x);'
+runtest '8'  'char *x;     printf("%d", sizeof x);'
+runtest '20' 'char x[20];  printf("%d", sizeof x);'
+runtest '8'  'char **x;    printf("%d", sizeof x);'
+runtest '12' 'int x[3];    printf("%d", sizeof x);'
+runtest '36' 'int x[3][3]; printf("%d", sizeof x);'
+
+#
 # Function call
 #
 /bin/echo -e '\nFunction call...'

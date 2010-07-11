@@ -409,7 +409,7 @@ typedef struct ReadContext {
 
 extern void parser_init(); // for testing
 extern List *parse(File *file, Elf *elf);
-extern int type_size(Ctype *ctype);
+extern int ctype_sizeof(Ctype *ctype);
 extern Token *read_token(ReadContext *ctx);
 extern void unget_token(ReadContext *ctx, Token *tok);
 extern ReadContext *make_read_context(File *file, Elf *elf);
@@ -464,6 +464,5 @@ extern Inst *make_inst2(int op, void *v0, void *v1);
 extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);
 extern Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v4);
 extern Inst *make_instn(int op, List *args);
-extern int type_bits(Ctype *ctype);
 
 #endif /* ECC_H */

@@ -184,7 +184,7 @@ static int var_abs_pos(Context *ctx, Var *var) {
 static int var_stack_pos(Context *ctx, Var *var) {
     CompiledVar *cvar = dict_get(ctx->stack, var);
     if (cvar == NULL) {
-        ctx->sp += type_size(var->ctype);
+        ctx->sp += ctype_sizeof(var->ctype);
         cvar = make_compiled_var(ctx->sp * -8);
         dict_put(ctx->stack, var, cvar);
     }
@@ -248,7 +248,7 @@ static void load_rax(Context *ctx, Var *var) {
         return;
     }
     int off = var_stack_pos(ctx, var);
-    int bits = type_bits(var->ctype);
+    int bits = ctype_sizeof(var->ctype) * 8;
     // MOV rax/eax, [rbp+off]
     if (bits == 64)
         emit1(ctx, 0x48);
@@ -274,7 +274,7 @@ static void load_r11(Context *ctx, Var *var) {
         return;
     }
     int off = var_stack_pos(ctx, var);
-    int bits = type_bits(var->ctype);
+    int bits = ctype_sizeof(var->ctype) * 8;
     // MOV r11d, [rbp+off]
     emit1(ctx, (bits == 64) ? 0x4c : 0x44);
     emit2(ctx, 0x9d8b);
@@ -295,7 +295,7 @@ static void load_r11(Context *ctx, Var *var) {
 
 static void save_rax(Context *ctx, Var *dst) {
     int off = var_stack_pos(ctx, dst);
-    int bits = type_bits(dst->ctype);
+    int bits = ctype_sizeof(dst->ctype) * 8;
     // MOV [rbp+off], rax/eax/ax/al
     if (bits >= 64)
         emit3(ctx, 0x858948);

@@ -153,11 +153,19 @@ static void ensure_lvalue(Var *var) {
     error("expected lvalue, but got %p", var);
 }
 
-int type_size(Ctype *ctype) {
+int ctype_sizeof(Ctype *ctype) {
     if (ctype->type == CTYPE_ARRAY) {
-        return ctype->size * type_size(ctype->ptr);
+        return ctype->size * ctype_sizeof(ctype->ptr);
     }
-    return 1;
+    switch (ctype->type) {
+    case CTYPE_FLOAT: return 8;
+    case CTYPE_PTR:   return 8;
+    case CTYPE_LONG:  return 8;
+    case CTYPE_INT:   return 4;
+    case CTYPE_SHORT: return 2;
+    case CTYPE_CHAR:  return 1;
+    default: panic("unknown type: %d", ctype->type);
+    }
 }
 
 /*============================================================
@@ -237,7 +245,7 @@ static Var *rv(ReadContext *ctx, Var *v) {
     if (!v->loc)
         return v;
     if (v->loc->ctype->ptr->type == CTYPE_ARRAY) {
-        Var *r = make_var(make_ctype_ptr(v->loc->ctype));
+        Var *r = make_var(make_ctype_ptr(v->loc->ctype->ptr->ptr));
         emit(ctx, make_inst2(OP_ASSIGN, r, v->loc));
         return r;
     }
@@ -251,13 +259,14 @@ static Var *rv(ReadContext *ctx, Var *v) {
 /*
  * See C:ARM p.197 6.3.3 The Usual Unary Conversions.
  */
-Var *unary_type_conv(ReadContext *ctx, Var *var) {
+static Var *unary_conv(ReadContext *ctx, Var *var) {
+    var = rv(ctx, var);
     if (var->ctype->type == CTYPE_ARRAY) {
         Var *r = make_var(make_ctype_ptr(var->ctype->ptr));
         emit(ctx, make_inst2(OP_ADDRESS, r, var));
         return r;
     }
-    if (type_bits(var->ctype) >= 32)
+    if (ctype_sizeof(var->ctype) >= 4)
         return var;
     Var *r = make_var(make_ctype(CTYPE_INT));
     emit(ctx, make_inst2(OP_ASSIGN, r, var));
@@ -268,7 +277,7 @@ Var *unary_type_conv(ReadContext *ctx, Var *var) {
  * See C:ARM p.198 6.3.4 The Usual Binary Conversions.
  */
 Ctype *binary_type_conv(Var *v0, Var *v1) {
-    return (type_bits(v0->ctype) < type_bits(v1->ctype)) ? v1->ctype : v0->ctype;
+    return (ctype_sizeof(v0->ctype) < ctype_sizeof(v1->ctype)) ? v1->ctype : v0->ctype;
 }
 
 static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
@@ -280,7 +289,7 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
         if (v0->ctype->type == CTYPE_PTR) {
             if (v1->ctype->type != CTYPE_INT)
                 error("arithmetic + is not defined for pointers except integer operand");
-            Var *size = make_imm(CTYPE_INT, (Cvalue)(type_size(v0->ctype->ptr) * 8));
+            Var *size = make_imm(CTYPE_INT, (Cvalue)ctype_sizeof(v0->ctype->ptr));
             Var *r = make_var(v0->ctype);
             Var *tmp = make_var(make_ctype(CTYPE_LONG));
             emit(ctx, make_inst3('*', tmp, v1, size));
@@ -294,14 +303,14 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
     case '-':
         // C:ARM p.230 7.6.2 Subtraction.
         if (v0->ctype->type == CTYPE_PTR && v1->ctype->type == CTYPE_INT) {
-            Var *size = make_imm(CTYPE_INT, (Cvalue)(type_size(v0->ctype) * 8));
+            Var *size = make_imm(CTYPE_INT, (Cvalue)ctype_sizeof(v0->ctype->ptr));
             Var *r = make_var(v0->ctype);
             Var *tmp = make_var(make_ctype(CTYPE_LONG));
             emit(ctx, make_inst3('*', tmp, v1, size));
             emit(ctx, make_inst3('-', r, v0, tmp));
             return r;
         } else if (v0->ctype->type == CTYPE_PTR && v1->ctype->type == CTYPE_PTR) {
-            Var *size = make_imm(CTYPE_INT, (Cvalue)(type_size(v0->ctype) * 8));
+            Var *size = make_imm(CTYPE_INT, (Cvalue)ctype_sizeof(v0->ctype->ptr));
             // [TODO] CTYPE_LONG should be ptrdiff_t.  See C:ARM p.231.
             Var *r = make_var(make_ctype(CTYPE_LONG));
             emit(ctx, make_inst3('-', r, v0, v1));
@@ -327,10 +336,9 @@ static Var *emit_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
 static void emit_assign(ReadContext *ctx, Var *v0, Var *v1) {
     ensure_lvalue(v0);
     if (v0->loc) {
-        emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, rv(ctx, v1)));
-        v0 = rv(ctx, v0);
+        emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, unary_conv(ctx, v1)));
     } else {
-        emit(ctx, make_inst2(OP_ASSIGN, v0, rv(ctx, v1)));
+        emit(ctx, make_inst2(OP_ASSIGN, v0, unary_conv(ctx, v1)));
     }
 }
 
@@ -338,7 +346,7 @@ static Var *emit_post_inc_dec(ReadContext *ctx, Var *var, int op) {
     ensure_lvalue(var);
     Var *copy = make_var(var->ctype);
     emit(ctx, make_inst2(OP_ASSIGN, copy, var));
-    Var *tmp = emit_arith(ctx, op, rv(ctx, var), make_imm(CTYPE_INT, (Cvalue)1));
+    Var *tmp = emit_arith(ctx, op, unary_conv(ctx, var), make_imm(CTYPE_INT, (Cvalue)1));
     emit_assign(ctx, var, tmp);
     return copy;
 }
@@ -355,7 +363,7 @@ static Var *emit_log_and_or(ReadContext *ctx, Var *condvar, Var *v0, Var *v1, Bl
     Block *cont = make_block();
     Var *r = make_var(binary_type_conv(v0, v1));
 
-    emit(ctx, make_inst4(OP_IF, rv(ctx, condvar), then, els, cont));
+    emit(ctx, make_inst4(OP_IF, unary_conv(ctx, condvar), then, els, cont));
 
     push_block(ctx, then);
     emit(ctx, make_inst2(OP_ASSIGN, r, v0));
@@ -954,7 +962,7 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
         unget_token(ctx, tok);
         for (;;) {
             Var *v = read_assign_expr(ctx);
-            list_push(args, rv(ctx, v));
+            list_push(args, unary_conv(ctx, v));
             Token *sep = read_token(ctx);
             if (sep->toktype != TOKTYPE_KEYWORD)
                 error("line %d:%d: expected ',', or ')', but got '%c'", sep->line, sep->column, sep->val.c);
@@ -1000,8 +1008,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     if (tok->toktype != TOKTYPE_KEYWORD) {
         unget_token(ctx, tok);
-        Var *tmp = read_postfix_expr(ctx);
-        return unary_type_conv(ctx, tmp);
+        return read_postfix_expr(ctx);
     }
     switch (tok->val.k) {
     case '(': {
@@ -1009,15 +1016,16 @@ static Var *read_unary_expr(ReadContext *ctx) {
         expect(ctx, ')');
         return r;
     }
+    case '+':
     case '-': {
         Var *v = read_cast_expr(ctx);
-        Var *tmp = rv(ctx, unary_type_conv(ctx, v));
+        Var *tmp = unary_conv(ctx, v);
         Var *r = make_var(tmp->ctype);
-        emit(ctx, make_inst3('-', r, make_imm(CTYPE_INT, (Cvalue)0), tmp));
+        emit(ctx, make_inst3(tok->val.k, r, make_imm(CTYPE_INT, (Cvalue)0), tmp));
         return r;
     }
     case '*': {
-        Var *pointed = rv(ctx, read_cast_expr(ctx));
+        Var *pointed = unary_conv(ctx, read_cast_expr(ctx));
         return make_deref_var(pointed);
     }
     case '&': {
@@ -1029,7 +1037,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
     case '~':
     case '!': {
         Var *v = read_cast_expr(ctx);
-        Var *tmp = rv(ctx, unary_type_conv(ctx, v));
+        Var *tmp = unary_conv(ctx, v);
         Var *r = make_var(tmp->ctype);
         emit(ctx, make_inst2(tok->val.k, r, tmp));
         return r;
@@ -1039,10 +1047,14 @@ static Var *read_unary_expr(ReadContext *ctx) {
         Var *v = read_cast_expr(ctx);
         ensure_lvalue(v);
         char op = tok->val.k == KEYWORD_INC ? '+' : '-';
-        Var *tmp = rv(ctx, unary_type_conv(ctx, v));
+        Var *tmp = unary_conv(ctx, v);
         tmp = emit_arith(ctx, op, tmp, make_imm(CTYPE_INT, (Cvalue)1));
         emit_assign(ctx, v, tmp);
         return v;
+    }
+    case KEYWORD_SIZEOF: {
+        Var *v = read_unary_expr(ctx);
+        return make_imm(CTYPE_INT, (Cvalue)ctype_sizeof(v->ctype));
     }
     default:
         error("expected unary, but got %d", tok->val.k);
@@ -1077,7 +1089,7 @@ static int prec(Token *tok) {
         return 1;
     case KEYWORD_INC: case KEYWORD_DEC: case '~':
         return 2;
-    case '*': case '/': case '%':
+    case '*': case '/': case '%': case KEYWORD_SIZEOF:
         return 3;
     case '+': case '-':
         return 4;
@@ -1162,8 +1174,8 @@ static Var *read_subscript_expr(ReadContext *ctx, Var *a) {
     // a[i] is equivalent to *((a) + (i))
     Var *i = read_comma_expr(ctx);
     expect(ctx, ']');
-    Var *var = emit_arith(ctx, '+', rv(ctx, a), rv(ctx, i));
-    return make_deref_var(rv(ctx, var));
+    Var *var = emit_arith(ctx, '+', unary_conv(ctx, a), unary_conv(ctx, i));
+    return make_deref_var(unary_conv(ctx, var));
 }
 
 /*
@@ -1177,7 +1189,7 @@ static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
     Block *cont = make_block();
     Var *r = make_var(make_ctype(CTYPE_INVALID));
 
-    emit(ctx, make_inst4(OP_IF, rv(ctx, condvar), then, els, cont));
+    emit(ctx, make_inst4(OP_IF, unary_conv(ctx, condvar), then, els, cont));
 
     push_block(ctx, then);
     Var *v0 = read_logor_expr(ctx);
@@ -1220,7 +1232,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         }
         if (IS_KEYWORD(tok, '?')) {
             v0 = read_cond_expr(ctx, v0);
-            v0 = rv(ctx, v0);
+            v0 = unary_conv(ctx, v0);
             continue;
         }
         if (IS_KEYWORD(tok, KEYWORD_LOG_AND) || IS_KEYWORD(tok, KEYWORD_LOG_OR)) {
@@ -1240,8 +1252,8 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             continue;
         }
 
-        v0 = rv(ctx, v0);
-        v1 = rv(ctx, v1);
+        v0 = unary_conv(ctx, v0);
+        v1 = unary_conv(ctx, v1);
         int op;
         switch (tok->val.k) {
         case ',':
@@ -1510,7 +1522,7 @@ void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *var = read_declarator(ctx, ctype);
     add_local_var(ctx, var->name, var);
     if (next_token_is(ctx, '=')) {
-        Var *val = rv(ctx, read_initializer(ctx));
+        Var *val = unary_conv(ctx, read_initializer(ctx));
         emit(ctx, make_inst2(OP_ASSIGN, var, val));
         return;
     }
@@ -1572,7 +1584,7 @@ static void read_if_stmt(ReadContext *ctx) {
     Var *cond = read_comma_expr(ctx);
     expect(ctx, ')');
 
-    emit(ctx, make_inst4(OP_IF, rv(ctx, cond), then, els, cont));
+    emit(ctx, make_inst4(OP_IF, unary_conv(ctx, cond), then, els, cont));
 
     push_block(ctx, then);
     read_stmt(ctx);
