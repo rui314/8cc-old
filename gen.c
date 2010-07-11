@@ -168,19 +168,6 @@ static void emit3(Context *ctx, u32 d) { o3(ctx->text, d); }
 static void emit4(Context *ctx, u32 d) { o4(ctx->text, d); }
 static void emit8(Context *ctx, u64 q) { o8(ctx->text, q); }
 
-static int var_size(Ctype *ctype) {
-    if (ctype->type == CTYPE_ARRAY) {
-        return ctype->size * var_size(ctype->ptr);
-    }
-    return 1;
-}
-
-static Var *resolve_alias(Var *var) {
-    while (var->stype == VAR_ALIAS)
-        var = var->loc;
-    return var;
-}
-
 static int var_abs_pos(Context *ctx, Var *var) {
     assert(var->stype == VAR_IMM);
     assert(var->ctype->type == CTYPE_ARRAY);
@@ -195,10 +182,9 @@ static int var_abs_pos(Context *ctx, Var *var) {
 }
 
 static int var_stack_pos(Context *ctx, Var *var) {
-    var = resolve_alias(var);
     CompiledVar *cvar = dict_get(ctx->stack, var);
     if (cvar == NULL) {
-        ctx->sp += var_size(var->ctype);
+        ctx->sp += type_size(var->ctype);
         cvar = make_compiled_var(ctx->sp * -8);
         dict_put(ctx->stack, var, cvar);
     }
@@ -261,8 +247,6 @@ static void load_rax(Context *ctx, Var *var) {
         load_imm(ctx, var, 0xb848);
         return;
     }
-
-    var = resolve_alias(var);
     int off = var_stack_pos(ctx, var);
     int bits = type_bits(var->ctype);
     // MOV rax/eax, [rbp+off]
@@ -289,8 +273,6 @@ static void load_r11(Context *ctx, Var *var) {
         load_imm(ctx, var, 0xbb49);
         return;
     }
-
-    var = resolve_alias(var);
     int off = var_stack_pos(ctx, var);
     int bits = type_bits(var->ctype);
     // MOV r11d, [rbp+off]

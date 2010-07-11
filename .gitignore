@@ -3,6 +3,7 @@
 test
 tests
 tmp*
+.tmp*
 *#
 .#*
 nqueen

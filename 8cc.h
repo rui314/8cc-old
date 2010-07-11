@@ -409,6 +409,7 @@ typedef struct ReadContext {
 
 extern void parser_init(); // for testing
 extern List *parse(File *file, Elf *elf);
+extern int type_size(Ctype *ctype);
 extern Token *read_token(ReadContext *ctx);
 extern void unget_token(ReadContext *ctx, Token *tok);
 extern ReadContext *make_read_context(File *file, Elf *elf);
@@ -419,16 +420,14 @@ extern ReadContext *make_read_context(File *file, Elf *elf);
 
 #define VAR_IMM    0
 #define VAR_EXTERN 1
-#define VAR_GLOBAL 2
-#define VAR_LVALUE 3
-#define VAR_ALIAS  4
+#define VAR_LOCAL  2
 
 typedef struct Var {
     int stype;
     Ctype *ctype;
     String *name;
     Cvalue val;  // Immediate value.  Only valid when stype == VAR_IMM
-    struct Var *loc;
+    struct Var *loc; // Non-NULL if lvalue
 } Var;
 
 enum {

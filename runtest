@@ -6,9 +6,9 @@ fail=0
 
 runtest_int() {
     /bin/echo -En "  $2 ... "
-    echo "$3" | ./8cc - tmpTEST$$.o
-    gcc -o tmpTEST$$ tmpTEST$$.o
-    local result="`./tmpTEST$$`"
+    echo "$3" | ./8cc - .tmpTEST$$.o
+    gcc -o .tmpTEST$$ .tmpTEST$$.o
+    local result="`./.tmpTEST$$`"
     if [ "$result" = "$1" ]; then
 	echo $1
     else
@@ -265,6 +265,8 @@ runtest '17' 'int i[20]; printf("17");'
 runtest '17 42' 'int i[20]; i[0]=17; i[19]=42; printf("%d %d", i[0], i[19]);'
 runtest '17 42' 'int i[20]; int *p=i; p[0]=17; p[1]=42; printf("%d %d", *p, p[1]);'
 runtest '5' 'int i[20]; int *p=i; int *q=p+5; printf("%d", q-p);'
+runtest '123'       'int a[3][3]; a[0][1]=1; a[2][0]=2; a[2][2]=3; printf("%d%d%d", a[0][1], a[2][0], a[2][2]);'
+runtest '012345678' 'int a[3][3]; int i; int j; for (i=0;i<3;i++) for (j=0;j<3;j++) a[i][j]=i*3+j; for (i=0;i<9;i++) printf("%d",*(*a+i));'
 
 #
 # Pointer arithmetic
@@ -288,7 +290,7 @@ runtest '255' 'unsigned char c=255; printf("%d", c);'
 runtest 'Hello' 'char *p="Hello"; printf("%s", p);'
 runtest 'Hello world' 'char *p="Hello " "world"; printf("%s", p);'
 
-rm -f tmpTEST$$ tmpTEST$$.o
+rm -f .tmpTEST$$ .tmpTEST$$.o
 echo
 if [ $fail -gt 0 ]; then
     echo "Test failure(s): $fail";

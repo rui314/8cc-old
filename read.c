@@ -75,7 +75,7 @@ static Ctype *make_ctype(int type) {
     Ctype *r = malloc(sizeof(Ctype));
     r->type = type;
     r->ptr = NULL;
-    r->size = 0;
+    r->size = 1;
     r->signedp = true;
     return r;
 }
@@ -84,7 +84,7 @@ static Ctype *make_ctype_ptr(Ctype *type) {
     Ctype *r = malloc(sizeof(Ctype));
     r->type = CTYPE_PTR;
     r->ptr = type;
-    r->size = 0;
+    r->size = 1;
     return r;
 }
 
@@ -98,7 +98,7 @@ static Ctype *make_ctype_array(Ctype *type, int size) {
 
 static Var *make_var(Ctype *ctype) {
     Var *r = malloc(sizeof(Var));
-    r->stype = VAR_GLOBAL;
+    r->stype = VAR_LOCAL;
     r->ctype = ctype;
     r->val.l = 0;
     r->name = NULL;
@@ -106,12 +106,17 @@ static Var *make_var(Ctype *ctype) {
     return r;
 }
 
-static Var *make_lvalue(Var *v) {
-    if (!v->ctype->ptr)
-        error("pointer required, but got %s", STRING_BODY(v->name));
+static Var *make_deref_var(Var *var) {
+    assert(var->ctype->ptr);
+    // No expressions except string literals can be lvalues if their
+    // type is "array of...".  C:ARM p.204.
+    if (var->ctype->ptr->type == CTYPE_ARRAY) {
+        Var *r = make_var(var->ctype->ptr);
+        r->loc = var;
+        return r;
+    }
     Var *r = make_var(make_ctype(CTYPE_INVALID));
-    r->stype = VAR_LVALUE;
-    r->loc = v;
+    r->loc = var;
     return r;
 }
 
@@ -142,7 +147,16 @@ static Function *make_function(String *name, List *params, Block *entry) {
 }
 
 static void ensure_lvalue(Var *var) {
-    return;
+    if (var->loc || var->name)
+        return;
+    error("expected lvalue, but got %p", var);
+}
+
+int type_size(Ctype *ctype) {
+    if (ctype->type == CTYPE_ARRAY) {
+        return ctype->size * type_size(ctype->ptr);
+    }
+    return 1;
 }
 
 /*============================================================
@@ -219,13 +233,13 @@ static Var *find_var(ReadContext *ctx, String *name) {
 }
 
 static Var *rv(ReadContext *ctx, Var *v) {
-    if (v->ctype->type == CTYPE_ARRAY) {
-        Var *r = make_var(make_ctype_ptr(v->ctype->ptr));
-        emit(ctx, make_inst2(OP_ADDRESS, r, v));
+    if (!v->loc)
+        return v;
+    if (v->loc->ctype->ptr->type == CTYPE_ARRAY) {
+        Var *r = make_var(make_ctype_ptr(v->loc->ctype));
+        emit(ctx, make_inst2(OP_ASSIGN, r, v->loc));
         return r;
     }
-    if (v->stype != VAR_LVALUE)
-        return v;
     if (!v->loc->ctype->ptr)
         panic("pointed variable is not a pointer?");
     Var *r = make_var(v->loc->ctype->ptr);
@@ -237,11 +251,15 @@ static Var *rv(ReadContext *ctx, Var *v) {
  * See C:ARM p.197 6.3.3 The Usual Unary Conversions.
  */
 Var *unary_type_conv(ReadContext *ctx, Var *var) {
+    if (var->ctype->type == CTYPE_ARRAY) {
+        Var *r = make_var(make_ctype_ptr(var->ctype->ptr));
+        emit(ctx, make_inst2(OP_ADDRESS, r, var));
+        return r;
+    }
     if (type_bits(var->ctype) >= 32)
         return var;
     Var *r = make_var(make_ctype(CTYPE_INT));
-    r->stype = VAR_ALIAS;
-    r->loc = var;
+    emit(ctx, make_inst2(OP_ASSIGN, r, var));
     return r;
 }
 
@@ -261,10 +279,10 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
         if (v0->ctype->type == CTYPE_PTR) {
             if (v1->ctype->type != CTYPE_INT)
                 error("arithmetic + is not defined for pointers except integer operand");
-            Var *ptr_size = make_imm(CTYPE_INT, (Cvalue)(type_bits(v0->ctype->ptr) / 8));
+            Var *size = make_imm(CTYPE_INT, (Cvalue)(type_size(v0->ctype->ptr) * 8));
             Var *r = make_var(v0->ctype);
             Var *tmp = make_var(make_ctype(CTYPE_LONG));
-            emit(ctx, make_inst3('*', tmp, v1, ptr_size));
+            emit(ctx, make_inst3('*', tmp, v1, size));
             emit(ctx, make_inst3('+', r, v0, tmp));
             return r;
         }
@@ -275,18 +293,18 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
     case '-':
         // C:ARM p.230 7.6.2 Subtraction.
         if (v0->ctype->type == CTYPE_PTR && v1->ctype->type == CTYPE_INT) {
-            Var *ptr_size = make_imm(CTYPE_INT, (Cvalue)(type_bits(v0->ctype->ptr) / 8));
+            Var *size = make_imm(CTYPE_INT, (Cvalue)(type_size(v0->ctype) * 8));
             Var *r = make_var(v0->ctype);
             Var *tmp = make_var(make_ctype(CTYPE_LONG));
-            emit(ctx, make_inst3('*', tmp, v1, ptr_size));
+            emit(ctx, make_inst3('*', tmp, v1, size));
             emit(ctx, make_inst3('-', r, v0, tmp));
             return r;
         } else if (v0->ctype->type == CTYPE_PTR && v1->ctype->type == CTYPE_PTR) {
-            Var *ptr_size = make_imm(CTYPE_INT, (Cvalue)(type_bits(v0->ctype->ptr) / 8));
+            Var *size = make_imm(CTYPE_INT, (Cvalue)(type_size(v0->ctype) * 8));
             // [TODO] CTYPE_LONG should be ptrdiff_t.  See C:ARM p.231.
             Var *r = make_var(make_ctype(CTYPE_LONG));
             emit(ctx, make_inst3('-', r, v0, v1));
-            emit(ctx, make_inst3('/', r, r, ptr_size));
+            emit(ctx, make_inst3('/', r, r, size));
             return r;
         } else if (v0->ctype->type == CTYPE_PTR) {
             error("arithmetic - is not defined for pointer and type %d", v1->ctype->type);
@@ -306,8 +324,6 @@ static Var *emit_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
 }
 
 static void emit_assign(ReadContext *ctx, Var *v0, Var *v1) {
-    while (v0->stype == VAR_ALIAS)
-        v0 = v0->loc;
     ensure_lvalue(v0);
     if (v0->loc) {
         emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, rv(ctx, v1)));
@@ -1001,7 +1017,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
     }
     case '*': {
         Var *pointed = rv(ctx, read_cast_expr(ctx));
-        return make_lvalue(pointed);
+        return make_deref_var(pointed);
     }
     case '&': {
         Var *v = read_cast_expr(ctx);
@@ -1145,8 +1161,8 @@ static Var *read_subscript_expr(ReadContext *ctx, Var *a) {
     // a[i] is equivalent to *((a) + (i))
     Var *i = read_comma_expr(ctx);
     expect(ctx, ']');
-    Var *ptr = emit_arith(ctx, '+', rv(ctx, a), rv(ctx, i));
-    return make_lvalue(rv(ctx, ptr));
+    Var *var = emit_arith(ctx, '+', rv(ctx, a), rv(ctx, i));
+    return make_deref_var(rv(ctx, var));
 }
 
 /*
@@ -1388,6 +1404,26 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
     error("Line %d:%d: both 'signed' and 'unsigned' in declaration specifiers", tok->line, tok->column);
 }
 
+Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
+    int size;
+    if (next_token_is(ctx, ']')) {
+        size = -1;
+    } else {
+        Token *tok = read_token(ctx);
+        if (tok->toktype != TOKTYPE_INT)
+            panic("non immediate dimension is not supported yet");
+        size = tok->val.i;
+        expect(ctx, ']');
+    }
+    if (next_token_is(ctx, '[')) {
+        Ctype *ctype1 = read_array_dimensions(ctx, ctype);
+        if (ctype1->size < 0)
+            error("Line %d:%d: Dimension is not specified for a multimentional array", ctx->file->line, ctx->file->column);
+        return make_ctype_array(ctype1, size);
+    }
+    return make_ctype_array(ctype, size);
+}
+
 /*
  * declarator:
  *     pointer-declarator
@@ -1428,11 +1464,8 @@ Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *r = make_var(ctype);
     Token *tok = read_ident(ctx);
     r->name = tok->val.str;
-    if (next_token_is(ctx, '[')) {
-        Token *num = read_num(ctx);
-        r->ctype = make_ctype_array(r->ctype, num->val.i);
-        expect(ctx, ']');
-    }
+    if (next_token_is(ctx, '['))
+        r->ctype = read_array_dimensions(ctx, r->ctype);
     return r;
 }
 
