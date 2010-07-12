@@ -388,6 +388,29 @@ static void save_xmm0(Context *ctx, Var *var) {
     emit4(ctx, off);
 }
 
+static void handle_int_to_float(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    Var *src = LIST_ELEM(inst->args, 1);
+    assert(is_flonum(dst->ctype));
+    assert(src->ctype->type == CTYPE_INT);
+    load_rax(ctx, src);
+    // cvtsi2sd xmm0, rax
+    emit4(ctx, 0x2a0f48f2);
+    emit1(ctx, 0xc0);
+    save_xmm0(ctx, dst);
+}
+
+static void handle_float_to_int(Context *ctx, Inst *inst) {
+    Var *dst = LIST_ELEM(inst->args, 0);
+    Var *src = LIST_ELEM(inst->args, 1);
+    assert(dst->ctype->type == CTYPE_INT);
+    assert(is_flonum(src->ctype));
+    load_xmm0(ctx, src);
+    // CVTTSD2SI eax, xmm0
+    emit4(ctx, 0xc02c0ff2);
+    save_rax(ctx, dst);
+}
+
 static void handle_func_call(Context *ctx, Inst *inst) {
     Var *fn = LIST_ELEM(inst->args, 0);
     Section *text = find_section(ctx->elf, ".text");
@@ -807,6 +830,12 @@ static void handle_block(Context *ctx, Block *block) {
             break;
         case OP_ALLOC:
             handle_alloc(ctx, inst);
+            break;
+        case OP_I2F:
+            handle_int_to_float(ctx, inst);
+            break;
+        case OP_F2I:
+            handle_float_to_int(ctx, inst);
             break;
         case OP_IF:
             handle_if(ctx, inst);

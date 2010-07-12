@@ -344,6 +344,13 @@ runtest '255' 'unsigned char c=255; printf("%d", c);'
 runtest 'Hello' 'char *p="Hello"; printf("%s", p);'
 runtest 'Hello world' 'char *p="Hello " "world"; printf("%s", p);'
 
+#
+# Type conversion between floating point and integer
+#
+/bin/echo -e '\nFlonum type conversion...'
+runtest '3.0' 'float f=3; printf("%.1f", f);'
+runtest '3' 'int i=3.0; printf("%d", i);'
+
 rm -f .tmpTEST$$ .tmpTEST$$.o
 echo
 if [ $fail -gt 0 ]; then

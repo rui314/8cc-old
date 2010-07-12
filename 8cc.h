@@ -445,6 +445,8 @@ enum {
     OP_RETURN,
     OP_SHL,
     OP_SHR,
+    OP_I2F,
+    OP_F2I,
 };
 
 typedef struct Inst {

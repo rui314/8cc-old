@@ -341,12 +341,26 @@ static Var *emit_log_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
     return r;
 }
 
+static Var *type_conv(ReadContext *ctx, Var *dst, Var *src) {
+    Var *r = make_var(dst->ctype);
+    if (is_flonum(dst->ctype) && src->ctype->type == CTYPE_INT) {
+        emit(ctx, make_inst2(OP_I2F, r, src));
+        return r;
+    }
+    if (dst->ctype->type == CTYPE_INT && is_flonum(src->ctype)) {
+        emit(ctx, make_inst2(OP_F2I, r, src));
+        return r;
+    }
+    return src;
+}
+
 static void emit_assign(ReadContext *ctx, Var *v0, Var *v1) {
     ensure_lvalue(v0);
+    v1 = type_conv(ctx, v0, unary_conv(ctx, v1));
     if (v0->loc) {
-        emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, unary_conv(ctx, v1)));
+        emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, v1));
     } else {
-        emit(ctx, make_inst2(OP_ASSIGN, v0, unary_conv(ctx, v1)));
+        emit(ctx, make_inst2(OP_ASSIGN, v0, v1));
     }
 }
 
@@ -1544,7 +1558,7 @@ void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     add_local_var(ctx, var->name, var);
     if (next_token_is(ctx, '=')) {
         Var *val = unary_conv(ctx, read_initializer(ctx));
-        emit(ctx, make_inst2(OP_ASSIGN, var, val));
+        emit_assign(ctx, var, val);
         return;
     }
     emit(ctx, make_inst1(OP_ALLOC, var));
