@@ -52,9 +52,6 @@
  *   http://www.amazon.com/dp/013089592X/
  */
 
-#define NOT_SUPPORTED()                                                 \
-    do { error("line %d: not supported yet", __LINE__); } while (0)
-
 #define SWAP(type, x, y) do { type tmp_ = x; x = y; y = tmp_; } while (0)
 
 static void emit_assign(ReadContext *ctx, Var *v0, Var *v1);
@@ -67,6 +64,31 @@ static Token *read_ident(ReadContext *ctx);
 static void read_compound_stmt(ReadContext *ctx);
 static void read_decl_or_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
+
+/*============================================================
+ * Error handlers
+ */
+
+static ATTRIBUTE((noreturn)) void error_int(int line, int column, char *msg, va_list ap) {
+    char buf[30];
+    snprintf(buf, sizeof(buf), "Line %d:%d: ", line, column);
+    String *b = make_string();
+    string_append(b, buf);
+    string_append(b, msg);
+    verror(STRING_BODY(b), ap);
+}
+
+static ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...) {
+    va_list ap;
+    va_start(ap, msg);
+    error_int(tok->line, tok->column, msg, ap);
+}
+
+static ATTRIBUTE((noreturn)) void error_ctx(ReadContext *ctx, char *msg, ...) {
+    va_list ap;
+    va_start(ap, msg);
+    error_int(ctx->file->line, ctx->file->column, msg, ap);
+}
 
 /*============================================================
  * Variables
@@ -147,10 +169,10 @@ static Function *make_function(String *name, List *params, Block *entry) {
     return r;
 }
 
-static void ensure_lvalue(Var *var) {
+static void ensure_lvalue(ReadContext *ctx, Var *var) {
     if (var->loc || var->name)
         return;
-    error("expected lvalue, but got %p", var);
+    error_ctx(ctx, "expected lvalue, but got %p", var);
 }
 
 int ctype_sizeof(Ctype *ctype) {
@@ -290,7 +312,7 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
             SWAP(Var *, v0, v1);
         if (v0->ctype->type == CTYPE_PTR) {
             if (v1->ctype->type != CTYPE_INT)
-                error("arithmetic + is not defined for pointers except integer operand");
+                error_ctx(ctx, "arithmetic + is not defined for pointers except integer operand");
             Var *size = make_imm(CTYPE_INT, (Cvalue)ctype_sizeof(v0->ctype->ptr));
             Var *r = make_var(v0->ctype);
             Var *tmp = make_var(make_ctype(CTYPE_LONG));
@@ -319,7 +341,7 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
             emit(ctx, make_inst3('/', r, r, size));
             return r;
         } else if (v0->ctype->type == CTYPE_PTR) {
-            error("arithmetic - is not defined for pointer and type %d", v1->ctype->type);
+            error_ctx(ctx, "arithmetic - is not defined for pointer and type %d", v1->ctype->type);
         }
         Var *r = make_var(binary_type_conv(v0, v1));
         emit(ctx, make_inst3('-', r, v0, v1));
@@ -355,7 +377,7 @@ static Var *type_conv(ReadContext *ctx, Var *dst, Var *src) {
 }
 
 static void emit_assign(ReadContext *ctx, Var *v0, Var *v1) {
-    ensure_lvalue(v0);
+    ensure_lvalue(ctx, v0);
     v1 = type_conv(ctx, v0, unary_conv(ctx, v1));
     if (v0->loc) {
         emit(ctx, make_inst2(OP_ASSIGN_DEREF, v0->loc, v1));
@@ -365,7 +387,7 @@ static void emit_assign(ReadContext *ctx, Var *v0, Var *v1) {
 }
 
 static Var *emit_post_inc_dec(ReadContext *ctx, Var *var, int op) {
-    ensure_lvalue(var);
+    ensure_lvalue(ctx, var);
     Var *copy = make_var(var->ctype);
     emit(ctx, make_inst2(OP_ASSIGN, copy, var));
     Var *tmp = emit_arith(ctx, op, unary_conv(ctx, var), make_imm(CTYPE_INT, (Cvalue)1));
@@ -638,7 +660,7 @@ static char read_escape_char(File *file) {
     case 'x':
         c = readc(file);
         if (!isxdigit(c))
-            error("hexdigit expected, but got '%c'", c);
+            error("line %d:%d: hexdigit expected, but got '%c'", file->line, file->column, c);
         r = hextodec(c);
         c = readc(file);
         if (isxdigit(c)) {
@@ -660,19 +682,19 @@ static char read_escape_char(File *file) {
  *    any source character except the double quote, backslash or newline
  *    escape-character
  */
-static String *read_str(File *file) {
+static String *read_str(ReadContext *ctx) {
     String *b = make_string();
     for (;;) {
-        int c = readc(file);
+        int c = readc(ctx->file);
         switch (c) {
         case '"':
             o1(b, '\0');
             return b;
         case '\\':
-            o1(b, read_escape_char(file));
+            o1(b, read_escape_char(ctx->file));
             break;
         case EOF:
-            error("line %d:%d: premature end of input file while reading a literal string", file->line, file->column);
+            error_ctx(ctx, "premature end of input file while reading a literal string");
         default:
             o1(b, c);
         }
@@ -688,12 +710,12 @@ static String *read_str(File *file) {
  *    any source character except the single quote, backslash or newline
  *    escape-character
  */
-static char read_char(File *file) {
-    int c = readc(file);
+static char read_char(ReadContext *ctx) {
+    int c = readc(ctx->file);
     switch (c) {
     case EOF:
-        error("line %d:%d: premature end of input file while reading a literal character", file->line, file->column);
-    case '\\': return read_escape_char(file);
+        error_ctx(ctx, "premature end of input file while reading a literal character");
+    case '\\': return read_escape_char(ctx->file);
     default: return (char)c;
     }
 }
@@ -722,25 +744,24 @@ Token *read_token(ReadContext *ctx) {
     if (!LIST_IS_EMPTY(ctx->ungotten))
         return list_pop(ctx->ungotten);
 
-    File *file = ctx->file;
     String *str;
     for (;;) {
-        int c = readc(file);
+        int c = readc(ctx->file);
         int c1;
         switch (c) {
         case ' ': case '\t': case '\r': case '\n':
             continue;
         case '0': case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8': case '9':
-            unreadc(c, file);
+            unreadc(c, ctx->file);
             return read_num(ctx);
         case '"':
-            return make_token1(ctx, TOKTYPE_STRING, (TokenValue)read_str(file));
+            return make_token1(ctx, TOKTYPE_STRING, (TokenValue)read_str(ctx));
         case '\'': {
-            Token *r = make_token1(ctx, TOKTYPE_CHAR, (TokenValue)read_char(file));
-            c1 = read_char(file);
+            Token *r = make_token1(ctx, TOKTYPE_CHAR, (TokenValue)read_char(ctx));
+            c1 = read_char(ctx);
             if (c1 != '\'')
-                error("single quote expected, but got %c", c1);
+                error_ctx(ctx, "single quote expected, but got %c", c1);
             return r;
         }
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
@@ -751,7 +772,7 @@ Token *read_token(ReadContext *ctx) {
         case 'J': case 'K': case 'L': case 'M': case 'N': case 'O': case 'P':
         case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W':
         case 'X': case 'Y': case 'Z': case '_':
-            str = read_word(file, c);
+            str = read_word(ctx->file, c);
             int id = (intptr)dict_get(reserved_word, str);
             if (id)
                 return make_keyword(ctx, id);
@@ -762,11 +783,11 @@ Token *read_token(ReadContext *ctx) {
             return make_keyword(ctx, '=');
         case '/':
             if (next_char_is(ctx->file, '*')) {
-                skip_comment(file);
+                skip_comment(ctx->file);
                 return read_token(ctx);
             }
             if (next_char_is(ctx->file, '/')) {
-                skip_line_comment(file);
+                skip_line_comment(ctx->file);
                 return read_token(ctx);
             }
             goto read_equal;
@@ -820,7 +841,7 @@ Token *read_token(ReadContext *ctx) {
         case EOF:
             return NULL;
         default:
-            error("line %d:%d: unimplemented '%c'", file->line, file->column, c);
+            error_ctx(ctx, "unimplemented '%c'", c);
         }
     }
     return NULL;
@@ -841,7 +862,7 @@ bool next_token_is(ReadContext *ctx, int keyword) {
     return false;
 }
 
-String *token_to_string(Token *tok) {
+static char *token_to_string(Token *tok) {
     char buf[20];
     String *r = make_string();
     switch (tok->toktype) {
@@ -850,46 +871,46 @@ String *token_to_string(Token *tok) {
         o1(r, '\0');
         break;
     case TOKTYPE_CHAR:
-        sprintf(buf, "'%c'", tok->val.c);
-        ostr(r, buf);
+        snprintf(buf, sizeof(buf), "'%c'", tok->val.c);
+        string_append(r, buf);
         break;
     case TOKTYPE_IDENT:
-        ostr(r, STRING_BODY(tok->val.str));
+        string_append(r, STRING_BODY(tok->val.str));
         break;
     case TOKTYPE_STRING:
-        ostr(r, STRING_BODY(tok->val.str));
+        string_append(r, STRING_BODY(tok->val.str));
         break;
     case TOKTYPE_INT:
-        sprintf(buf, "%d", tok->val.i);
-        ostr(r, buf);
+        snprintf(buf, sizeof(buf), "%d", tok->val.i);
+        string_append(r, buf);
         break;
     case TOKTYPE_FLOAT:
-        sprintf(buf, "%f", tok->val.f);
-        ostr(r, buf);
+        snprintf(buf, sizeof(buf), "%f", tok->val.f);
+        string_append(r, buf);
         break;
     case TOKTYPE_INVALID:
         panic("got TOKTYPE_INVALID");
     }
-    return r;
+    return STRING_BODY(r);
 }
 
 static void expect(ReadContext *ctx, int expected) {
     Token *tok = read_token(ctx);
     if (tok->toktype != TOKTYPE_KEYWORD)
-        error("line %d:%d: keyword expected, but got %s", ctx->file->line, ctx->file->column, STRING_BODY(token_to_string(tok)));
+        error_token(tok, "keyword expected, but got '%s'", token_to_string(tok));
     if (!IS_KEYWORD(tok, expected))
-        error("line %d:%d: '%c' expected, but got '%c'", ctx->file->line, ctx->file->column, expected, tok->val.k);
+        error_token(tok, "'%c' expected, but got '%c'", expected, tok->val.k);
 }
 
-static void process_break(ReadContext *ctx) {
+static void process_break(ReadContext *ctx, Token *tok) {
     if (!ctx->onbreak)
-        error("'break' statement not in loop or switch");
+        error_token(tok, "'break' statement not in loop or switch");
     emit(ctx, make_inst1(OP_JMP, ctx->onbreak));
 }
 
-static void process_continue(ReadContext *ctx) {
+static void process_continue(ReadContext *ctx, Token *tok) {
     if (!ctx->oncontinue)
-        error("'continue' statement not in loop statement");
+        error_token(tok, "'continue' statement not in loop statement");
     emit(ctx, make_inst1(OP_JMP, ctx->oncontinue));
 }
 
@@ -948,7 +969,7 @@ Var *read_primary_expr(ReadContext *ctx) {
         return var;
     }
     default:
-        NOT_SUPPORTED();
+        error("Line %d: not supported yet", __LINE__);
     }
 }
 
@@ -987,11 +1008,11 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
             list_push(args, unary_conv(ctx, v));
             Token *sep = read_token(ctx);
             if (sep->toktype != TOKTYPE_KEYWORD)
-                error("line %d:%d: expected ',', or ')', but got '%c'", sep->line, sep->column, sep->val.c);
+                error_token(sep, "expected ',', or ')', but got '%c'", sep->val.c);
             if (IS_KEYWORD(sep, ')'))
                 break;
             if (!IS_KEYWORD(sep, ','))
-                error("line %d:%d: expected ',', but got '%c'", sep->line, sep->column, sep->val.c);
+                error_token(sep, "expected ',', but got '%c'", sep->val.c);
         }
     }
     emit(ctx, make_instn(OP_FUNC_CALL, args));
@@ -1000,7 +1021,7 @@ static Var *read_func_call(ReadContext *ctx, Token *fntok) {
 
 static void expect_ident(Token *tok) {
     if (tok->toktype != TOKTYPE_IDENT)
-        error("line %d:%d: identifier expected", tok->line, tok->column);
+        error_token(tok, "identifier expected, but got '%s'", token_to_string(tok));
 }
 
 static Token *read_ident(ReadContext *ctx) {
@@ -1070,7 +1091,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
     case KEYWORD_INC:
     case KEYWORD_DEC: {
         Var *v = read_cast_expr(ctx);
-        ensure_lvalue(v);
+        ensure_lvalue(ctx, v);
         char op = tok->val.k == KEYWORD_INC ? '+' : '-';
         Var *tmp = unary_conv(ctx, v);
         tmp = emit_arith(ctx, op, tmp, make_imm(CTYPE_INT, (Cvalue)1));
@@ -1082,7 +1103,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
         return make_imm(CTYPE_INT, (Cvalue)ctype_sizeof(v->ctype));
     }
     default:
-        error("expected unary, but got %d", tok->val.k);
+        error_token(tok, "expected unary, but got '%s'", token_to_string(tok));
     }
 }
 
@@ -1297,7 +1318,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case '|': {
             Var *tmp = make_var(binary_type_conv(v0, v1));
             if (is_flonum(tmp->ctype))
-                error("invalid operand to binary '%c'", tok->val.k);
+                error_token(tok, "invalid operand to binary '%c'", tok->val.k);
             emit(ctx, make_inst3(tok->val.k, tmp, v0, v1));
             v0 = tmp;
             break;
@@ -1324,7 +1345,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case KEYWORD_A_SUB:
             op = '-'; goto assign_arith_op;
         assign_arith_op:
-            ensure_lvalue(v0);
+            ensure_lvalue(ctx, v0);
             emit_assign(ctx, v0, emit_arith(ctx, op, v0, v1));
             break;
         case KEYWORD_A_MUL:
@@ -1342,7 +1363,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         case KEYWORD_A_RSH:
             op = OP_SHR; goto assign_op;
         assign_op:
-            ensure_lvalue(v0);
+            ensure_lvalue(ctx, v0);
             emit(ctx, make_inst3(op, v0, v0, v1));
             break;
         case KEYWORD_LOG_AND:
@@ -1358,7 +1379,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
             v0 = emit_arith_inst3(ctx, OP_SHR, v0, v1);
             break;
         default:
-            error("unsupported operator: %c", tok->val.k);
+            error_token(tok, "unsupported operator: %s", token_to_string(tok));
         }
     }
     return v0;
@@ -1403,20 +1424,20 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
             break;
         case KEYWORD_SIGNED:
             if (sign == SIGNED)
-                error("Line %d:%d: 'signed' specified twice", tok->line, tok->column);
+                error_token(tok, "'signed' specified twice");
             if (sign == UNSIGNED)
                 goto sign_error;
             sign = UNSIGNED;
             break;
         case KEYWORD_UNSIGNED:
             if (sign == UNSIGNED)
-                error("Line %d:%d: 'unsigned' specified twice", tok->line, tok->column);
+                error_token(tok, "'unsigned' specified twice");
             if (sign == SIGNED)
                 goto sign_error;
             sign = UNSIGNED;
             break;
 #define CHECK_DUP()                                                     \
-            if (r) error("Line %d:%d: two or more data types in declaration specifiers", tok->line, tok->column);
+            if (r) error_token(tok, "two or more data types in declaration specifiers");
         case KEYWORD_CHAR:
             CHECK_DUP();
             r = make_ctype(CTYPE_CHAR);
@@ -1436,7 +1457,7 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
         case KEYWORD_FLOAT:
             CHECK_DUP();
             if (sign != NONE)
-                error("Line %d:%d: float cannot be signed nor unsigned", tok->line, tok->column);
+                error_token(tok, "float cannot be signed nor unsigned");
             r = make_ctype(CTYPE_FLOAT);
             break;
 #undef CHECK_DUP
@@ -1449,7 +1470,7 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
     unget_token(ctx, tok);
     return r ? r : make_ctype(CTYPE_INT);
  sign_error:
-    error("Line %d:%d: both 'signed' and 'unsigned' in declaration specifiers", tok->line, tok->column);
+    error_token(tok, "both 'signed' and 'unsigned' in declaration specifiers");
 }
 
 Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
@@ -1466,7 +1487,7 @@ Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
     if (next_token_is(ctx, '[')) {
         Ctype *ctype1 = read_array_dimensions(ctx, ctype);
         if (ctype1->size < 0)
-            error("Line %d:%d: Dimension is not specified for a multimentional array", ctx->file->line, ctx->file->column);
+            error_ctx(ctx, "Dimension is not specified for a multimentional array");
         return make_ctype_array(ctype1, size);
     }
     return make_ctype_array(ctype, size);
@@ -1771,7 +1792,7 @@ static void process_label(ReadContext *ctx, Token *tok) {
     String *label = tok->val.str;
 
     if (dict_get(ctx->label, label))
-        error("duplicate label: %s", STRING_BODY(label));
+        error_token(tok, "duplicate label: %s", STRING_BODY(label));
 
     Block *cont = make_block();
     emit(ctx, make_inst1(OP_JMP, cont));
@@ -1782,7 +1803,7 @@ static void process_label(ReadContext *ctx, Token *tok) {
     List *tbf = dict_get(ctx->label_tbf, label);
     if (!tbf)
         return;
-    for (int i = 0; i < LIST_LEN(tbf); i++) {
+    for (int i = 0; i < LIST_LEN(tbf); i += 2) {
         Block *block = LIST_REF(tbf, i);
         push_block(ctx, block);
         emit(ctx, make_inst1(OP_JMP, cont));
@@ -1812,6 +1833,7 @@ static void read_goto_stmt(ReadContext *ctx) {
     }
     Block *cur = replace_block(ctx, make_block());
     list_push(blocks, cur);
+    list_push(blocks, tok);
 }
 
 /*
@@ -1835,8 +1857,9 @@ static void check_context(ReadContext *ctx) {
     DictIter *iter = make_dict_iter(ctx->label_tbf);
     void **p;
     for (p = dict_iter_next(iter); p; p = dict_iter_next(iter)) {
-        String *label = p[0];
-        error("dangling goto label: '%s'", STRING_BODY(label));
+        List *list = p[1];
+        Token *tok = LIST_REF(list, 1);
+        error_token(tok, "dangling goto label: '%s'", STRING_BODY(tok->val.str));
     }
 }
 
@@ -1874,10 +1897,10 @@ static void read_stmt(ReadContext *ctx) {
         read_do_stmt(ctx);
     } else if (IS_KEYWORD(tok, KEYWORD_BREAK)) {
         expect(ctx, ';');
-        process_break(ctx);
+        process_break(ctx, tok);
     } else if (IS_KEYWORD(tok, KEYWORD_CONTINUE)) {
         expect(ctx, ';');
-        process_continue(ctx);
+        process_continue(ctx, tok);
     } else if (IS_KEYWORD(tok, KEYWORD_GOTO)) {
         read_goto_stmt(ctx);
     } else if (IS_KEYWORD(tok, KEYWORD_RETURN)) {
@@ -1895,7 +1918,7 @@ static void read_stmt(ReadContext *ctx) {
         read_comma_expr(ctx);
         Token *tok2 = read_token(ctx);
         if (!IS_KEYWORD(tok2, ';'))
-            error("';' expected");
+            error_token(tok2, "';' expected, but got '%s'", token_to_string(tok2));
     }
 }
 

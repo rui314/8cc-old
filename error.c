@@ -28,19 +28,29 @@
 
 #include "8cc.h"
 
+static void print(char *pre, char *format, va_list ap) {
+    fprintf(stderr, "%s", pre);
+    vfprintf(stderr, format, ap);
+    fprintf(stderr, "\n");
+}
+
+void verror(char *format, va_list ap) {
+    print("ERROR: ", format, ap);
+    exit(-1);
+}
+
+void vwarn(char *format, va_list ap) {
+    print("WARN: ", format, ap);
+}
+
 void error(char *format, ...) {
     va_list ap;
     va_start(ap, format);
-    fprintf(stderr, "8cc: ERROR: ");
-    vfprintf(stderr, format, ap);
-    fprintf(stderr, "\n");
-    exit(-1);
+    verror(format, ap);
 }
 
 void warn(char *format, ...) {
     va_list ap;
     va_start(ap, format);
-    fprintf(stderr, "8cc: ");
-    vfprintf(stderr, format, ap);
-    fprintf(stderr, "\n");
+    vwarn(format, ap);
 }

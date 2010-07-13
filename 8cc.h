@@ -131,7 +131,9 @@ typedef intptr_t intptr;
  * Common
  */
 extern ATTRIBUTE((noreturn)) void error(char *format, ...);
+extern ATTRIBUTE((noreturn)) void verror(char *format, va_list ap);
 extern void warn(char *format, ...);
+extern void vwarn(char *format, va_list ap);
 #define panic(fmt, ...) (error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__), 1)
 
 /*
@@ -153,6 +155,7 @@ typedef struct String {
 extern String *make_string(void);
 extern String *to_string(char *str);
 extern bool string_equal(String *a, String *b);
+extern void string_append(String *b, char *p);
 extern void o1(String *b, int byte);
 extern void out(String *b, void *data, size_t size);
 extern void ostr(String *b, char *str);

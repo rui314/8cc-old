@@ -28,8 +28,8 @@
 
 #include "8cc.h"
 
-#define NOT_NULL(p) do { if (!(p)) error("line %d: must not be null " #p, __LINE__); } while (0)
-#define EQ(x, y) do { if ((x) != (y)) error("line %d: must be the same", __LINE__); } while (0)
+#define NOT_NULL(p) do { if (!(p)) error("Line %d: must not be null " #p, __LINE__); } while (0)
+#define EQ(x, y) do { if ((x) != (y)) error("Line %d: must be the same: '%s' and '%s'", __LINE__, #x, #y); } while (0)
 #define EQ_CHAR(x, y) do { eq_char(__LINE__, (x), (y)); } while (0)
 #define EQ_STR(x, y)  do { eq_str(__LINE__, (x), (y)); } while (0)
 

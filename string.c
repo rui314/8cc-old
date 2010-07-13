@@ -54,6 +54,11 @@ bool string_equal(String *a, String *b) {
     return !strcmp(STRING_BODY(a), STRING_BODY(b));
 }
 
+void string_append(String *b, char *p) {
+    out(b, p, strlen(p) + 1);
+    string_seek(b, b->len - 1);
+}
+
 static void ensure_room(String *b, long room) {
     if (b->nalloc >= (b->pos + room))
         return;
