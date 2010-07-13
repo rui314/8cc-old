@@ -5,7 +5,8 @@ fail=0
 ./tests || fail=$((fail+1))
 
 runtest_int() {
-    /bin/echo -En "  $2 ... "
+    local msg=$(echo "$2"|perl -0777 -pe 's/\n/ /g')
+    /bin/echo -En "  $msg ... "
     echo "$3" | ./8cc - .tmpTEST$$.o
     gcc -o .tmpTEST$$ .tmpTEST$$.o
     local result="`./.tmpTEST$$`"
@@ -350,6 +351,12 @@ runtest 'Hello world' 'char *p="Hello " "world"; printf("%s", p);'
 /bin/echo -e '\nFlonum type conversion...'
 runtest '3.0' 'float f=3; printf("%.1f", f);'
 runtest '3' 'int i=3.0; printf("%d", i);'
+
+#
+# CPP #define
+#
+/bin/echo -e '\n#define...'
+runtest '3' $'#define  MSG "%d"\n # define NUM  3 \nprintf(MSG, NUM);'
 
 rm -f .tmpTEST$$ .tmpTEST$$.o
 echo

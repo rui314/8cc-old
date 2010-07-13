@@ -45,7 +45,7 @@ static Token *make_token1(ReadContext *ctx, TokType toktype, TokenValue val) {
     return r;
 }
 
-static Token *make_keyword(ReadContext *ctx, int k) {
+Token *make_keyword(ReadContext *ctx, int k) {
     Token *r = malloc(sizeof(Token));
     r->toktype = TOKTYPE_KEYWORD;
     r->val.k = k;
@@ -77,20 +77,6 @@ static void skip_line_comment(File *file) {
             return;
         }
     }
-}
-
-Dict *reserved_word(void) {
-    static Dict *reserved_word;
-    if (reserved_word != NULL)
-        return reserved_word;
-    reserved_word = make_string_dict();
-#define KEYWORD(id_, str_) \
-    dict_put(reserved_word, to_string(str_), (void *)id_);
-#define OP(_)
-# include "keyword.h"
-#undef OP
-#undef KEYWORD
-    return reserved_word;
 }
 
 /*
@@ -339,7 +325,15 @@ static String *read_word(File *file, char c0) {
     }
 }
 
-Token *read_token(ReadContext *ctx) {
+static bool skip_space(ReadContext *ctx) {
+    int c = readc(ctx->file);
+    while (c == ' ' || c == '\t' || c == '\f' || c == '\v')
+        c = readc(ctx->file);
+    unreadc(c, ctx->file);
+    return c == '\n';
+}
+
+Token *read_cpp_token(ReadContext *ctx) {
     if (!LIST_IS_EMPTY(ctx->ungotten))
         return list_pop(ctx->ungotten);
 
@@ -347,9 +341,15 @@ Token *read_token(ReadContext *ctx) {
     for (;;) {
         int c = readc(ctx->file);
         int c1;
+        bool b;
         switch (c) {
-        case ' ': case '\t': case '\r': case '\n':
-            continue;
+        case ' ': case '\t': case '\f': case '\v':
+            b = skip_space(ctx);
+            return make_token1(ctx, TOKTYPE_CPP, (TokenValue)(b ? '\n' : ' '));
+        case '\n':
+            return make_token1(ctx, TOKTYPE_CPP, (TokenValue)'\n');
+        case '#':
+            return make_token1(ctx, TOKTYPE_CPP, (TokenValue)'#');
         case '0': case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8': case '9':
             unreadc(c, ctx->file);
@@ -372,9 +372,6 @@ Token *read_token(ReadContext *ctx) {
         case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W':
         case 'X': case 'Y': case 'Z': case '_':
             str = read_word(ctx->file, c);
-            int id = (intptr)dict_get(reserved_word(), str);
-            if (id)
-                return make_keyword(ctx, id);
             return make_token1(ctx, TOKTYPE_IDENT, (TokenValue)str);
         case '=':
             if (next_char_is(ctx->file, '='))

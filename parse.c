@@ -214,6 +214,8 @@ ReadContext *make_read_context(File *file, Elf *elf) {
     r->oncontinue = NULL;
     r->label = make_string_dict();
     r->label_tbf = make_string_dict();
+    r->at_bol = true;
+    r->defs = make_string_dict();
     return r;
 }
 
@@ -438,25 +440,7 @@ static Var *emit_log_or(ReadContext *ctx, Var *v0, Var *v1) {
  * Parser
  */
 
-Token *peek_token(ReadContext *ctx) {
-    Token *r = read_token(ctx);
-    unget_token(ctx, r);
-    return r;
-}
-
-void unget_token(ReadContext *ctx, Token *tok) {
-    list_push(ctx->ungotten, tok);
-}
-
-bool next_token_is(ReadContext *ctx, int keyword) {
-    Token *tok = read_token(ctx);
-    if (IS_KEYWORD(tok, keyword))
-        return true;
-    unget_token(ctx, tok);
-    return false;
-}
-
-static char *token_to_string(Token *tok) {
+char *token_to_string(Token *tok) {
     char buf[20];
     String *r = make_string();
     switch (tok->toktype) {
@@ -482,6 +466,8 @@ static char *token_to_string(Token *tok) {
         snprintf(buf, sizeof(buf), "%f", tok->val.f);
         string_append(r, buf);
         break;
+    case TOKTYPE_CPP:
+        panic("got TOKTYPE_CPP");
     case TOKTYPE_INVALID:
         panic("got TOKTYPE_INVALID");
     }

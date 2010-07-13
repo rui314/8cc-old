@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-std=c99 -Wall -g
-OBJS1=string.o list.o gen.o lex.o parse.o file.o dict.o error.o elf.o
+OBJS1=string.o list.o gen.o lex.o cpp.o parse.o file.o dict.o error.o elf.o
 OBJS=main.o $(OBJS1)
 
 8cc: $(OBJS)

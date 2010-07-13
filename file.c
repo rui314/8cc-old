@@ -59,7 +59,7 @@ File *open_file(char *path) {
 
 void unreadc(int c, File *file) {
     if (c == EOF)
-        error("[internal error] can't pushback EOF");
+        return;
     if (c == '\n') {
         file->line--;
         file->column = file->last_column;

@@ -324,6 +324,7 @@ typedef union TokenValue {
 
 typedef enum TokType {
     TOKTYPE_INVALID,
+    TOKTYPE_CPP,
     TOKTYPE_KEYWORD,
     TOKTYPE_CHAR,
     TOKTYPE_STRING ,
@@ -339,9 +340,64 @@ typedef struct Token {
     int column;
 } Token;
 
-struct ReadContext;
+/*
+ * Represents basic block of program.  Code must contain one of OP_RETURN OP_JMP
+ * or OP_IF which is the end of the basic block.  Other instructions following
+ * the instruction are dead code and safely be ignored.
+ */
+typedef struct Block {
+    int pos;
+    List *code;
+} Block;
+
+typedef struct Function {
+    String *name;
+    List *params;
+    Block *entry;
+} Function;
+
+/*
+ * Read context for lexer and parser
+ */
+typedef struct ReadContext {
+    File *file;
+    Elf *elf;
+    List *scope;
+    // The entry basic block for the fucntion being read.
+    Block *entry;
+    // The stack of basic blocks.  Instructions for code being processsed are
+    // emitted to the top basic block of the stack.
+    List *blockstack;
+    // Pushback buffer for tokens.
+    List *ungotten;
+    // "break" and "continue" targets.  NULL means we're outside of loop or
+    // switch.
+    Block *onbreak;
+    Block *oncontinue;
+    // Labels and their jump destination basic blocks.  Used by goto.
+    Dict *label;
+    // Labels and their jump origination basic blocks.  When the parser visits
+    // a forward-referencing goto (having labels which has not yet seen), the
+    // label and the block is stored to the dictionary.  Such blocks are
+    // processed when the labels are read.
+    Dict *label_tbf;
+    // For CPP
+    bool at_bol;
+    Dict *defs;
+} ReadContext;
+
 extern void lexer_init(void);
-extern Token *read_token(struct ReadContext *ctx);
+extern Token *read_cpp_token(ReadContext *ctx);
+extern Token *make_keyword(ReadContext *ctx, int k);
+
+/*============================================================
+ * C Preprocessor
+ */
+
+extern Token *read_token(ReadContext *ctx);
+extern Token *peek_token(ReadContext *ctx);
+extern void unget_token(ReadContext *ctx, Token *tok);
+extern bool next_token_is(ReadContext *ctx, int keyword);
 
 /*============================================================
  * Parser
@@ -375,57 +431,14 @@ typedef struct Ctype {
     int size; // valid iff type == CTYPE_ARRAY
 } Ctype;
 
-/*
- * Represents basic block of program.  Code must contain one of OP_RETURN OP_JMP
- * or OP_IF which is the end of the basic block.  Other instructions following
- * the instruction are dead code and safely be ignored.
- */
-typedef struct Block {
-    int pos;
-    List *code;
-} Block;
-
-typedef struct Function {
-    String *name;
-    List *params;
-    Block *entry;
-} Function;
-
-/*
- * Read context for parser
- */
-typedef struct ReadContext {
-    File *file;
-    Elf *elf;
-    List *scope;
-    // The entry basic block for the fucntion being read.
-    Block *entry;
-    // The stack of basic blocks.  Instructions for code being processsed are
-    // emitted to the top basic block of the stack.
-    List *blockstack;
-    // Pushback buffer for tokens.
-    List *ungotten;
-    // "break" and "continue" targets.  NULL means we're outside of loop or
-    // switch.
-    Block *onbreak;
-    Block *oncontinue;
-    // Labels and their jump destination basic blocks.  Used by goto.
-    Dict *label;
-    // Labels and their jump origination basic blocks.  When the parser visits
-    // a forward-referencing goto (having labels which has not yet seen), the
-    // label and the block is stored to the dictionary.  Such blocks are
-    // processed when the labels are read.
-    Dict *label_tbf;
-} ReadContext;
-
 extern void parser_init(); // for testing
 extern List *parse(File *file, Elf *elf);
 extern int ctype_sizeof(Ctype *ctype);
 extern Token *read_token(ReadContext *ctx);
-extern void unget_token(ReadContext *ctx, Token *tok);
 extern ReadContext *make_read_context(File *file, Elf *elf);
 extern ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...);
 extern ATTRIBUTE((noreturn)) void error_ctx(ReadContext *ctx, char *msg, ...);
+extern char *token_to_string(Token *tok);
 
 /*============================================================
  * Code generator
