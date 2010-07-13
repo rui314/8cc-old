@@ -332,7 +332,6 @@ static void test_read_unget_token(void) {
 int main(int argc, char **argv) {
     printf("Running unit tests... ");
     fflush(stdout);
-    lexer_init();
 
     test_string();
     test_list();

@@ -28,8 +28,6 @@
 
 #include "8cc.h"
 
-static Dict *reserved_word;
-
 static Token *make_token(ReadContext *ctx) {
     Token *r = malloc(sizeof(Token));
     r->toktype = TOKTYPE_INVALID;
@@ -79,6 +77,20 @@ static void skip_line_comment(File *file) {
             return;
         }
     }
+}
+
+Dict *reserved_word(void) {
+    static Dict *reserved_word;
+    if (reserved_word != NULL)
+        return reserved_word;
+    reserved_word = make_string_dict();
+#define KEYWORD(id_, str_) \
+    dict_put(reserved_word, to_string(str_), (void *)id_);
+#define OP(_)
+# include "keyword.h"
+#undef OP
+#undef KEYWORD
+    return reserved_word;
 }
 
 /*
@@ -360,7 +372,7 @@ Token *read_token(ReadContext *ctx) {
         case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W':
         case 'X': case 'Y': case 'Z': case '_':
             str = read_word(ctx->file, c);
-            int id = (intptr)dict_get(reserved_word, str);
+            int id = (intptr)dict_get(reserved_word(), str);
             if (id)
                 return make_keyword(ctx, id);
             return make_token1(ctx, TOKTYPE_IDENT, (TokenValue)str);
@@ -432,20 +444,4 @@ Token *read_token(ReadContext *ctx) {
         }
     }
     return NULL;
-}
-
-/*============================================================
- * Initializer
- */
-
-void lexer_init(void) {
-    if (reserved_word != NULL)
-        return;
-    reserved_word = make_string_dict();
-#define KEYWORD(id_, str_) \
-    dict_put(reserved_word, to_string(str_), (void *)id_);
-#define OP(_)
-# include "keyword.h"
-#undef OP
-#undef KEYWORD
 }

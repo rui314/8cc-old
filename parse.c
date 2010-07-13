@@ -1620,7 +1620,6 @@ static Function *read_func_declaration(ReadContext *ctx) {
  */
 
 List *parse(File *file, Elf *elf) {
-    lexer_init();
     List *r = make_list();
     for (;;) {
         ReadContext *ctx = make_read_context(file, elf);
