@@ -75,7 +75,7 @@ Context *make_context(Elf *elf) {
 
 Section *find_section(Elf *elf, char *name) {
     for (int i = 0; i < LIST_LEN(elf->sections); i++) {
-        Section *sect = LIST_ELEM(elf->sections, i);
+        Section *sect = LIST_REF(elf->sections, i);
         if (!strcmp(sect->name, name))
             return sect;
     }
@@ -124,31 +124,31 @@ Inst *make_inst0(int op) {
 
 Inst *make_inst1(int op, void *v0) {
     Inst *r = make_inst(op, 1);
-    LIST_ELEM(r->args, 0) = v0;
+    LIST_REF(r->args, 0) = v0;
     return r;
 }
 
 Inst *make_inst2(int op, void *v0, void *v1) {
     Inst *r = make_inst(op, 2);
-    LIST_ELEM(r->args, 0) = v0;
-    LIST_ELEM(r->args, 1) = v1;
+    LIST_REF(r->args, 0) = v0;
+    LIST_REF(r->args, 1) = v1;
     return r;
 }
 
 Inst *make_inst3(int op, void *v0, void *v1, void *v2) {
     Inst *r = make_inst(op, 3);
-    LIST_ELEM(r->args, 0) = v0;
-    LIST_ELEM(r->args, 1) = v1;
-    LIST_ELEM(r->args, 2) = v2;
+    LIST_REF(r->args, 0) = v0;
+    LIST_REF(r->args, 1) = v1;
+    LIST_REF(r->args, 2) = v2;
     return r;
 }
 
 Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v3) {
     Inst *r = make_inst(op, 4);
-    LIST_ELEM(r->args, 0) = v0;
-    LIST_ELEM(r->args, 1) = v1;
-    LIST_ELEM(r->args, 2) = v2;
-    LIST_ELEM(r->args, 3) = v3;
+    LIST_REF(r->args, 0) = v0;
+    LIST_REF(r->args, 1) = v1;
+    LIST_REF(r->args, 2) = v2;
+    LIST_REF(r->args, 3) = v3;
     return r;
 }
 
@@ -389,8 +389,8 @@ static void save_xmm0(Context *ctx, Var *var) {
 }
 
 static void handle_int_to_float(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src = LIST_ELEM(inst->args, 1);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src = LIST_REF(inst->args, 1);
     assert(is_flonum(dst->ctype));
     assert(src->ctype->type == CTYPE_INT);
     load_rax(ctx, src);
@@ -401,8 +401,8 @@ static void handle_int_to_float(Context *ctx, Inst *inst) {
 }
 
 static void handle_float_to_int(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src = LIST_ELEM(inst->args, 1);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src = LIST_REF(inst->args, 1);
     assert(dst->ctype->type == CTYPE_INT);
     assert(is_flonum(src->ctype));
     load_xmm0(ctx, src);
@@ -412,13 +412,13 @@ static void handle_float_to_int(Context *ctx, Inst *inst) {
 }
 
 static void handle_func_call(Context *ctx, Inst *inst) {
-    Var *fn = LIST_ELEM(inst->args, 0);
+    Var *fn = LIST_REF(inst->args, 0);
     Section *text = find_section(ctx->elf, ".text");
     int gpr = 0;
     int xmm = 0;
 
     for (int i = 2; i < LIST_LEN(inst->args); i++) {
-        Var *var = LIST_ELEM(inst->args, i);
+        Var *var = LIST_REF(inst->args, i);
         if (is_flonum(var->ctype)) {
             load_xmm7(ctx, var);
             emit4(ctx, push_xmm_arg[xmm++]);
@@ -439,15 +439,15 @@ static void handle_func_call(Context *ctx, Inst *inst) {
     emit4(ctx, 0);
 
     // Save function return value to the stack;
-    Var *rval = LIST_ELEM(inst->args, 1);
+    Var *rval = LIST_REF(inst->args, 1);
     save_rax(ctx, rval);
 }
 
 static void finish_func_call(Elf *elf, Dict *func, List *tbf) {
     Section *text = find_section(elf, ".text");
     for (int i = 0; i < LIST_LEN(tbf); i = i + 2) {
-        String *fname = LIST_ELEM(tbf, i);
-        u32 pos = (intptr)LIST_ELEM(tbf, i + 1);
+        String *fname = LIST_REF(tbf, i);
+        u32 pos = (intptr)LIST_REF(tbf, i + 1);
         if (dict_has(func, fname)) {
             string_seek(text->body, pos);
             o4(text->body, (u32)(intptr)dict_get(func, fname) - pos - 4);
@@ -459,9 +459,9 @@ static void finish_func_call(Elf *elf, Dict *func, List *tbf) {
 }
 
 static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src0 = LIST_REF(inst->args, 1);
+    Var *src1 = LIST_REF(inst->args, 2);
     if (is_flonum(src0->ctype)) {
         load_xmm0(ctx, src0);
         load_xmm7(ctx, src1);
@@ -478,9 +478,9 @@ static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
 }
 
 static void handle_imul(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src0 = LIST_REF(inst->args, 1);
+    Var *src1 = LIST_REF(inst->args, 2);
     if (is_flonum(src0->ctype)) {
         load_xmm0(ctx, src0);
         load_xmm7(ctx, src1);
@@ -497,9 +497,9 @@ static void handle_imul(Context *ctx, Inst *inst) {
 }
 
 static void handle_idiv(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src0 = LIST_REF(inst->args, 1);
+    Var *src1 = LIST_REF(inst->args, 2);
     if (is_flonum(src0->ctype)) {
         load_xmm0(ctx, src0);
         load_xmm7(ctx, src1);
@@ -514,12 +514,12 @@ static void handle_idiv(Context *ctx, Inst *inst) {
     emit2(ctx, 0xd231);
     // IDIV r11
     emit3(ctx, 0xfbf749);
-    save_rax(ctx, LIST_ELEM(inst->args, 0));
+    save_rax(ctx, LIST_REF(inst->args, 0));
 }
 
 static void handle_not(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src = LIST_ELEM(inst->args, 1);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src = LIST_REF(inst->args, 1);
     load_rax(ctx, src);
     // TEST eax, eax
     emit2(ctx, 0xc085);
@@ -531,9 +531,9 @@ static void handle_not(Context *ctx, Inst *inst) {
 }
 
 static void emit_cmp(Context *ctx, Inst *inst, u32 op) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src0 = LIST_REF(inst->args, 1);
+    Var *src1 = LIST_REF(inst->args, 2);
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     // CMP rax, r11
@@ -545,9 +545,9 @@ static void emit_cmp(Context *ctx, Inst *inst, u32 op) {
 }
 
 static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src0 = LIST_REF(inst->args, 1);
+    Var *src1 = LIST_REF(inst->args, 2);
     emit1(ctx, 0x90);
     emit1(ctx, 0x90);
     load_xmm0(ctx, src0);
@@ -561,7 +561,7 @@ static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
 }
 
 static void handle_less(Context *ctx, Inst *inst) {
-    if (is_flonum(((Var *)LIST_ELEM(inst->args, 1))->ctype)) {
+    if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
         // SETL al
         emit_cmp(ctx, inst, 0xc09c0f);
     } else {
@@ -571,7 +571,7 @@ static void handle_less(Context *ctx, Inst *inst) {
 }
 
 static void handle_less_equal(Context *ctx, Inst *inst) {
-    if (is_flonum(((Var *)LIST_ELEM(inst->args, 1))->ctype)) {
+    if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
         // SETA al
         // emit_fcmp(ctx, inst, 0xc0970f);
         // SETLE al
@@ -585,8 +585,8 @@ static void handle_less_equal(Context *ctx, Inst *inst) {
 }
 
 static void handle_neg(Context *ctx, Inst *inst) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src = LIST_ELEM(inst->args, 1);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src = LIST_REF(inst->args, 1);
     load_rax(ctx, src);
     // NOT eax
     emit2(ctx, 0xd0f7);
@@ -594,9 +594,9 @@ static void handle_neg(Context *ctx, Inst *inst) {
 }
 
 static void handle_inst3(Context *ctx, Inst *inst, u64 op) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src0 = LIST_REF(inst->args, 1);
+    Var *src1 = LIST_REF(inst->args, 2);
     load_rax(ctx, src0);
     load_r11(ctx, src1);
     emit3(ctx, op);
@@ -609,9 +609,9 @@ static void handle_and(Context *ctx, Inst *inst) {
 }
 
 static void handle_shift(Context *ctx, Inst *inst, u64 op) {
-    Var *dst = LIST_ELEM(inst->args, 0);
-    Var *src0 = LIST_ELEM(inst->args, 1);
-    Var *src1 = LIST_ELEM(inst->args, 2);
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src0 = LIST_REF(inst->args, 1);
+    Var *src1 = LIST_REF(inst->args, 2);
     load_rax(ctx, src1);
     // MOV ecx, eax
     emit2(ctx, 0xc189);
@@ -641,11 +641,11 @@ static void handle_xor(Context *ctx, Inst *inst) {
 }
 
 static void handle_assign(Context *ctx, Inst *inst) {
-    Var *var = LIST_ELEM(inst->args, 0);
-    Var *val = LIST_ELEM(inst->args, 1);
+    Var *var = LIST_REF(inst->args, 0);
+    Var *val = LIST_REF(inst->args, 1);
     assert(var->ctype->type != CTYPE_ARRAY);
     assert(val);
-    if (is_flonum(((Var *)LIST_ELEM(inst->args, 1))->ctype)) {
+    if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
         load_xmm0(ctx, val);
         save_xmm0(ctx, var);
     } else {
@@ -656,7 +656,7 @@ static void handle_assign(Context *ctx, Inst *inst) {
 
 static void handle_equal(Context *ctx, Inst *inst, bool eq) {
     // SETE al or SETNE al
-    if (is_flonum(((Var *)LIST_ELEM(inst->args, 1))->ctype)) {
+    if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
         emit_fcmp(ctx, inst, eq ? 0xc0940f : 0xc0950f);
     } else {
         emit_cmp(ctx, inst, eq ? 0xc0940f : 0xc0950f);
@@ -664,8 +664,8 @@ static void handle_equal(Context *ctx, Inst *inst, bool eq) {
 }
 
 static void handle_address(Context *ctx, Inst *inst) {
-    Var *p = LIST_ELEM(inst->args, 0);
-    Var *v = LIST_ELEM(inst->args, 1);
+    Var *p = LIST_REF(inst->args, 0);
+    Var *v = LIST_REF(inst->args, 1);
     if (v->stype == VAR_IMM && v->ctype->type == CTYPE_ARRAY) {
         load_rax(ctx, v);
     } else {
@@ -678,8 +678,8 @@ static void handle_address(Context *ctx, Inst *inst) {
 }
 
 static void handle_deref(Context *ctx, Inst *inst) {
-    Var *v = LIST_ELEM(inst->args, 0);
-    Var *p = LIST_ELEM(inst->args, 1);
+    Var *v = LIST_REF(inst->args, 0);
+    Var *p = LIST_REF(inst->args, 1);
     load_rax(ctx, p);
     // MOV rax, [rax]
     emit3(ctx, 0x008b48);
@@ -687,8 +687,8 @@ static void handle_deref(Context *ctx, Inst *inst) {
 }
 
 static void handle_assign_deref(Context *ctx, Inst *inst) {
-    Var *loc = LIST_ELEM(inst->args, 0);
-    Var *v = LIST_ELEM(inst->args, 1);
+    Var *loc = LIST_REF(inst->args, 0);
+    Var *v = LIST_REF(inst->args, 1);
     load_rax(ctx, v);
     load_r11(ctx, loc);
     // MOV [r11], rax
@@ -696,10 +696,10 @@ static void handle_assign_deref(Context *ctx, Inst *inst) {
 }
 
 static void handle_if(Context *ctx, Inst *inst) {
-    Var *cond = LIST_ELEM(inst->args, 0);
-    Block *then = LIST_ELEM(inst->args, 1);
-    Block *els = LIST_ELEM(inst->args, 2);
-    Block *cont = LIST_ELEM(inst->args, 3);
+    Var *cond = LIST_REF(inst->args, 0);
+    Block *then = LIST_REF(inst->args, 1);
+    Block *els = LIST_REF(inst->args, 2);
+    Block *cont = LIST_REF(inst->args, 3);
     load_rax(ctx, cond);
 
     // TEST rax, rax
@@ -736,7 +736,7 @@ static void handle_if(Context *ctx, Inst *inst) {
 }
 
 static void handle_alloc(Context *ctx, Inst *inst) {
-    Var *v = LIST_ELEM(inst->args, 0);
+    Var *v = LIST_REF(inst->args, 0);
     var_stack_pos(ctx, v);
 }
 
@@ -747,7 +747,7 @@ static void jump_to(Context *ctx, int pos) {
 }
 
 static void handle_jmp(Context *ctx, Inst *inst) {
-    Block *dst = LIST_ELEM(inst->args, 0);
+    Block *dst = LIST_REF(inst->args, 0);
     if (dst->pos < 0) {
         handle_block(ctx, dst);
     } else {
@@ -756,7 +756,7 @@ static void handle_jmp(Context *ctx, Inst *inst) {
 }
 
 void handle_return(Context *ctx, Inst *inst) {
-    Var *retval = LIST_ELEM(inst->args, 0);
+    Var *retval = LIST_REF(inst->args, 0);
     load_rax(ctx, retval);
     emit1(ctx, 0xc9); // LEAVE
     emit1(ctx, 0xc3); // RET
@@ -769,7 +769,7 @@ static void handle_block(Context *ctx, Block *block) {
     }
     block->pos = STRING_LEN(ctx->text);
     for (int i = 0; i < LIST_LEN(block->code); i++) {
-        Inst *inst = LIST_ELEM(block->code, i);
+        Inst *inst = LIST_REF(block->code, i);
         switch (inst->op) {
         case '+': case '-':
             handle_add_or_sub(ctx, inst, inst->op == '+');
@@ -856,7 +856,7 @@ static void handle_block(Context *ctx, Block *block) {
 
 void save_params(Context *ctx, Function *func) {
     for (int i = 0; i < LIST_LEN(func->params); i++) {
-        Var *param = LIST_ELEM(func->params, i);
+        Var *param = LIST_REF(func->params, i);
         emit3(ctx, pop_arg[i]);
         save_rax(ctx, param);
     }
@@ -889,7 +889,7 @@ void assemble(Elf *elf, List *fns) {
     for (int i = 0; i < LIST_LEN(fns); i++) {
         Context *ctx = make_context(elf);
         ctx->func_tbf = tbf;
-        Function *func = LIST_ELEM(fns, i);
+        Function *func = LIST_REF(fns, i);
 
         Symbol *fsym = make_symbol(func->name, text, STRING_LEN(ctx->text), STB_GLOBAL, STT_NOTYPE, 1);
         dict_put(ctx->elf->syms, func->name, fsym);

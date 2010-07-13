@@ -175,10 +175,10 @@ typedef struct List {
     int len;
 } List;
 
-#define LIST_ELEM(lis, i) (((lis)->elems)[i])
+#define LIST_REF(lis, i) (((lis)->elems)[i])
 #define LIST_LEN(lis) ((lis)->len)
-#define LIST_TOP(lis) (LIST_ELEM((lis), 0))
-#define LIST_BOTTOM(lis) (LIST_ELEM((lis), LIST_LEN(lis) - 1))
+#define LIST_TOP(lis) (LIST_REF((lis), 0))
+#define LIST_BOTTOM(lis) (LIST_REF((lis), LIST_LEN(lis) - 1))
 #define LIST_IS_EMPTY(lis) ((lis)->len == 0)
 
 extern List *make_list(void);

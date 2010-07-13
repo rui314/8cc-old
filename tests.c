@@ -81,8 +81,8 @@ static void test_list(void) {
     list_push(list, (void *)17);
     list_push(list, (void *)42);
     EQ(2, (intptr)LIST_LEN(list));
-    EQ(17, (intptr)LIST_ELEM(list, 0));
-    EQ(42, (intptr)LIST_ELEM(list, 1));
+    EQ(17, (intptr)LIST_REF(list, 0));
+    EQ(42, (intptr)LIST_REF(list, 1));
     EQ(42, (intptr)list_pop(list));
     EQ(17, (intptr)list_pop(list));
     EQ(0, LIST_LEN(list));

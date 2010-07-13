@@ -231,11 +231,11 @@ static void add_local_var(ReadContext *ctx, String *name, Var *var) {
 
 static Var *find_var(ReadContext *ctx, String *name) {
     for (int i = LIST_LEN(ctx->scope) - 1; i >= 0; i--) {
-        List *scope = LIST_ELEM(ctx->scope, i);
+        List *scope = LIST_REF(ctx->scope, i);
         for (int j = 0; j < LIST_LEN(scope); j += 2) {
-            String *str = LIST_ELEM(scope, j);
+            String *str = LIST_REF(scope, j);
             if (string_equal(str, name))
-                return LIST_ELEM(scope, j + 1);
+                return LIST_REF(scope, j + 1);
         }
     }
     return NULL;
@@ -1783,7 +1783,7 @@ static void process_label(ReadContext *ctx, Token *tok) {
     if (!tbf)
         return;
     for (int i = 0; i < LIST_LEN(tbf); i++) {
-        Block *block = LIST_ELEM(tbf, i);
+        Block *block = LIST_REF(tbf, i);
         push_block(ctx, block);
         emit(ctx, make_inst1(OP_JMP, cont));
         pop_block(ctx);
