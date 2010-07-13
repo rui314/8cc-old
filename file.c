@@ -98,9 +98,12 @@ static void next_line(File *file, int c) {
 /*
  * Abstracts C source file.  This does two things:
  *
- *   - converts "\r\n" or "\r" to "\n".
- *   - removes backslash and following end-of-line marker
- *     (C:ARM p.13).
+ *   - Converts "\r\n" or "\r" to "\n".
+ **
+ *   - Removes backslash and following end-of-line marker.  This needs
+ *     to happen before preprocessing and before the lexical analysis
+ *     of the C program.  (C:ARM p.13 2.1.2 Whitespace and Line
+ *     Termination)
  */
 int readc(File *file) {
     int c;
