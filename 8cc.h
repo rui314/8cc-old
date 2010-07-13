@@ -127,7 +127,7 @@ typedef intptr_t intptr;
 # define ATTRIBUTE(x)
 #endif
 
-/*
+/*============================================================
  * Common
  */
 extern ATTRIBUTE((noreturn)) void error(char *format, ...);
@@ -136,7 +136,7 @@ extern void warn(char *format, ...);
 extern void vwarn(char *format, va_list ap);
 #define panic(fmt, ...) (error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__), 1)
 
-/*
+/*============================================================
  * Byte String
  */
 
@@ -166,7 +166,7 @@ extern void o8(String *b, u64 data);
 extern void align(String *b, int n);
 extern void string_seek(String *b, int pos);
 
-/*
+/*============================================================
  * List
  */
 
@@ -191,7 +191,7 @@ extern void *list_pop(List *list);
 extern void *list_unshift(List *list);
 extern List *sublist(List *orig, int off);
 
-/*
+/*============================================================
  * Dictionary (Hash table)
  */
 
@@ -279,7 +279,7 @@ extern void write_elf(FILE *outfile, Elf *elf);
 extern void add_section(Elf *elf, Section *sect);
 extern Section *find_section(Elf *elf, char *name);
 
-/*
+/*============================================================
  * File
  */
 
@@ -299,37 +299,9 @@ extern void unreadc(int c, File *file);
 extern int readc(File *file);
 extern bool next_char_is(File *file, int c);
 
-/*
- * Parser
+/*============================================================
+ * Lexer
  */
-
-typedef union Cvalue {
-    char c;
-    int i;
-    long l;
-    float f;
-    String *s;
-} Cvalue;
-
-typedef enum CtypeEnum {
-    CTYPE_INVALID,
-    CTYPE_PTR,
-    CTYPE_ARRAY,
-    CTYPE_LLONG,
-    CTYPE_LONG,
-    CTYPE_INT,
-    CTYPE_SHORT,
-    CTYPE_CHAR,
-    CTYPE_FLOAT,
-    CTYPE_DOUBLE,
-} CtypeEnum;
-
-typedef struct Ctype {
-    CtypeEnum type;
-    bool signedp;
-    struct Ctype *ptr;
-    int size; // valid iff type == CTYPE_ARRAY
-} Ctype;
 
 typedef enum KeywordType {
     KEYWORD_NON_ONE_CHAR_BEGIN = 255,
@@ -367,6 +339,42 @@ typedef struct Token {
     int column;
 } Token;
 
+struct ReadContext;
+extern void lexer_init(void);
+extern Token *read_token(struct ReadContext *ctx);
+
+/*============================================================
+ * Parser
+ */
+
+typedef union Cvalue {
+    char c;
+    int i;
+    long l;
+    float f;
+    String *s;
+} Cvalue;
+
+typedef enum CtypeEnum {
+    CTYPE_INVALID,
+    CTYPE_PTR,
+    CTYPE_ARRAY,
+    CTYPE_LLONG,
+    CTYPE_LONG,
+    CTYPE_INT,
+    CTYPE_SHORT,
+    CTYPE_CHAR,
+    CTYPE_FLOAT,
+    CTYPE_DOUBLE,
+} CtypeEnum;
+
+typedef struct Ctype {
+    CtypeEnum type;
+    bool signedp;
+    struct Ctype *ptr;
+    int size; // valid iff type == CTYPE_ARRAY
+} Ctype;
+
 /*
  * Represents basic block of program.  Code must contain one of OP_RETURN OP_JMP
  * or OP_IF which is the end of the basic block.  Other instructions following
@@ -384,7 +392,7 @@ typedef struct Function {
 } Function;
 
 /*
- * Read context for parser.
+ * Read context for parser
  */
 typedef struct ReadContext {
     File *file;
@@ -416,9 +424,11 @@ extern int ctype_sizeof(Ctype *ctype);
 extern Token *read_token(ReadContext *ctx);
 extern void unget_token(ReadContext *ctx, Token *tok);
 extern ReadContext *make_read_context(File *file, Elf *elf);
+extern ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...);
+extern ATTRIBUTE((noreturn)) void error_ctx(ReadContext *ctx, char *msg, ...);
 
-/*
- * Assembler
+/*============================================================
+ * Code generator
  */
 
 #define VAR_IMM    0
