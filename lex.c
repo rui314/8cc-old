@@ -26,163 +26,197 @@
  *   DAMAGE.
  */
 
+/*
+ * There are two classes of tokens during translation: "preprocessing tokens"
+ * and "tokens".  C source files are parsed into preprocessing tokens first, C
+ * preprocessor handles preprecessing directives and macro replacement, and then
+ * the preprocessing tokens are converted to tokens.  Main C compiler sees only
+ * the sequence of tokens.
+ *
+ * The functions in this file does parses C source file into sequence of
+ * preprocessor token.  Preprocessor token is defined as the below (WG14/N1256
+ * 6.4):
+ *
+ * preprocessing-token:
+ *     header-name
+ *     identifier
+ *     pp-number
+ *     character-constant
+ *     string-literal
+ *     punctuator
+ *     each non-white-space character that cannot be one of the above
+ */
+
 #include "8cc.h"
 
-static Token *make_token(ReadContext *ctx) {
-    Token *r = malloc(sizeof(Token));
-    r->toktype = TOKTYPE_INVALID;
-    r->line = ctx->file->line;
-    r->column = ctx->file->column;
+/*==============================================================================
+ * Functions to make CPP processing context.
+ */
+CppContext *make_cpp_context(File *file) {
+    CppContext *r = malloc(sizeof(CppContext));
+    r->file = file;
+    r->at_bol = true;
+    r->defs = make_string_dict();
+    r->ungotten = make_list();
     return r;
 }
 
-static Token *make_token1(ReadContext *ctx, TokType toktype, TokenValue val) {
+/*==============================================================================
+ * Utility functions.
+ */
+
+static bool iswhitespace(int c) {
+    return c == ' ' || c == '\t' || c == '\f' || c == '\v';
+}
+
+ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...) {
+    va_list ap;
+    va_start(ap, msg);
+    print_parse_error(ctx->file->line, ctx->file->column, msg, ap);
+}
+
+void unget_cpp_token(CppContext *ctx, Token *tok) {
+    list_push(ctx->ungotten, tok);
+}
+
+Token *peek_cpp_token(CppContext *ctx) {
+    Token *tok = read_cpp_token(ctx);
+    unget_cpp_token(ctx, tok);
+    return tok;
+}
+
+static bool next_chars_are(File *file, char *str) {
+    for (int i = 0; str[i]; i++) {
+        if (next_char_is(file, str[i]))
+            continue;
+        while (i-- >= 0)
+            unreadc(str[i], file);
+        return false;
+    }
+    return true;
+}
+
+/*==============================================================================
+ * Functions to make tokens.
+ */
+
+Token *copy_token(Token *tok) {
     Token *r = malloc(sizeof(Token));
-    r->toktype = toktype;
+    r->toktype = tok->toktype;
+    r->val = tok->val;
+    r->line = tok->line;
+    r->column = tok->column;
+    return r;
+}
+
+extern Token *make_token(CppContext *ctx, TokType type, TokenValue val) {
+    Token *r = malloc(sizeof(Token));
+    r->toktype = type;
     r->val = val;
     r->line = ctx->file->line;
     r->column = ctx->file->column;
     return r;
 }
 
-Token *make_keyword(ReadContext *ctx, int k) {
-    Token *r = malloc(sizeof(Token));
-    r->toktype = TOKTYPE_KEYWORD;
-    r->val.k = k;
-    r->line = ctx->file->line;
-    r->column = ctx->file->column;
-    return r;
+static Token *make_ident(CppContext *ctx, String *val) {
+    return make_token(ctx, TOKTYPE_IDENT, (TokenValue)val);
 }
 
-static void skip_comment(File *file) {
-    int line = file->line;
-    int column = file->column;
+static Token *make_cppnum(CppContext *ctx, String *val) {
+    return make_token(ctx, TOKTYPE_CPPNUM, (TokenValue)val);
+}
+
+static Token *make_punct(CppContext *ctx, int c) {
+    return make_token(ctx, TOKTYPE_PUNCT, (TokenValue)c);
+}
+
+static Token *make_char_const(CppContext *ctx, char c) {
+    return make_token(ctx, TOKTYPE_CHAR, (TokenValue)(int)c);
+}
+
+static Token *make_str_literal(CppContext *ctx, String *val) {
+    return make_token(ctx, TOKTYPE_STRING, (TokenValue)val);
+}
+
+static Token *make_cpp_token(CppContext *ctx, TokType type) {
+    return make_token(ctx, type, (TokenValue)0);
+}
+
+/*==============================================================================
+ * Functions to handle comments.  Comment will be treated as if it were one
+ * whitespace character.  (See WG14/N1256 5.1.1.2 Translation phases, phase 4)
+ */
+static void skip_comment(CppContext *ctx) {
     int prev = '\0';
     for (;;) {
-        int c = readc(file);
+        int c = readc(ctx->file);
         if (c == EOF)
-            error("Line %d:%d: premature end of input file in comment", line, column);
+            error_cpp_ctx(ctx, "premature end of input file in comment");
         if (c == '/' && prev == '*')
             return;
         prev = c;
     }
 }
 
-static void skip_line_comment(File *file) {
+static void skip_line_comment(CppContext *ctx) {
     for (;;) {
-        int c = readc(file);
+        int c = readc(ctx->file);
         if (c == EOF) return;
         if (c == '\n') {
-            unreadc(c, file);
+            unreadc(c, ctx->file);
             return;
         }
     }
 }
 
-/*
- * integer-constant:
- *     decimal-constant integer-suffix?
- *     octal-constant integer-suffix?
- *     hexadecimal-constant integer-suffix?
- *
- * decimal-constant:
- *     [1-9] [0-9]*
- *
- * octal-constant:
- *     "0" [0-7]*
- *
- * hexadecimal-constant
- *     "0" [xX] [0-9a-fA-F]+
- *
- * integer-suffix:
- *     long-suffix unsigned-suffix?
- *     long-long-suffix unsigned-suffix?
- *     unsigned-suffix long-suffix?
- *     unsigned-suffix long--longsuffix?
- *
- * long-suffix;
- *     "l"
- *     "L"
- *
- * long-long-suffix:
- *     "ll"
- *     "LL"
- *
- * unsigned-suffix:
- *     "u"
- *     "U"
- *
- * floating-constant:
- *     decimal-floating-constant
- *     hexadecimal-floating-constant
- *
- * decimal-floating-constant:
- *     digit-sequence exponent? floating-suffix?
- *
- * hexadecimal-floating-constant:
- *     hex-prefix dotted-hex-digits binary-exponent floating-suffix?
- *     hex-prefix hex-digit-sequence binary-exponent floating-suffix?
- *
- * hex-prefix:
- *     0x
- *     0X
- *
- * dotted-hex-digits:
- *     hex-digit-sequence "."
- *     hex-digit-sequence "." hex-digit-sequence
- *     "." hex-digit-sequence
- *
- * exponent:
- *     [eE] [-+]? digit-sequence
- *
- * binary-exponent:
- *     [pP] [-+]? digit-sequence
- *
- * floating-suffix:
- *     [fFlL]
- *
- * digit-sequence:
- *     [0-9]+
- *
- * hex-digit-sequence:
- *     [0-9a-fA-F]+
+/*==============================================================================
+ * Parser.  These methods reads source file and returns preprocessing tokens.
  */
-static Token *read_num(ReadContext *ctx) {
-    Token *tok = make_token(ctx);
+
+/*
+ * WG14/N1256 6.4.8 Preprocessing numbers
+ *
+ * pp-number
+ *     digit
+ *     . digit
+ *     pp-number digit
+ *     pp-number identifier-nondigit
+ *     pp-number [eEpP] sign
+ *     pp-number .
+ *
+ * (WG14/N1256 6.4.2 Identifiers)
+ * identifier-nondigit:
+ *     nondigit
+ *     universal-character-name
+ *     other implementation-defined characters
+ * nondigit:
+ *     [_a-zA-Z]
+ */
+static Token *read_cppnum(CppContext *ctx, int c) {
+    // c0 must be [0-9] or '.'
     String *buf = make_string();
-    for (;;) {
-        int c = readc(ctx->file);
-        if (c == EOF) {
-            goto ret_int;
-        } else if ('0' <= c && c <= '9') {
-            o1(buf, c);
-        } else if (c == '.') {
-            o1(buf, c);
-            break;
-        } else {
-            unreadc(c, ctx->file);
-            goto ret_int;
-        }
+    o1(buf, c);
+    if (c == '.') {
+        int c1 = readc(ctx->file);
+        if (!isdigit(c1))
+            error_cpp_ctx(ctx, "number expected, but got '%c'", c1);
+        o1(buf, c1);
     }
     for (;;) {
-        int c = readc(ctx->file);
-        if (c == EOF) {
-            goto ret_float;
-        } else if ('0' <= c && c <= '9') {
+        c = readc(ctx->file);
+        if (isalnum(c) || c == '_' || c == '.') {
             o1(buf, c);
+        } else if (c == 'e' || c == 'E' || c == 'p' || c == 'P') {
+            o1(buf, c);
+            int c1 = readc(ctx->file);
+            if (c1 != '+' && c1 != '-')
+                error_cpp_ctx(ctx, "'+' or '-' expected, but got '%c'", c1);
+            o1(buf, c1);
         } else {
             unreadc(c, ctx->file);
-            goto ret_float;
+            return make_cppnum(ctx, buf);
         }
     }
- ret_int:
-    tok->toktype = TOKTYPE_INT;
-    tok->val.i = atoi(STRING_BODY(buf));
-    return tok;
- ret_float:
-    tok->toktype = TOKTYPE_FLOAT;
-    tok->val.f = atof(STRING_BODY(buf));
-    return tok;
 }
 
 static int hextodec(char c) {
@@ -271,7 +305,7 @@ static char read_escape_char(File *file) {
  *    any source character except the double quote, backslash or newline
  *    escape-character
  */
-static String *read_str(ReadContext *ctx) {
+static String *read_str(CppContext *ctx) {
     String *b = make_string();
     for (;;) {
         int c = readc(ctx->file);
@@ -283,7 +317,7 @@ static String *read_str(ReadContext *ctx) {
             o1(b, read_escape_char(ctx->file));
             break;
         case EOF:
-            error_ctx(ctx, "premature end of input file while reading a literal string");
+            error_cpp_ctx(ctx, "premature end of input file while reading a literal string");
         default:
             o1(b, c);
         }
@@ -299,70 +333,110 @@ static String *read_str(ReadContext *ctx) {
  *    any source character except the single quote, backslash or newline
  *    escape-character
  */
-static char read_char(ReadContext *ctx) {
+static char read_char(CppContext *ctx) {
     int c = readc(ctx->file);
     switch (c) {
     case EOF:
-        error_ctx(ctx, "premature end of input file while reading a literal character");
+        error_cpp_ctx(ctx, "premature end of input file while reading a literal character");
     case '\\': return read_escape_char(ctx->file);
     default: return (char)c;
     }
 }
 
-static String *read_word(File *file, char c0) {
+static String *read_ident(File *file, char c0) {
     String *b = make_string();
     o1(b, c0);
     for (;;) {
-        int c = readc(file);
-        if (isalnum(c) || c == '_') {
-            o1(b, c);
-        } else if (c != EOF) {
-            unreadc(c, file);
-            return b;
+        int c1 = readc(file);
+        if (isalnum(c1) || c1 == '_') {
+            o1(b, c1);
         } else {
+            unreadc(c1, file);
             return b;
         }
     }
 }
 
-static bool skip_space(ReadContext *ctx) {
+static void skip_whitespace(CppContext *ctx) {
     int c = readc(ctx->file);
-    while (c == ' ' || c == '\t' || c == '\f' || c == '\v')
+    while (iswhitespace(c))
         c = readc(ctx->file);
     unreadc(c, ctx->file);
-    return c == '\n';
 }
 
-Token *read_cpp_token(ReadContext *ctx) {
+/*
+ * Reads operators such as += or *=.
+ */
+static Token *maybe_read_equal(CppContext *ctx, int t0, int t1) {
+    if (next_char_is(ctx->file, '='))
+        return make_punct(ctx, t1);
+    return make_punct(ctx, t0);
+}
+
+/*
+ * Reads operators such as ++ or --.
+ */
+static Token *maybe_read_rep0(CppContext *ctx, int t0, int t1, int t2) {
+    if (next_char_is(ctx->file, t0))
+        return make_punct(ctx, t2);
+    return maybe_read_equal(ctx, t0, t1);
+}
+
+/*
+ * Reads operators such as <<= or >>=.
+ */
+static Token *maybe_read_rep1(CppContext *ctx, int t0, int t1, int t2, int t3) {
+    if (next_char_is(ctx->file, t0))
+        return maybe_read_equal(ctx, t2, t3);
+    return maybe_read_equal(ctx, t0, t1);
+}
+
+/*
+ * Returns the next token.  This considers a squence of whitespace characters a
+ * token, unlike read_cpp_token().
+ */
+static Token *read_cpp_token_int(CppContext *ctx) {
     if (!LIST_IS_EMPTY(ctx->ungotten))
         return list_pop(ctx->ungotten);
 
-    String *str;
     for (;;) {
         int c = readc(ctx->file);
-        int c1;
-        bool b;
         switch (c) {
         case ' ': case '\t': case '\f': case '\v':
-            b = skip_space(ctx);
-            return make_token1(ctx, TOKTYPE_CPP, (TokenValue)(b ? '\n' : ' '));
+            skip_whitespace(ctx);
+            return make_cpp_token(ctx, TOKTYPE_SPACE);
         case '\n':
-            return make_token1(ctx, TOKTYPE_CPP, (TokenValue)'\n');
+            return make_cpp_token(ctx, TOKTYPE_NEWLINE);
+        case '/':
+            if (next_char_is(ctx->file, '*')) {
+                skip_comment(ctx);
+                return make_cpp_token(ctx, TOKTYPE_SPACE);
+            }
+            if (next_char_is(ctx->file, '/')) {
+                skip_line_comment(ctx);
+                return make_cpp_token(ctx, TOKTYPE_SPACE);
+            }
+            return maybe_read_equal(ctx, '/', KEYWORD_A_DIV);
         case '#':
-            return make_token1(ctx, TOKTYPE_CPP, (TokenValue)'#');
+            if (next_char_is(ctx->file, '#'))
+                make_punct(ctx, KEYWORD_TWOSHARPS);
+            return make_punct(ctx, '#');
+        case '.':
+            if (next_chars_are(ctx->file, ".."))
+                return make_punct(ctx, KEYWORD_THREEDOTS);
+            return make_punct(ctx, '.');
         case '0': case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8': case '9':
-            unreadc(c, ctx->file);
-            return read_num(ctx);
+            return read_cppnum(ctx, c);
         case '"':
-            return make_token1(ctx, TOKTYPE_STRING, (TokenValue)read_str(ctx));
+            return make_str_literal(ctx, read_str(ctx));
         case '\'': {
-            Token *r = make_token1(ctx, TOKTYPE_CHAR, (TokenValue)read_char(ctx));
-            c1 = read_char(ctx);
-            if (c1 != '\'')
-                error_ctx(ctx, "single quote expected, but got %c", c1);
+            Token *r = make_char_const(ctx, read_char(ctx));
+            if (!next_char_is(ctx->file, '\''))
+                error_cpp_ctx(ctx, "single quote expected, but got %c", readc(ctx->file));
             return r;
         }
+
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
         case 'h': case 'i': case 'j': case 'k': case 'l': case 'm': case 'n':
         case 'o': case 'p': case 'q': case 'r': case 's': case 't': case 'u':
@@ -371,74 +445,93 @@ Token *read_cpp_token(ReadContext *ctx) {
         case 'J': case 'K': case 'L': case 'M': case 'N': case 'O': case 'P':
         case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W':
         case 'X': case 'Y': case 'Z': case '_':
-            str = read_word(ctx->file, c);
-            return make_token1(ctx, TOKTYPE_IDENT, (TokenValue)str);
-        case '=':
-            if (next_char_is(ctx->file, '='))
-                return make_keyword(ctx, KEYWORD_EQ);
-            return make_keyword(ctx, '=');
-        case '/':
-            if (next_char_is(ctx->file, '*')) {
-                skip_comment(ctx->file);
-                return read_token(ctx);
-            }
-            if (next_char_is(ctx->file, '/')) {
-                skip_line_comment(ctx->file);
-                return read_token(ctx);
-            }
-            goto read_equal;
-        case '<':
-            if (next_char_is(ctx->file, '<'))
-                c = KEYWORD_LSH;
-            goto read_equal;
-        case '>':
-            if (next_char_is(ctx->file, '>'))
-                c = KEYWORD_RSH;
-            goto read_equal;
-        case '+':
-            if (next_char_is(ctx->file, '+'))
-                return make_keyword(ctx, KEYWORD_INC);
-            goto read_equal;
+            return make_ident(ctx, read_ident(ctx->file, c));
+
+        case '=': return maybe_read_equal(ctx, '=', KEYWORD_EQ);
+        case '*': return maybe_read_equal(ctx, '*', KEYWORD_A_MUL);
+        case '^': return maybe_read_equal(ctx, '^', KEYWORD_A_XOR);
+        case '!': return maybe_read_equal(ctx, '!', KEYWORD_NE);
+
+        case '+': return maybe_read_rep0(ctx, '+', KEYWORD_A_ADD, KEYWORD_INC);
+        case '&': return maybe_read_rep0(ctx, '&', KEYWORD_A_AND, KEYWORD_LOG_AND);
+        case '|': return maybe_read_rep0(ctx, '|', KEYWORD_A_OR,  KEYWORD_LOG_OR);
+
         case '-':
-            if (next_char_is(ctx->file, '-'))
-                return make_keyword(ctx, KEYWORD_DEC);
-            goto read_equal;
-        case '&':
-            if (next_char_is(ctx->file, '&'))
-                return make_keyword(ctx, KEYWORD_LOG_AND);
-            goto read_equal;
-        case '|':
-            if (next_char_is(ctx->file, '|'))
-                return make_keyword(ctx, KEYWORD_LOG_OR);
-            goto read_equal;
-        case '*': case '%': case '~': case '^': case '!':
-        read_equal:
-            if (next_char_is(ctx->file, '=')) {
-                int k = c == '+' ? KEYWORD_A_ADD
-                    : c == '-' ? KEYWORD_A_SUB
-                    : c == '*' ? KEYWORD_A_MUL
-                    : c == '/' ? KEYWORD_A_DIV
-                    : c == '%' ? KEYWORD_A_MOD
-                    : c == '&' ? KEYWORD_A_AND
-                    : c == '|' ? KEYWORD_A_OR
-                    : c == '^' ? KEYWORD_A_XOR
-                    : c == '<' ? KEYWORD_LE
-                    : c == '>' ? KEYWORD_GE
-                    : c == '!' ? KEYWORD_NE
-                    : c == KEYWORD_LSH ? KEYWORD_A_LSH
-                    : c == KEYWORD_RSH ? KEYWORD_A_RSH
-                    : panic("unknown op: %c", c);
-                return make_keyword(ctx, k);
-            }
-            // FALL THROUGH
+            if (next_char_is(ctx->file, '>'))
+                return make_punct(ctx, KEYWORD_ARROW);
+            return maybe_read_rep0(ctx, '-', KEYWORD_A_SUB, KEYWORD_DEC);
+
+            /*
+             * The following six tokens (so-called "digraphs")
+             *   <: :> <% %> %: %:%:
+             * are equivalent to the following six tokens.
+             *   [   ]  {  }  #  ##
+             * (WG14/N1256 6.4.6 Punctuators, paragraph 3)
+             */
+        case '<':
+            if (next_char_is(ctx->file, ':'))
+                return make_punct(ctx, '[');
+            if (next_char_is(ctx->file, '%'))
+                return make_punct(ctx, '{');
+            return maybe_read_rep1(ctx, '<', KEYWORD_LE, KEYWORD_LSH, KEYWORD_A_LSH);
+        case ':':
+            if (next_char_is(ctx->file, '>'))
+                return make_punct(ctx, ']');
+            return make_punct(ctx, ':');
+        case '%':
+            if (next_char_is(ctx->file, '>'))
+                return make_punct(ctx, ']');
+            if (next_chars_are(ctx->file, ":%:"))
+                return make_punct(ctx, KEYWORD_TWOSHARPS);
+            if (next_char_is(ctx->file, ':'))
+                return make_punct(ctx, '#');
+            return maybe_read_equal(ctx, '%', KEYWORD_A_MOD);
+
+        case '>':
+            return maybe_read_rep1(ctx, '>', KEYWORD_GE, KEYWORD_RSH, KEYWORD_A_RSH);
+
         case '(': case ')': case ',': case ';': case '[': case ']':
-        case '{': case '}': case ':': case '?':
-            return make_keyword(ctx, c);
+        case '{': case '}': case '?': case '~':
+            return make_punct(ctx, c);
         case EOF:
             return NULL;
         default:
-            error_ctx(ctx, "unimplemented '%c'", c);
+            error_cpp_ctx(ctx, "unimplemented '%c'", c);
         }
     }
-    return NULL;
+}
+
+/*==============================================================================
+ * Public interfaces to be used by the preprocessor.
+ */
+
+/*
+ * Returns iff the next token a next token is immediately preceded by
+ * whitespace.  Token is not consumed.
+ *
+ * This function will be used only when the preprocessor reads #define
+ * directive, which is the only place where the parser needs to be aware whether
+ * whitespace exists between tokens or not.  For example, the following macro
+ * FOO is function-like, that takes an argument named "x".
+ *
+ *   #define FOO(x) ...
+ *
+ * On the other hand, macro BAR shown below is not function-like and will be
+ * expanded to "(x) ...".
+ *
+ *   #define BAR (x) ...
+ */
+bool is_next_space(CppContext *ctx) {
+    Token *tok = peek_cpp_token(ctx);
+    return tok->toktype == TOKTYPE_SPACE;
+}
+
+/*
+ * Returns the next token.
+ */
+Token *read_cpp_token(CppContext *ctx) {
+    Token *tok = read_cpp_token_int(ctx);
+    while (tok && tok->toktype == TOKTYPE_SPACE)
+        tok = read_cpp_token_int(ctx);
+    return tok;
 }

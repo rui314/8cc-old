@@ -73,6 +73,15 @@ void unreadc(int c, File *file) {
 }
 
 /*
+ * Returns the next character without consuming it.
+ */
+int peekc(File *file) {
+    int c = readc(file);
+    unreadc(c, file);
+    return c;
+}
+
+/*
  * Consume next character iff the same as a given charcter.
  */
 bool next_char_is(File *file, int c) {

@@ -239,6 +239,19 @@ static void test_file_backslash_at_eol(void) {
 }
 
 /*
+ * Lexer
+ */
+
+static void test_lex() {
+    FILE *stream = create_file("");
+    File *file = make_file(stream, "-");
+    ReadContext *ctx = make_read_context(file, NULL);
+    EQ(2, read_token(ctx)->val.i);
+    EQ(4, read_token(ctx)->val.i);
+    EQ(NULL, read_token(ctx));
+}
+
+/*
  * Parser
  */
 
@@ -342,6 +355,8 @@ int main(int argc, char **argv) {
     test_file_unreadc();
     test_file_next_char_is();
     test_file_backslash_at_eol();
+
+    test_lex();
 
     test_read_comment();
     test_read_float();

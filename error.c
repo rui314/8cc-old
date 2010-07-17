@@ -54,3 +54,12 @@ void warn(char *format, ...) {
     va_start(ap, format);
     vwarn(format, ap);
 }
+
+void print_parse_error(int line, int column, char *msg, va_list ap) {
+    char buf[30];
+    snprintf(buf, sizeof(buf), "Line %d:%d: ", line, column);
+    String *b = make_string();
+    string_append(b, buf);
+    string_append(b, msg);
+    verror(STRING_BODY(b), ap);
+}

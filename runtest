@@ -356,7 +356,7 @@ runtest '3' 'int i=3.0; printf("%d", i);'
 # CPP #define
 #
 /bin/echo -e '\n#define...'
-runtest '3' $'#define  MSG "%d"\n # define NUM  3 \nprintf(MSG, NUM);'
+runtest '3' $'\n#define  MSG "%d"\n # define NUM  3 \nprintf(MSG, NUM);'
 
 rm -f .tmpTEST$$ .tmpTEST$$.o
 echo

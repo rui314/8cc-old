@@ -130,11 +130,14 @@ typedef intptr_t intptr;
 /*============================================================
  * Common
  */
+
 extern ATTRIBUTE((noreturn)) void error(char *format, ...);
 extern ATTRIBUTE((noreturn)) void verror(char *format, va_list ap);
 extern void warn(char *format, ...);
 extern void vwarn(char *format, va_list ap);
-#define panic(fmt, ...) (error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__), 1)
+extern ATTRIBUTE((noreturn)) void print_parse_error(int line, int column, char *msg, va_list ap);
+
+#define panic(fmt, ...) error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
 
 /*============================================================
  * Byte String
@@ -296,6 +299,7 @@ typedef struct File {
 extern File *make_file(FILE *stream, char *filename);
 extern File *open_file(char *path);
 extern void unreadc(int c, File *file);
+extern int peekc(File *file);
 extern int readc(File *file);
 extern bool next_char_is(File *file, int c);
 
@@ -312,25 +316,25 @@ typedef enum KeywordType {
 #undef KEYWORD
 } KeywordType;
 
-#define IS_KEYWORD(tok, type) ((tok)->toktype == TOKTYPE_KEYWORD && (tok)->val.k == type)
-
 typedef union TokenValue {
-    char c;
     int i;
     float f;
     String *str;
-    KeywordType k;
 } TokenValue;
 
 typedef enum TokType {
     TOKTYPE_INVALID,
-    TOKTYPE_CPP,
     TOKTYPE_KEYWORD,
+    TOKTYPE_IDENT,
+    TOKTYPE_PUNCT,
+    TOKTYPE_CPPNUM,
     TOKTYPE_CHAR,
-    TOKTYPE_STRING ,
+    TOKTYPE_STRING,
     TOKTYPE_INT,
     TOKTYPE_FLOAT,
-    TOKTYPE_IDENT,
+    // The following two types are used only in CPP.
+    TOKTYPE_NEWLINE,
+    TOKTYPE_SPACE,
 } TokType;
 
 typedef struct Token {
@@ -339,6 +343,34 @@ typedef struct Token {
     int line;
     int column;
 } Token;
+
+typedef struct CppContext {
+    File *file;
+    bool at_bol;
+    // Macro definitions.
+    Dict *defs;
+    // Pushback buffer for preprocessing tokens.
+    List *ungotten;
+} CppContext;
+
+extern Token *read_cpp_token(CppContext *ctx);
+extern Token *copy_token(Token *tok);
+
+extern CppContext *make_cpp_context(File *file);
+extern void unget_cpp_token(CppContext *ctx, Token *tok);
+extern Token *peek_cpp_token(CppContext *ctx);
+extern ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...);
+
+/*============================================================
+ * C Preprocessor
+ */
+
+struct ReadContext;
+extern Token *read_token(struct ReadContext *ctx);
+
+/*============================================================
+ * Parser
+ */
 
 /*
  * Represents basic block of program.  Code must contain one of OP_RETURN OP_JMP
@@ -382,26 +414,10 @@ typedef struct ReadContext {
     // processed when the labels are read.
     Dict *label_tbf;
     // For CPP
-    bool at_bol;
-    Dict *defs;
+    CppContext *cppctx;
 } ReadContext;
 
-extern void lexer_init(void);
-extern Token *read_cpp_token(ReadContext *ctx);
-extern Token *make_keyword(ReadContext *ctx, int k);
-
-/*============================================================
- * C Preprocessor
- */
-
-extern Token *read_token(ReadContext *ctx);
-extern Token *peek_token(ReadContext *ctx);
-extern void unget_token(ReadContext *ctx, Token *tok);
-extern bool next_token_is(ReadContext *ctx, int keyword);
-
-/*============================================================
- * Parser
- */
+extern void unget_token(ReadContext *ctx, Token *tok); // for test
 
 typedef union Cvalue {
     char c;
@@ -434,10 +450,7 @@ typedef struct Ctype {
 extern void parser_init(); // for testing
 extern List *parse(File *file, Elf *elf);
 extern int ctype_sizeof(Ctype *ctype);
-extern Token *read_token(ReadContext *ctx);
 extern ReadContext *make_read_context(File *file, Elf *elf);
-extern ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...);
-extern ATTRIBUTE((noreturn)) void error_ctx(ReadContext *ctx, char *msg, ...);
 extern char *token_to_string(Token *tok);
 
 /*============================================================
