@@ -194,6 +194,7 @@ extern void list_push(List *list, void *e);
 extern void *list_pop(List *list);
 extern void *list_unshift(List *list);
 extern List *sublist(List *orig, int off);
+extern void list_append(List *a, List *b);
 
 /*============================================================
  * Dictionary (Hash table)
@@ -223,6 +224,7 @@ extern void dict_put(Dict *dict, void *key, void *obj);
 extern void *dict_get(Dict *dict, void *key);
 extern bool dict_delete(Dict *dict, void *key);
 extern bool dict_has(Dict *dict, void *key);
+extern int dict_size(Dict *dict);
 
 typedef struct DictIter {
     Dict *dict;
@@ -336,6 +338,7 @@ typedef enum TokType {
     // The following two types are used only in CPP.
     TOKTYPE_NEWLINE,
     TOKTYPE_SPACE,
+    TOKTYPE_MACRO_PARAM,
 } TokType;
 
 typedef struct Token {
@@ -356,8 +359,10 @@ typedef struct CppContext {
 
 extern Token *read_cpp_token(CppContext *ctx);
 extern Token *copy_token(Token *tok);
+extern Token *make_token(CppContext *ctx, TokType type, TokenValue val);
 extern Token *make_str_literal(CppContext *ctx, String *val);
 extern Token *make_cppnum(CppContext *ctx, String *val);
+extern bool is_next_space(CppContext *ctx);
 
 extern CppContext *make_cpp_context(File *file);
 extern void unget_cpp_token(CppContext *ctx, Token *tok);
@@ -376,6 +381,7 @@ extern ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...)
 
 struct ReadContext;
 extern Token *read_token(struct ReadContext *ctx);
+extern void define_predefined_macros(CppContext *ctx);
 
 /*============================================================
  * Parser

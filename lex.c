@@ -49,8 +49,6 @@
 
 #include "8cc.h"
 
-static void define_predefined_macros(CppContext *ctx);
-
 /*==============================================================================
  * Functions to make CPP processing context.
  */
@@ -112,7 +110,7 @@ Token *copy_token(Token *tok) {
     return r;
 }
 
-extern Token *make_token(CppContext *ctx, TokType type, TokenValue val) {
+Token *make_token(CppContext *ctx, TokType type, TokenValue val) {
     Token *r = malloc(sizeof(Token));
     r->toktype = type;
     r->val = val;
@@ -144,56 +142,6 @@ Token *make_str_literal(CppContext *ctx, String *val) {
 static Token *make_cpp_token(CppContext *ctx, TokType type) {
     return make_token(ctx, type, (TokenValue)0);
 }
-
-/*==============================================================================
- * WG14/N1256 6.10.8 Predefined macro names.
- */
-
-static void defmacro(CppContext *ctx, char *name, Token *val) {
-    List *list = make_list();
-    list_push(list, val);
-    dict_put(ctx->defs, to_string(name), list);
-}
-
-static void defvarmacro(CppContext *ctx, char *name) {
-    dict_put(ctx->defs, to_string(name), VARIABLE_MACRO);
-}
-
-static Token *macro_date(CppContext *ctx, struct tm *now) {
-    char *month[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-    char buf[20];
-    sprintf(buf, "%s %02d %04d", month[now->tm_mon], now->tm_mday, 1900 + now->tm_year);
-    return make_str_literal(ctx, to_string(buf));
-}
-
-static Token *macro_time(CppContext *ctx, struct tm *now) {
-    char buf[10];
-    sprintf(buf, "%02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
-    return make_str_literal(ctx, to_string(buf));
-}
-
-static void define_predefined_macros(CppContext *ctx) {
-    time_t timet = time(NULL);
-    struct tm now;
-    localtime_r(&timet, &now);
-
-    defmacro(ctx, "__8CC__", make_cppnum(ctx, to_string("1")));
-    defmacro(ctx, "__STDC__", make_cppnum(ctx, to_string("1")));
-    defmacro(ctx, "__STDC_HOSTED__", make_cppnum(ctx, to_string("1")));
-    defmacro(ctx, "__STDC_VERSION__", make_cppnum(ctx, to_string("199901L")));
-    defmacro(ctx, "__DATE__", macro_date(ctx, &now));
-    defmacro(ctx, "__TIME__", macro_time(ctx, &now));
-    defvarmacro(ctx, "__FILE__");
-    defvarmacro(ctx, "__LINE__");
-}
-
-/*
- * The following macros are not defined for now.
- *  __STDC_MB_MIGHT_NEQ_WC__
- *  __STDC_IEC_559__
- *  __STDC_IEC_559_COMPLEX__
- *  __STDC_ISO_10646__
- */
 
 /*==============================================================================
  * Functions to handle comments.  Comment will be treated as if it were one

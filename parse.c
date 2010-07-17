@@ -486,9 +486,10 @@ char *token_to_string(Token *tok) {
         snprintf(buf, sizeof(buf), "%s", STRING_BODY(tok->val.str));
         string_append(r, buf);
         break;
-    case TOKTYPE_SPACE:   panic("got TOKTYPE_SPACE");
-    case TOKTYPE_NEWLINE: panic("got TOKTYPE_NEWLINE");
-    case TOKTYPE_INVALID: panic("got TOKTYPE_INVALID");
+    case TOKTYPE_SPACE:       panic("got TOKTYPE_SPACE");
+    case TOKTYPE_NEWLINE:     panic("got TOKTYPE_NEWLINE");
+    case TOKTYPE_INVALID:     panic("got TOKTYPE_INVALID");
+    case TOKTYPE_MACRO_PARAM: panic("got TOKTYPE_MACRO_PARAM");
     }
     return STRING_BODY(r);
 }

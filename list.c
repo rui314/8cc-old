@@ -83,3 +83,8 @@ List *sublist(List *orig, int off) {
     r->len = orig->len - off;
     return r;
 }
+
+void list_append(List *a, List *b) {
+    for (int i = 0; i < LIST_LEN(b); i++)
+        list_push(a, LIST_REF(b, i));
+}

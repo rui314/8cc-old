@@ -184,6 +184,10 @@ bool dict_has(Dict *dict, void *key) {
     return !BUCKET_EMPTY(ent);
 }
 
+int dict_size(Dict *dict) {
+    return dict->nelem;
+}
+
 /*============================================================
  * Iterator
  */
