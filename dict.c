@@ -72,7 +72,7 @@ static inline u32 string_hash(String *str) {
     u32 hv = 0;
     char *ptr = STRING_BODY(str);
     for (int i = 0; i < STRING_LEN(str) && ptr[i]; i++) {
-        hv = (hv << 5) - hv + (unsigned char)*ptr++;
+        hv = (hv << 5) - hv + (unsigned char)ptr[i];
     }
     return hv;
 }
@@ -89,7 +89,7 @@ static inline u32 calculate_hash(Dict *dict, void *obj) {
     case DICT_TYPE_ADDRESS:
         return address_hash(obj);
     }
-    error("[internal error] unknown dictionary type: %d", dict->type);
+    panic("unknown dictionary type: %d", dict->type);
 }
 
 /*============================================================
@@ -115,20 +115,22 @@ static void rehash(Dict *dict) {
 /*
  * Returns a pointer to a bucket to which a given key would be stored.
  */
-static Bucket *find_bucket(Dict *dict, void *key, u32 hv) {
+static Bucket *find_bucket(Dict *dict, void *key, u32 hv, bool put) {
     int start = hv % dict->nalloc;
     Bucket *ent;
     for (int i = start; i < start + dict->nalloc; i++) {
         ent = &dict->buckets[i % dict->nalloc];
-        if (BUCKET_EMPTY(ent)) return ent;
+        if (put && ent->key == DELETED) return ent;
+        if (!ent->key) return ent;
         if (ent->hashval != hv)
             continue;
-        if (dict->type == DICT_TYPE_STRING && string_equal(ent->key, key))
+        if (dict->type == DICT_TYPE_STRING && string_equal(ent->key, key)){
             return ent;
+        }
         if (dict->type == DICT_TYPE_ADDRESS && ent->key == key)
             return ent;
     }
-    error("[internal errror] no space found in dictionary");
+    panic("no space found in dictionary");
 }
 
 /*
@@ -136,8 +138,8 @@ static Bucket *find_bucket(Dict *dict, void *key, u32 hv) {
  * already associated with a value.
  */
 static bool store(Dict *dict, void *key, u32 hv, void *obj) {
-    Bucket *ent = find_bucket(dict, key, hv);
-    bool r = !!ent->key;
+    Bucket *ent = find_bucket(dict, key, hv, true);
+    bool r = !BUCKET_EMPTY(ent);
     ent->hashval = hv;
     ent->key = key;
     ent->elem = obj;
@@ -162,7 +164,7 @@ void dict_put(Dict *dict, void *key, void *obj) {
 }
 
 bool dict_delete(Dict *dict, void *key) {
-    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
+    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key), false);
     if (BUCKET_EMPTY(ent)) return false;
     ent->hashval = 0;
     ent->key = DELETED;
@@ -172,13 +174,13 @@ bool dict_delete(Dict *dict, void *key) {
 }
 
 void *dict_get(Dict *dict, void *key) {
-    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
+    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key), false);
     if (BUCKET_EMPTY(ent)) return NULL;
     return ent->elem;
 }
 
 bool dict_has(Dict *dict, void *key) {
-    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key));
+    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key), false);
     return !BUCKET_EMPTY(ent);
 }
 
