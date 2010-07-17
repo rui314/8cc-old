@@ -461,6 +461,7 @@ extern List *parse(File *file, Elf *elf);
 extern int ctype_sizeof(Ctype *ctype);
 extern ReadContext *make_read_context(File *file, Elf *elf);
 extern char *token_to_string(Token *tok);
+extern ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...);
 
 /*============================================================
  * Code generator

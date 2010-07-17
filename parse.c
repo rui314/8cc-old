@@ -69,7 +69,7 @@ static void read_stmt(ReadContext *ctx);
  * Error handlers
  */
 
-static ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...) {
+ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     print_parse_error(tok->line, tok->column, msg, ap);
@@ -478,10 +478,16 @@ char *token_to_string(Token *tok) {
         snprintf(buf, sizeof(buf), "%f", tok->val.f);
         string_append(r, buf);
         break;
+    case TOKTYPE_PUNCT:
+        snprintf(buf, sizeof(buf), "%c", tok->val.i);
+        string_append(r, buf);
+        break;
+    case TOKTYPE_CPPNUM:
+        snprintf(buf, sizeof(buf), "%s", STRING_BODY(tok->val.str));
+        string_append(r, buf);
+        break;
     case TOKTYPE_SPACE:   panic("got TOKTYPE_SPACE");
     case TOKTYPE_NEWLINE: panic("got TOKTYPE_NEWLINE");
-    case TOKTYPE_CPPNUM:  panic("got TOKTYPE_CPPNUM");
-    case TOKTYPE_PUNCT:   panic("got TOKTYPE_PUNCT");
     case TOKTYPE_INVALID: panic("got TOKTYPE_INVALID");
     }
     return STRING_BODY(r);

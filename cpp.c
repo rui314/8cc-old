@@ -32,12 +32,12 @@
  * Utility functions for token handling.
  */
 
-static bool next_ident_is(CppContext *ctx, char *str) {
+static Token *read_if(CppContext *ctx, char *str) {
     Token *tok = read_cpp_token(ctx);
     if (tok->toktype == TOKTYPE_IDENT && !strcmp(STRING_BODY(tok->val.str), str))
-        return true;
+        return tok;
     unget_cpp_token(ctx, tok);
-    return false;
+    return NULL;
 }
 
 /*==============================================================================
@@ -120,9 +120,24 @@ static void read_define(CppContext *ctx) {
     dict_put(ctx->defs, name->val.str, val);
 }
 
+// WG14/N1256 6.10.5 Error directive.
+static void read_error_dir(CppContext *ctx, Token *define) {
+    String *buf = make_string();
+    Token *tok = read_cpp_token(ctx);
+    while(tok &&  tok->toktype != TOKTYPE_NEWLINE) {
+        o1(buf, ' ');
+        string_append(buf, token_to_string(tok));
+        tok = read_cpp_token(ctx);
+    }
+    error_token(define, "error: #error:%s", STRING_BODY(buf));
+}
+
 static void read_directive(CppContext *ctx) {
-    if (next_ident_is(ctx, "define"))
+    Token *tok;
+    if (read_if(ctx, "define"))
         read_define(ctx);
+    else if ( (tok = read_if(ctx, "error")) )
+        read_error_dir(ctx, tok);
     else
         error_cpp_ctx(ctx, "'#' must be followed by 'define' for now");
 }
