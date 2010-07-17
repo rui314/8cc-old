@@ -239,19 +239,6 @@ static void test_file_backslash_at_eol(void) {
 }
 
 /*
- * Lexer
- */
-
-static void test_lex() {
-    FILE *stream = create_file("");
-    File *file = make_file(stream, "-");
-    ReadContext *ctx = make_read_context(file, NULL);
-    EQ(2, read_token(ctx)->val.i);
-    EQ(4, read_token(ctx)->val.i);
-    EQ(NULL, read_token(ctx));
-}
-
-/*
  * Parser
  */
 
@@ -285,20 +272,20 @@ static void test_read_char(void) {
 
     Token *tok = read_token(ctx);
     EQ(TOKTYPE_CHAR, tok->toktype);
-    EQ('a', tok->val.c);
-    EQ('\n', read_token(ctx)->val.c);
-    EQ('\0', read_token(ctx)->val.c);
-    EQ('\23', read_token(ctx)->val.c);
-    EQ('\233', read_token(ctx)->val.c);
-    EQ('\x3', read_token(ctx)->val.c);
-    EQ('\x3f', read_token(ctx)->val.c);
+    EQ('a', tok->val.i);
+    EQ('\n', read_token(ctx)->val.i);
+    EQ('\0', read_token(ctx)->val.i);
+    EQ('\23', read_token(ctx)->val.i);
+    EQ('\233', read_token(ctx)->val.i);
+    EQ('\x3', read_token(ctx)->val.i);
+    EQ('\x3f', read_token(ctx)->val.i);
 }
 
 #define TEST_READ_KEYWORDS(ctx_, type_)    \
     do {                                   \
         Token *tok = read_token(ctx_);     \
         EQ(TOKTYPE_KEYWORD, tok->toktype); \
-        EQ(tok->val.k, type_);             \
+        EQ(tok->val.i, type_);             \
     } while (0)
 
 static void test_read_keywords(void) {
@@ -355,8 +342,6 @@ int main(int argc, char **argv) {
     test_file_unreadc();
     test_file_next_char_is();
     test_file_backslash_at_eol();
-
-    test_lex();
 
     test_read_comment();
     test_read_float();

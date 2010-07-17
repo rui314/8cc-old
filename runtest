@@ -1,5 +1,5 @@
 #!/bin/bash
-
+export LANG=
 fail=0
 
 ./tests || fail=$((fail+1))
@@ -357,6 +357,14 @@ runtest '3' 'int i=3.0; printf("%d", i);'
 #
 /bin/echo -e '\n#define...'
 runtest '3' $'\n#define  MSG "%d"\n # define NUM  3 \nprintf(MSG, NUM);'
+# Predefined macro names
+runtest 1 'printf("%d", __8CC__);'
+runtest "$(date '+%b %d %Y')" 'printf("%s", __DATE__);'
+runtest '-' 'printf("%s", __FILE__);'
+runtest 1 'printf("%d", __LINE__);'
+runtest 1 'printf("%d", __STDC__);'
+runtest 1 'printf("%d", __STDC_HOSTED__);'
+runtest 199901 'printf("%d", __STDC_VERSION__);'
 
 rm -f .tmpTEST$$ .tmpTEST$$.o
 echo

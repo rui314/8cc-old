@@ -32,16 +32,17 @@
 #define _POSIX_SOURCE
 #define _BSD_SOURCE
 
+#include <assert.h>
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
-#include <assert.h>
 
 /*
  * Primitive data types
@@ -355,11 +356,19 @@ typedef struct CppContext {
 
 extern Token *read_cpp_token(CppContext *ctx);
 extern Token *copy_token(Token *tok);
+extern Token *make_str_literal(CppContext *ctx, String *val);
+extern Token *make_cppnum(CppContext *ctx, String *val);
 
 extern CppContext *make_cpp_context(File *file);
 extern void unget_cpp_token(CppContext *ctx, Token *tok);
 extern Token *peek_cpp_token(CppContext *ctx);
 extern ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...);
+
+/*
+ * A special value indicating that the result of macro expansion
+ * varies depending on context.  Used for __DATE__ and __TIME__.
+ */
+#define VARIABLE_MACRO ((void *)1)
 
 /*============================================================
  * C Preprocessor

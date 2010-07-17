@@ -28,7 +28,7 @@
 
 #include "8cc.h"
 
-/*============================================================
+/*==============================================================================
  * Utility functions for token handling.
  */
 
@@ -40,7 +40,7 @@ static bool next_ident_is(CppContext *ctx, char *str) {
     return false;
 }
 
-/*============================================================
+/*==============================================================================
  * Keyword recognizer.
  */
 
@@ -88,7 +88,22 @@ static Token *cppnum_to_num(Token *tok) {
     return r;
 }
 
-/*============================================================
+/*==============================================================================
+ * Predefined macros.
+ */
+
+static Token *handle_variable_macro(CppContext *cpp, Token *tok) {
+    if (!strcmp("__FILE__", STRING_BODY(tok->val.str)))
+        return make_str_literal(cpp, cpp->file->filename);
+    if (!strcmp("__LINE__", STRING_BODY(tok->val.str))) {
+        char buf[10];
+        sprintf(buf, "%d", cpp->file->line);
+        return cppnum_to_num(make_cppnum(cpp, to_string(buf)));
+    }
+    panic("Unknown variable macro: '%s'", STRING_BODY(tok->val.str));
+}
+
+/*==============================================================================
  * C preprocessor.
  */
 
@@ -133,6 +148,8 @@ Token *read_token(ReadContext *ctx) {
         cppctx->at_bol = false;
         if (tok->toktype == TOKTYPE_IDENT) {
             List *defs = dict_get(cppctx->defs, tok->val.str);
+            if (defs == VARIABLE_MACRO)
+                return handle_variable_macro(cppctx, tok);
             if (!defs)
                 return to_keyword(cppctx, tok);
             for (int i = LIST_LEN(defs) - 1; i >= 0; i--)
