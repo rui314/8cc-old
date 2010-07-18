@@ -245,7 +245,7 @@ static void test_file_backslash_at_eol(void) {
 static void test_read_comment(void) {
     FILE *stream = create_file("/* 1 * */ 2 // 3 \n 4");
     File *file = make_file(stream, "-");
-    ReadContext *ctx = make_read_context(file, NULL);
+    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
     EQ(2, read_token(ctx)->val.i);
     EQ(4, read_token(ctx)->val.i);
     EQ(NULL, read_token(ctx));
@@ -254,7 +254,7 @@ static void test_read_comment(void) {
 static void test_read_float(void) {
     FILE *stream = create_file("1 2.0");
     File *file = make_file(stream, "-");
-    ReadContext *ctx = make_read_context(file, NULL);
+    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
 
     Token *tok = read_token(ctx);
     EQ(TOKTYPE_INT, tok->toktype);
@@ -268,7 +268,7 @@ static void test_read_float(void) {
 static void test_read_char(void) {
     FILE *stream = create_file("'a' '\\n' '\\0' '\\23' '\\233' '\\x3' '\\x3f'");
     File *file = make_file(stream, "-");
-    ReadContext *ctx = make_read_context(file, NULL);
+    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
 
     Token *tok = read_token(ctx);
     EQ(TOKTYPE_CHAR, tok->toktype);
@@ -291,7 +291,7 @@ static void test_read_char(void) {
 static void test_read_keywords(void) {
     FILE *stream = create_file("int float ( ) { } ! = ^ == ++ -- ||");
     File *file = make_file(stream, "-");
-    ReadContext *ctx = make_read_context(file, NULL);
+    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
 
     TEST_READ_KEYWORDS(ctx, KEYWORD_INT);
     TEST_READ_KEYWORDS(ctx, KEYWORD_FLOAT);
@@ -311,7 +311,7 @@ static void test_read_keywords(void) {
 static void test_read_unget_token(void) {
     FILE *stream = create_file("int float (");
     File *file = make_file(stream, "-");
-    ReadContext *ctx = make_read_context(file, NULL);
+    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
 
     Token *t0 = read_token(ctx);
     Token *t1 = read_token(ctx);

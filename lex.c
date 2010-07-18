@@ -523,7 +523,8 @@ static Token *read_cpp_token_int(CppContext *ctx) {
  *   #define BAR (x) ...
  */
 bool is_next_space(CppContext *ctx) {
-    Token *tok = peek_cpp_token(ctx);
+    Token *tok = read_cpp_token_int(ctx);
+    unget_cpp_token(ctx, tok);
     return tok->toktype == TOKTYPE_SPACE;
 }
 

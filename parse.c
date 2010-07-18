@@ -192,7 +192,7 @@ Block *make_block() {
     return r;
 }
 
-ReadContext *make_read_context(File *file, Elf *elf) {
+ReadContext *make_read_context(File *file, Elf *elf, CppContext *cppctx) {
     ReadContext *r = malloc(sizeof(ReadContext));
     r->file = file;
     r->elf = elf;
@@ -205,7 +205,7 @@ ReadContext *make_read_context(File *file, Elf *elf) {
     r->oncontinue = NULL;
     r->label = make_string_dict();
     r->label_tbf = make_string_dict();
-    r->cppctx = make_cpp_context(file);
+    r->cppctx = cppctx;
     return r;
 }
 
@@ -1627,8 +1627,9 @@ static Function *read_func_declaration(ReadContext *ctx) {
 
 List *parse(File *file, Elf *elf) {
     List *r = make_list();
+    CppContext *cppctx = make_cpp_context(file);
     for (;;) {
-        ReadContext *ctx = make_read_context(file, elf);
+        ReadContext *ctx = make_read_context(file, elf, cppctx);
         if (!peek_token(ctx))
             break;
         Function *f = read_func_declaration(ctx);

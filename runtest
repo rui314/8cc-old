@@ -356,10 +356,18 @@ runtest '3' 'int i=3.0; printf("%d", i);'
 # CPP #define
 #
 /bin/echo -e '\n#define...'
-runtest '3' $'\n#define  MSG "%d"\n # define NUM  3 \nprintf(MSG, NUM);'
+runtest '3' $'\n#define MSG "%d"\n # define NUM  3 \nprintf(MSG, NUM);'
 runtest '3' $'\n#define FOO(x) x\nprintf("%d", FOO(3));'
+runtest '3' $'\n#define FOO() 3\nprintf("%d", FOO());'
+runtest '3' $'\n#define FOO(x) 3\nprintf("%d", FOO());'
+runtest '3' $'\n#define FOO(x) 3\nprintf("%d", FOO(bar));'
+runtest '5' $'\n#define FOO (x)\nint x=5; printf("%d", FOO);'
 runtest '34' $'\n#define FOO(x, y) x, y\nprintf("%d%d", FOO(3, 4));'
-# Predefined macro names
+
+#
+# Predefined macros
+#
+/bin/echo -e '\nPredefined macros...'
 runtest 1 'printf("%d", __8CC__);'
 runtest "$(date '+%b %d %Y')" 'printf("%s", __DATE__);'
 runtest '-' 'printf("%s", __FILE__);'

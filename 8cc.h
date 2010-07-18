@@ -465,7 +465,7 @@ typedef struct Ctype {
 extern void parser_init(); // for testing
 extern List *parse(File *file, Elf *elf);
 extern int ctype_sizeof(Ctype *ctype);
-extern ReadContext *make_read_context(File *file, Elf *elf);
+extern ReadContext *make_read_context(File *file, Elf *elf, CppContext *ctx);
 extern char *token_to_string(Token *tok);
 extern ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...);
 

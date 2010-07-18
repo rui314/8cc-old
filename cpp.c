@@ -270,7 +270,7 @@ static void read_function_like_define(CppContext *ctx, String *name) {
  * Reads arguments of function-like macro invocation.
  * (WG14/N1256 6.10.3 Macro replacement, sentence 10)
  */
-static List *read_args(CppContext *ctx) {
+static List *read_args(CppContext *ctx, Macro *macro) {
     List *r = make_list();
     List *arg = make_list();
     int depth = 0;
@@ -296,6 +296,29 @@ static List *read_args(CppContext *ctx) {
         }
         list_push(arg, tok);
     }
+
+    /*
+     * In CPP syntax, we cannot distinguish zero-argument macro invocation from
+     * one argument macro invocation, because macro argument can be blank.  For
+     * example, the following macro invocation
+     *
+     *   FOO()
+     *
+     * is valid for both definitions shown below.
+     *
+     *   #define FOO()  1
+     *   #define FOO(x) x
+     *
+     * In the latter case, macro parameter "x" become an empty sequence of
+     * identifiers, thus FOO() will be replaced with the empty.
+     *
+     * The argument list is set to empty here if macro takes no parameters and
+     * argument is empty.
+     */
+    if (macro->nargs != 0)
+        return r;
+    if (LIST_LEN(r) == 1 && LIST_LEN((List *)LIST_REF(r, 0)) == 0)
+        list_pop(r);
     return r;
 }
 
@@ -403,7 +426,7 @@ Token *read_token(ReadContext *ctx) {
             case MACRO_FUNC: {
                 if (!read_punct_if(cppctx, '('))
                     return cpp_token_to_token(tok);
-                List *repl = subst_args(macro, tok, read_args(cppctx));
+                List *repl = subst_args(macro, tok, read_args(cppctx, macro));
                 for (int i = LIST_LEN(repl) - 1; i >= 0; i--)
                     unget_token(ctx, LIST_REF(repl, i));
                 return read_token(ctx);
