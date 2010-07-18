@@ -195,6 +195,10 @@ extern void *list_pop(List *list);
 extern void *list_unshift(List *list);
 extern List *sublist(List *orig, int off);
 extern void list_append(List *a, List *b);
+extern bool list_in(List *list, String *e);
+extern List *list_union(List *a, List *b);
+extern List *list_union1(List *list, String *b);
+extern List *list_intersect(List *a, List *b);
 
 /*============================================================
  * Dictionary (Hash table)

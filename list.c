@@ -88,3 +88,45 @@ void list_append(List *a, List *b) {
     for (int i = 0; i < LIST_LEN(b); i++)
         list_push(a, LIST_REF(b, i));
 }
+
+static List *list_copy(List *list) {
+    List *r = make_list_int(list->nalloc);
+    for (int i = 0; i < LIST_LEN(list); i++)
+        list_push(r, LIST_REF(list, i));
+    return r;
+}
+
+bool list_in(List *list, String *e) {
+    for (int i = 0; i < LIST_LEN(list); i++)
+        if (string_equal(LIST_REF(list, i), e))
+            return true;
+    return false;
+}
+
+List *list_union(List *a, List *b) {
+    if (LIST_IS_EMPTY(a)) return b;
+    if (LIST_IS_EMPTY(b)) return a;
+    List *r = list_copy(a);
+    for (int i = 0; i < LIST_LEN(b); i++)
+        if (!list_in(r, LIST_REF(b, i)))
+            list_push(r, LIST_REF(b, i));
+    return r;
+}
+
+List *list_union1(List *list, String *e) {
+    if (list_in(list, e))
+        return list;
+    List *r = list_copy(list);
+    list_push(r, e);
+    return r;
+}
+
+List *list_intersect(List *a, List *b) {
+    if (LIST_IS_EMPTY(a)) return a;
+    if (LIST_IS_EMPTY(b)) return b;
+    List *r = make_list();
+    for (int i = 0; i < LIST_LEN(a); i++)
+        if (list_in(b, LIST_REF(a, i)))
+            list_push(r, LIST_REF(a, i));
+    return r;
+}
