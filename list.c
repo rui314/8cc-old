@@ -89,7 +89,14 @@ void list_append(List *a, List *b) {
         list_push(a, LIST_REF(b, i));
 }
 
-static List *list_copy(List *list) {
+List *list_reverse(List *list) {
+    List *r = make_list_int(list->nalloc);
+    for (int i = LIST_LEN(list) - 1; i >= 0; i--)
+        list_push(r, LIST_REF(list, i));
+    return r;
+}
+
+List *list_copy(List *list) {
     List *r = make_list_int(list->nalloc);
     for (int i = 0; i < LIST_LEN(list); i++)
         list_push(r, LIST_REF(list, i));

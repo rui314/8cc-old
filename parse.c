@@ -452,13 +452,29 @@ static bool next_token_is(ReadContext *ctx, int keyword) {
     return false;
 }
 
+static char *keyword_to_string(int v) {
+    switch (v) {
+#define KEYWORD(id, str) case id: return str;
+#define PUNCT(id, str) case id: return str;
+# include "keyword.h"
+#undef PUNCT
+#undef KEYWORD
+    default:
+        panic("should not reach here");
+    }
+}
+
 char *token_to_string(Token *tok) {
     char buf[20];
     String *r = make_string();
     switch (tok->toktype) {
     case TOKTYPE_KEYWORD:
-        o1(r, tok->val.i);
-        o1(r, '\0');
+    case TOKTYPE_PUNCT:
+        if (tok->val.i < 128)
+            snprintf(buf, sizeof(buf), "%c", tok->val.i);
+        else
+            snprintf(buf, sizeof(buf), "%s", keyword_to_string(tok->val.i));
+        string_append(r, buf);
         break;
     case TOKTYPE_CHAR:
         snprintf(buf, sizeof(buf), "'%c'", tok->val.i);
@@ -476,10 +492,6 @@ char *token_to_string(Token *tok) {
         break;
     case TOKTYPE_FLOAT:
         snprintf(buf, sizeof(buf), "%f", tok->val.f);
-        string_append(r, buf);
-        break;
-    case TOKTYPE_PUNCT:
-        snprintf(buf, sizeof(buf), "%c", tok->val.i);
         string_append(r, buf);
         break;
     case TOKTYPE_CPPNUM:

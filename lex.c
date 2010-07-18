@@ -58,6 +58,7 @@ CppContext *make_cpp_context(File *file) {
     r->at_bol = true;
     r->defs = make_string_dict();
     r->ungotten = make_list();
+    r->in_macro = false;
     define_predefined_macros(r);
     return r;
 }
@@ -107,6 +108,7 @@ Token *copy_token(Token *tok) {
     r->val = tok->val;
     r->line = tok->line;
     r->column = tok->column;
+    r->hideset = tok->hideset;
     return r;
 }
 
@@ -114,8 +116,13 @@ Token *make_token(CppContext *ctx, TokType type, TokenValue val) {
     Token *r = malloc(sizeof(Token));
     r->toktype = type;
     r->val = val;
-    r->line = ctx->file->line;
-    r->column = ctx->file->column;
+    if (ctx->file) {
+        r->line = ctx->file->line;
+        r->column = ctx->file->column;
+    } else {
+        r->line = r->column = 0;
+    }
+    r->hideset = make_list();
     return r;
 }
 
@@ -399,6 +406,8 @@ static Token *maybe_read_rep1(CppContext *ctx, int t0, int t1, int t2, int t3) {
 static Token *read_cpp_token_int(CppContext *ctx) {
     if (!LIST_IS_EMPTY(ctx->ungotten))
         return list_pop(ctx->ungotten);
+    if (ctx->in_macro)
+        return NULL;
 
     for (;;) {
         int c = readc(ctx->file);
@@ -420,7 +429,7 @@ static Token *read_cpp_token_int(CppContext *ctx) {
             return maybe_read_equal(ctx, '/', KEYWORD_A_DIV);
         case '#':
             if (next_char_is(ctx->file, '#'))
-                make_punct(ctx, KEYWORD_TWOSHARPS);
+                return make_punct(ctx, KEYWORD_TWOSHARPS);
             return make_punct(ctx, '#');
         case '.':
             if (next_chars_are(ctx->file, ".."))

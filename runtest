@@ -365,6 +365,46 @@ runtest '5' $'\n#define FOO (x)\nint x=5; printf("%d", FOO);'
 runtest '34' $'\n#define FOO(x, y) x, y\nprintf("%d%d", FOO(3, 4));'
 
 #
+# Recursively expanded macros.
+#
+/bin/echo -e '\nNested macros...'
+runtest 'ok' $'\n#define FOO() "ok"\n#define BAR FOO()\nprintf("%s", BAR);'
+runtest 'ok' $'\n#define FOO() "ok"\n#define BAR() FOO()\nprintf("%s", BAR());'
+# Examples in 6.10.3.5
+runtest 'vers2' $'\n#define str(s) # s\n#define xstr(s) str(s)\n#define INCFILE(n) vers ## n\nprintf("%s", xstr(INCFILE(2)));'
+runtest '1 3' $'int foo = 1;\n#define foo foo, 3\nprintf("%d %d\n", foo);'
+runtest 'hello:hello, world' $'\n#define glue(a, b) a ## b
+#define xglue(a, b) glue(a, b)
+#define HIGHLOW "hello"
+#define LOW LOW ", world"
+printf("%s:%s", glue(HIGH, LOW), xglue(HIGH, LOW));'
+runtest '123 45 67 89' $'\n#define t(x,y,z) x ## y ## z
+printf("%d %d %d %d", t(1,2,3), t(,4,5), t(6,,7), t(8,9,));'
+runtest '10 11 12' $'\n#define t(x,y,z) x ## y ## z
+printf("%d %d %d", t(10,,), t(,11,), t(,,12) t(,,));'
+runtest '0' $'\n#define OBJ_LIKE (1-1)\nprintf("%d", OBJ_LIKE);'
+runtest '0' $'\n#define OBJ_LIKE /* white space */ (1-1) /* other */\nprintf("%d", OBJ_LIKE);'
+runtest '7' $'\n#define FUNC_LIKE(a) ( a )\nprintf("%d", FUNC_LIKE(7));'
+runtest '7' $'\n#define FUNC_LIKE( a )( /* note the white space */ \\\na /* other stuff on this line\n*/ )\nprintf("%d", FUNC_LIKE(7));'
+
+#
+# CPP # operator
+#
+/bin/echo -e '\nPreprocessor # operator...'
+runtest 'abc' $'\n#define STR(x) #x\nprintf("%s", STR(abc));'
+runtest '1abc' $'\n#define STR(x, y) x, #y\nprintf("%d%s", STR(1, abc));'
+runtest '123' $'\n#define STR(x) #x\nprintf("%s", STR(123));'
+runtest '123 abc' $'\n#define STR(x) #x\nprintf("%s", STR(123 abc));'
+runtest "'0' '\xfe'" $'\n#define STR(x) #x\nprintf("%s", STR('"'0' '\\xfe'));"
+runtest '"a\\\"b"' $'\n#define STR(x) #x\nprintf("%s", STR("a\\\\\\\"b"));'
+
+#
+# CPP ## operator
+#
+/bin/echo -e '\nPreprocessor ## operator...'
+runtest '7' $'\n#define CONC(x, y) x ## y\nint ab=7; printf("%d", CONC(a, b));'
+
+#
 # Predefined macros
 #
 /bin/echo -e '\nPredefined macros...'

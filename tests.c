@@ -91,6 +91,14 @@ static void test_list(void) {
     list_push(list, (void *)42);
     EQ(17, (intptr)list_unshift(list));
     EQ(42, (intptr)list_unshift(list));
+
+    // list_reverse()
+    List *list1 = make_list();
+    list_push(list1, (void *)17);
+    list_push(list1, (void *)42);
+    List *rev = list_reverse(list1);
+    EQ(42, (intptr)LIST_REF(rev, 0));
+    EQ(17, (intptr)LIST_REF(rev, 1));
 }
 
 static void test_list_as_set(void) {

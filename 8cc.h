@@ -195,6 +195,8 @@ extern void *list_pop(List *list);
 extern void *list_unshift(List *list);
 extern List *sublist(List *orig, int off);
 extern void list_append(List *a, List *b);
+extern List *list_reverse(List *list);
+extern List *list_copy(List *list);
 extern bool list_in(List *list, String *e);
 extern List *list_union(List *a, List *b);
 extern List *list_union1(List *list, String *b);
@@ -317,9 +319,9 @@ extern bool next_char_is(File *file, int c);
 typedef enum KeywordType {
     KEYWORD_NON_ONE_CHAR_BEGIN = 255,
 #define KEYWORD(k, s) k,
-#define OP(k) k,
+#define PUNCT(k, s) k,
 # include "keyword.h"
-#undef OP
+#undef PUNCT
 #undef KEYWORD
 } KeywordType;
 
@@ -350,6 +352,8 @@ typedef struct Token {
     TokenValue val;
     int line;
     int column;
+    // Used in preprocessor macro expansion.
+    List *hideset;
 } Token;
 
 typedef struct CppContext {
@@ -359,6 +363,8 @@ typedef struct CppContext {
     Dict *defs;
     // Pushback buffer for preprocessing tokens.
     List *ungotten;
+    // Never read file if true
+    bool in_macro;
 } CppContext;
 
 extern Token *read_cpp_token(CppContext *ctx);

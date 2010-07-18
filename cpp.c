@@ -40,14 +40,6 @@ static Token *read_if(CppContext *ctx, char *str) {
     return NULL;
 }
 
-static bool read_punct_if(CppContext *ctx, int v) {
-    Token *tok = read_cpp_token(ctx);
-    if (tok->toktype == TOKTYPE_PUNCT && tok->val.i == v)
-        return true;
-    unget_cpp_token(ctx, tok);
-    return false;
-}
-
 static bool is_punct(Token *tok, int v) {
     return tok->toktype == TOKTYPE_PUNCT && tok->val.i == v;
 }
@@ -56,7 +48,7 @@ static bool is_punct(Token *tok, int v) {
  * Data structure representing a macro
  */
 
-typedef Token *special_macro_handler(CppContext *ctx);
+typedef Token *special_macro_handler(CppContext *ctx, Token *tok);
 
 // Object-like macro, function-like macro and special macro
 // (e.g. __FILE__ or __LINE__).
@@ -106,9 +98,9 @@ static Dict *keyword_dict(void) {
     dict = make_string_dict();
 #define KEYWORD(id_, str_) \
     dict_put(dict, to_string(str_), (void *)id_);
-#define OP(_)
+#define PUNCT(id_, str_)
 # include "keyword.h"
-#undef OP
+#undef PUNCT
 #undef KEYWORD
     return dict;
 }
@@ -139,6 +131,7 @@ static Token *cppnum_to_num(Token *tok) {
 }
 
 static Token *cpp_token_to_token(Token *tok) {
+    tok->hideset = NULL;
     if (tok->toktype == TOKTYPE_IDENT)
         return ident_to_keyword(tok);
     if (tok->toktype == TOKTYPE_CPPNUM)
@@ -179,14 +172,20 @@ static Token *macro_time(CppContext *ctx, struct tm *now) {
     return make_str_literal(ctx, to_string(buf));
 }
 
-static Token *handle_file_macro(CppContext *cpp) {
-    return make_str_literal(cpp, cpp->file->filename);
+static Token *handle_file_macro(CppContext *ctx, Token *tok) {
+    Token *r = copy_token(tok);
+    r->toktype = TOKTYPE_STRING;
+    r->val.str = ctx->file->filename;
+    return r;
 }
 
-static Token *handle_line_macro(CppContext *cpp) {
+static Token *handle_line_macro(CppContext *ctx, Token *tok) {
+    Token *r = copy_token(tok);
     char buf[10];
-    sprintf(buf, "%d", cpp->file->line);
-    return cppnum_to_num(make_cppnum(cpp, to_string(buf)));
+    sprintf(buf, "%d", ctx->file->line);
+    r->toktype = TOKTYPE_CPPNUM;
+    r->val.str = to_string(buf);
+    return r;
 }
 
 void define_predefined_macros(CppContext *ctx) {
@@ -213,7 +212,337 @@ void define_predefined_macros(CppContext *ctx) {
  */
 
 /*==============================================================================
- * C preprocessor.
+ * Macro expansion.
+ *
+ * Preprocessor macro expansion is woefully underspecified in the C standard.
+ * An insufficient implementation could not fully expand all macros in an
+ * expanded form, while too aggressive expansion could go into infinite
+ * replacement loop.
+ *
+ * In order to prevent infinite expansion, the macro expander here maintains
+ * "hide set" for each token.  If a token is placed as a result of macro X's
+ * expansion, the name "X" is added to the hide set of the token.  The token
+ * will not be expanded by further macro X expansion because of the hide set,
+ * that prevents infinite loop.
+ *
+ * There are many phases in macro expansion.  In the first phase, a macro
+ * arguments are parsed.  The macro's replacement list is read next, to see if
+ * there are any macro argument used as the operand of ## or # operator.  If so,
+ * the arguments are concatenated or stringized, respectively.  All the other
+ * arguments are fully macro-expanded, and then the macro parameters will be
+ * replaced by the expanded arguments.  The resulted sequence of tokens are read
+ * again by the macro expander, until the first token is not a macro.
+ *
+ * A implementation that process macro expansion in a different order could
+ * produce fully-expanded but wrong results of a macro.
+ *
+ * The implementation here is based on Dave Prosser's expansion algorithm, that
+ * is said the ANSI C committee used as a basis for the standard's wording,
+ * described in the following PDF.  I believe the algorithm and my implemention
+ * is correct, as it correctly expands all example macros in the C
+ * specification, while I'm not 100% sure.
+ *
+ * Blog dds: Dave Prosser's C Preprocessing Algorithm
+ * http://www.spinellis.gr/blog/20060626/
+ */
+
+static Token *expand(CppContext *ctx);
+
+CppContext *make_virt_cpp_context(CppContext *ctx, List *ts) {
+    CppContext *r = make_cpp_context(NULL);
+    r->at_bol = false;
+    r->defs = ctx->defs;
+    r->ungotten = ts;
+    r->in_macro = true;
+    return r;
+}
+
+static List *expand_all(CppContext *ctx, List *ts) {
+    List *r = make_list();
+    CppContext *virt = make_virt_cpp_context(ctx, list_reverse(ts));
+    Token *tok;
+    while ((tok = expand(virt)) != NULL)
+        list_push(r, tok);
+    return r;
+}
+
+static void pushback(CppContext *ctx, List *ts) {
+    for (int i = LIST_LEN(ts) - 1; i >= 0; i--)
+        unget_cpp_token(ctx, (Token *)LIST_REF(ts, i));
+}
+
+/*
+ * Reads arguments of function-like macro invocation.
+ * (WG14/N1256 6.10.3 Macro replacement, sentence 10)
+ */
+static List *read_args(CppContext *ctx, Macro *macro) {
+    List *r = make_list();
+    List *arg = make_list();
+    List *ts = make_list();
+    int depth = 0;
+
+    Token *tok = peek_cpp_token(ctx);
+    if (!tok || !is_punct(tok, '('))
+        return NULL;
+    read_cpp_token(ctx);
+    list_push(ts, tok);
+
+    for (tok = read_cpp_token(ctx); ; tok = read_cpp_token(ctx)) {
+        if (!tok) {
+            pushback(ctx, ts);
+            return NULL;
+        }
+        list_push(ts, tok);
+        if (tok->toktype == TOKTYPE_NEWLINE)
+            continue;
+        if (depth) {
+            if (is_punct(tok, ')'))
+                depth--;
+            list_push(arg, tok);
+            continue;
+        }
+        if (is_punct(tok, '('))
+            depth++;
+        if (is_punct(tok, ')')) {
+            unget_cpp_token(ctx, tok);
+            list_push(r, arg);
+            break;
+        }
+        if (is_punct(tok, ',')) {
+            list_push(r, arg);
+            arg = make_list();
+            continue;
+        }
+        list_push(arg, tok);
+    }
+
+    /*
+     * In CPP syntax, we cannot distinguish zero-argument macro invocation from
+     * one argument macro invocation, because macro argument can be blank.  For
+     * example, the following macro invocation
+     *
+     *   FOO()
+     *
+     * is valid for both definitions shown below.
+     *
+     *   #define FOO()  1
+     *   #define FOO(x) x
+     *
+     * In the latter case, macro parameter "x" become an empty sequence of
+     * identifiers, thus FOO() will be replaced with the empty.
+     *
+     * The argument list is set to empty here if macro takes no parameters and
+     * argument is empty.
+     */
+    if (macro->nargs != 0)
+        return r;
+    if (LIST_LEN(r) == 1 && LIST_LEN((List *)LIST_REF(r, 0)) == 0)
+        list_pop(r);
+    return r;
+}
+
+static List *hide_set_add(List *ts, List *hideset) {
+    List *r = make_list();
+    for (int i = 0; i < LIST_LEN(ts); i++) {
+        Token *t = copy_token((Token *)LIST_REF(ts, i));
+        t->hideset = list_union(t->hideset, hideset);
+        list_push(r, t);
+    }
+    return r;
+}
+
+Dict *punct_dict(void) {
+    static Dict *dict;
+    if (dict) return dict;
+    dict = make_string_dict();
+#define KEYWORD(k, s)
+#define PUNCT(k, s) dict_put(dict, to_string(s), (void *)k);
+# include "keyword.h"
+#undef PUNCT
+#undef KEYWORD
+    return dict;
+}
+
+void stringize_char(char *buf, char c, char quote) {
+    if (!isascii(c))
+        sprintf(buf, "\\x%02x", (u8)c);
+    else if (c == '\\' || c == quote)
+        sprintf(buf, "\\%c", c);
+    else
+        sprintf(buf, "%c", c);
+}
+
+void paste(String *b, Token *tok) {
+    switch (tok->toktype) {
+    case TOKTYPE_IDENT:
+    case TOKTYPE_CPPNUM:
+        string_append(b, STRING_BODY(tok->val.str));
+        return;
+    case TOKTYPE_PUNCT:
+        string_append(b, token_to_string(tok));
+        return;
+    default:
+        error_token(tok, "pasting invalid token: '%s'", token_to_string(tok));
+    }
+}
+
+Token *glue_tokens(Token *t0, Token *t1) {
+    String *b = make_string();
+    paste(b, t0);
+    paste(b, t1);
+    Token *r = copy_token(t0);
+    if (isdigit(STRING_BODY(b)[0])) {
+        r->toktype = TOKTYPE_CPPNUM;
+        r->val.str = b;
+        return r;
+    }
+    int punct = (intptr)dict_get(punct_dict(), b);
+    if (punct) {
+        r->toktype = TOKTYPE_PUNCT;
+        r->val.i = punct;
+        return r;
+    }
+    r->toktype = TOKTYPE_IDENT;
+    r->val.str = b;
+    return r;
+}
+
+void glue_push(List *ls, Token *tok) {
+    assert(!LIST_IS_EMPTY(ls));
+    Token *last = list_pop(ls);
+    list_push(ls, glue_tokens(last, tok));
+}
+
+Token *stringize(Token *tmpl, List *arg) {
+    String *s = make_string();
+    for (int i = 0; i < LIST_LEN(arg); i++) {
+        Token *tok = LIST_REF(arg, i);
+        if (STRING_LEN(s))
+            o1(s, ' ');
+        switch (tok->toktype) {
+        case TOKTYPE_IDENT:
+        case TOKTYPE_CPPNUM:
+            string_append(s, STRING_BODY(tok->val.str));
+            break;
+        case TOKTYPE_PUNCT:
+            string_append(s, token_to_string(tok));
+            break;
+        case TOKTYPE_CHAR: {
+            // TODO: retain original spelling
+            char buf[10];
+            o1(s, '\'');
+            stringize_char(buf, tok->val.i, '\'');
+            string_append(s, buf);
+            string_append(s, "\'");
+            break;
+        }
+        case TOKTYPE_STRING: {
+            o1(s, '"');
+            for (char *p = STRING_BODY(tok->val.str); *p; p++) {
+                char buf[10];
+                stringize_char(buf, *p, '\"');
+                string_append(s, buf);
+            }
+            string_append(s, "\"");
+            break;
+        }
+        default:
+            panic("invalid token type: %d", tok->toktype);
+        }
+    }
+    Token *r = copy_token(tmpl);
+    r->toktype = TOKTYPE_STRING;
+    r->val.str = s;
+    return r;
+}
+
+static List *subst(CppContext *ctx, Macro *macro, List *args, List *hideset) {
+    List *r = make_list();
+    for (int i = 0; i < LIST_LEN(macro->repl); i++) {
+        bool islast = (i == LIST_LEN(macro->repl) - 1);
+        Token *t0 = LIST_REF(macro->repl, i);
+        Token *t1 = islast ? NULL : LIST_REF(macro->repl, i + 1);
+        bool t0_param = t0->toktype == TOKTYPE_MACRO_PARAM;
+        bool t1_param = !islast && t1->toktype == TOKTYPE_MACRO_PARAM;
+
+        if (is_punct(t0, '#') && t1_param) {
+            list_push(r, stringize(t0, LIST_REF(args, t1->val.i)));
+            i++;
+            continue;
+        }
+        if (is_punct(t0, KEYWORD_TWOSHARPS) && t1_param) {
+            List *arg = LIST_REF(args, t1->val.i);
+            if (!LIST_IS_EMPTY(arg)) {
+                glue_push(r, (Token *)LIST_REF(arg, 0));
+                List *tmp = make_list();
+                for (int i = 1; i < LIST_LEN(arg); i++)
+                    list_push(tmp, LIST_REF(arg, i));
+                list_append(r, expand_all(ctx, tmp));
+            }
+            i++;
+            continue;
+        }
+        if (is_punct(t0, KEYWORD_TWOSHARPS) && !islast) {
+            hideset = t1->hideset; // wrong?
+            glue_push(r, t1);
+            i++;
+            continue;
+        }
+        if (t0_param && !islast && is_punct(t1, KEYWORD_TWOSHARPS)) {
+            hideset = t1->hideset; // wrong?
+            List *arg = LIST_REF(args, t0->val.i);
+            if (LIST_IS_EMPTY(arg))
+                i++;
+            else
+                list_append(r, arg);
+            continue;
+        }
+        if (t0_param) {
+            List *arg = LIST_REF(args, t0->val.i);
+            list_append(r, expand_all(ctx, arg));
+            continue;
+        }
+        list_push(r, t0);
+    }
+    return hide_set_add(r, hideset);
+}
+
+static Token *expand(CppContext *ctx) {
+    Token *tok = read_cpp_token(ctx);
+    if (!tok) return NULL;
+    if (tok->toktype != TOKTYPE_IDENT)
+        return tok;
+    String *s = tok->val.str;
+    if (list_in(tok->hideset, s))
+        return tok;
+    Macro *macro = dict_get(ctx->defs, s);
+    if (!macro)
+        return tok;
+
+    switch (macro->type) {
+    case MACRO_OBJ: {
+        List *ts = subst(ctx, macro, make_list(), list_union1(tok->hideset, s));
+        pushback(ctx, ts);
+        return expand(ctx);
+    }
+    case MACRO_FUNC: {
+        List *args = read_args(ctx, macro);
+        if (!args)
+            return tok;
+        Token *rparen = read_cpp_token(ctx);
+        List *hideset = list_union1(list_intersect(tok->hideset, rparen->hideset), s);
+        List *ts = subst(ctx, macro, args, hideset);
+        pushback(ctx, ts);
+        return expand(ctx);
+    }
+    case MACRO_SPECIAL:
+        return macro->fn(ctx, tok);
+    }
+    panic("should not reach here");
+}
+
+/*==============================================================================
+ * Preprocessor directives.
  */
 
 /*
@@ -267,85 +596,6 @@ static void read_function_like_define(CppContext *ctx, String *name) {
 }
 
 /*
- * Reads arguments of function-like macro invocation.
- * (WG14/N1256 6.10.3 Macro replacement, sentence 10)
- */
-static List *read_args(CppContext *ctx, Macro *macro) {
-    List *r = make_list();
-    List *arg = make_list();
-    int depth = 0;
-    for (Token *tok = read_cpp_token(ctx); ; tok = read_cpp_token(ctx)) {
-        if (!tok)
-            error_cpp_ctx(ctx, "EOF while reading arguments of macro");
-        if (tok->toktype == TOKTYPE_NEWLINE)
-            continue;
-        if (depth) {
-            if (is_punct(tok, ')'))
-                depth--;
-            list_push(arg, tok);
-            continue;
-        }
-        if (is_punct(tok, ')')) {
-            list_push(r, arg);
-            break;
-        }
-        if (is_punct(tok, ',')) {
-            list_push(r, arg);
-            arg = make_list();
-            continue;
-        }
-        list_push(arg, tok);
-    }
-
-    /*
-     * In CPP syntax, we cannot distinguish zero-argument macro invocation from
-     * one argument macro invocation, because macro argument can be blank.  For
-     * example, the following macro invocation
-     *
-     *   FOO()
-     *
-     * is valid for both definitions shown below.
-     *
-     *   #define FOO()  1
-     *   #define FOO(x) x
-     *
-     * In the latter case, macro parameter "x" become an empty sequence of
-     * identifiers, thus FOO() will be replaced with the empty.
-     *
-     * The argument list is set to empty here if macro takes no parameters and
-     * argument is empty.
-     */
-    if (macro->nargs != 0)
-        return r;
-    if (LIST_LEN(r) == 1 && LIST_LEN((List *)LIST_REF(r, 0)) == 0)
-        list_pop(r);
-    return r;
-}
-
-/*
- * Expands a function-like macro.
- * (WG14/N1256 6.10.3 Macro replacement)
- */
-static List *subst_args(Macro *macro, Token *tok, List *args) {
-    assert(macro->type == MACRO_FUNC);
-    if (macro->nargs != LIST_LEN(args))
-        error_token(tok, "Parameter number does not match argument list");
-
-    List *r = make_list();
-    for (int i = 0; i < LIST_LEN(macro->repl); i++) {
-        Token *subst = LIST_REF(macro->repl, i);
-        if (subst->toktype == TOKTYPE_MACRO_PARAM)
-            list_append(r, LIST_REF(args, subst->val.i));
-        else
-            list_push(r, subst);
-    }
-
-    for (int i = 0; i < LIST_LEN(r); i++)
-        LIST_REF(r, i) = cpp_token_to_token(LIST_REF(r, i));
-    return r;
-}
-
-/*
  * #define
  * (WG14/N1256 6.10.3 Macro replacement)
  */
@@ -395,47 +645,30 @@ static void read_directive(CppContext *ctx) {
         error_cpp_ctx(ctx, "'#' must be followed by 'define' for now");
 }
 
-Token *read_token(ReadContext *ctx) {
-    if (!LIST_IS_EMPTY(ctx->ungotten))
-        return list_pop(ctx->ungotten);
+/*==============================================================================
+ * Entry function.
+ */
 
-    CppContext *cppctx = ctx->cppctx;
+Token *read_token(ReadContext *readctx) {
+    if (!LIST_IS_EMPTY(readctx->ungotten))
+        return list_pop(readctx->ungotten);
+
+    CppContext *ctx = readctx->cppctx;
     for (;;) {
-        Token *tok = read_cpp_token(cppctx);
+        Token *tok = read_cpp_token(ctx);
         if (!tok)
             return NULL;
         if (tok->toktype == TOKTYPE_NEWLINE) {
-            cppctx->at_bol = true;
+            ctx->at_bol = true;
             continue;
         }
-        if (cppctx->at_bol && is_punct(tok, '#')) {
-            read_directive(cppctx);
-            cppctx->at_bol = true;
+        if (ctx->at_bol && is_punct(tok, '#')) {
+            read_directive(ctx);
+            ctx->at_bol = true;
             continue;
         }
-        cppctx->at_bol = false;
-        if (tok->toktype == TOKTYPE_IDENT) {
-            Macro *macro = dict_get(cppctx->defs, tok->val.str);
-            if (!macro)
-                return cpp_token_to_token(tok);
-            switch (macro->type) {
-            case MACRO_OBJ:
-                for (int i = LIST_LEN(macro->repl) - 1; i >= 0; i--)
-                    unget_cpp_token(cppctx, (Token *)LIST_REF(macro->repl, i));
-                break;
-            case MACRO_FUNC: {
-                if (!read_punct_if(cppctx, '('))
-                    return cpp_token_to_token(tok);
-                List *repl = subst_args(macro, tok, read_args(cppctx, macro));
-                for (int i = LIST_LEN(repl) - 1; i >= 0; i--)
-                    unget_token(ctx, LIST_REF(repl, i));
-                return read_token(ctx);
-            }
-            case MACRO_SPECIAL:
-                return macro->fn(cppctx);
-            }
-            continue;
-        }
-        return cpp_token_to_token(tok);
+        ctx->at_bol = false;
+        unget_cpp_token(ctx, tok);
+        return cpp_token_to_token(expand(ctx));
     }
 }
