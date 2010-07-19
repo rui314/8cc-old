@@ -218,23 +218,23 @@ void define_predefined_macros(CppContext *ctx) {
  * Macro expansion.
  *
  * Preprocessor macro expansion is woefully underspecified in the C standard.
- * An insufficient implementation could not fully expand all macros in an
- * expanded form, while too aggressive expansion could go into infinite
- * replacement loop.
+ * An insufficient implementation could not fully expand all recursive macros,
+ * while too aggressive expansion could go into infinite replacement loop.
  *
  * In order to prevent infinite expansion, the macro expander here maintains
  * "hide set" for each token.  If a token is placed as a result of macro X's
  * expansion, the name "X" is added to the hide set of the token.  The token
- * will not be expanded by further macro X expansion because of the hide set,
- * that prevents infinite loop.
+ * will not trigger execution of macro X because of the hide set, that prevents
+ * infinite loop.
  *
  * There are many phases in macro expansion.  In the first phase, a macro
- * arguments are parsed.  The macro's replacement list is read next, to see if
- * there are any macro argument used as the operand of ## or # operator.  If so,
- * the arguments are concatenated or stringized, respectively.  All the other
- * arguments are fully macro-expanded, and then the macro parameters will be
- * replaced by the expanded arguments.  The resulted sequence of tokens are read
- * again by the macro expander, until the first token is not a macro.
+ * arguments are parsed as a sequence of tokens separated by comma.  The macro's
+ * replacement list is read next, to see if there are any macro argument used as
+ * the operand of # or ## operator.  If so, the arguments are converted to
+ * string or concatenated, respectively.  All the other arguments are fully
+ * macro-expanded, and then the macro parameters will be replaced by the
+ * expanded arguments.  The resulting sequence of tokens are read again by the
+ * macro expander, until the first token is not a macro.
  *
  * A implementation that process macro expansion in a different order could
  * produce fully-expanded but wrong results of a macro.
@@ -260,6 +260,15 @@ CppContext *make_virt_cpp_context(CppContext *ctx, List *ts) {
     return r;
 }
 
+/*
+ * Expands all macros in a given token list, as if they consisted the rest of
+ * the source file.  A new preprocessing contests are created, and the tokens
+ * are pushed to the context so that subsequent read_cpp_token() will get them,
+ * as if these were the content of a file.
+ *
+ * expand() and expand_all() calls each other to get the fully expanded form of
+ * a macro.
+ */
 static List *expand_all(CppContext *ctx, List *ts) {
     List *r = make_list();
     CppContext *virt = make_virt_cpp_context(ctx, list_reverse(ts));
@@ -275,7 +284,9 @@ static void pushback(CppContext *ctx, List *ts) {
 }
 
 /*
- * Reads arguments of function-like macro invocation.
+ * Reads arguments of function-like macro invocation.  Comma characters in
+ * matching parentheses are not considered as separator.
+ *
  * (WG14/N1256 6.10.3 Macro replacement, sentence 10)
  */
 static List *read_args(CppContext *ctx, Macro *macro) {
@@ -393,6 +404,9 @@ void paste(String *b, Token *tok) {
     }
 }
 
+/*
+ * Joins given two tokens and returns it.  Used by "##" operator.
+ */
 Token *glue_tokens(Token *t0, Token *t1) {
     String *b = make_string();
     paste(b, t0);
@@ -420,6 +434,10 @@ void glue_push(List *ls, Token *tok) {
     list_push(ls, glue_tokens(last, tok));
 }
 
+/*
+ * Make a string token representation of given tokens to a buffer.  Used by "#"
+ * operator.
+ */
 Token *stringize(Token *tmpl, List *arg) {
     String *s = make_string();
     for (int i = 0; i < LIST_LEN(arg); i++) {
@@ -463,6 +481,9 @@ Token *stringize(Token *tmpl, List *arg) {
     return r;
 }
 
+/*
+ * Substitutes parameters in macro replacement list with actual arguments.
+ */
 static List *subst(CppContext *ctx, Macro *macro, List *args, List *hideset) {
     List *r = make_list();
     for (int i = 0; i < LIST_LEN(macro->repl); i++) {
@@ -514,6 +535,10 @@ static List *subst(CppContext *ctx, Macro *macro, List *args, List *hideset) {
     return hide_set_add(r, hideset);
 }
 
+/*
+ * Reads a token from a given preprocessing context, expands it if macro, and
+ * returns it.
+ */
 static Token *expand(CppContext *ctx) {
     Token *tok = read_cpp_token(ctx);
     if (!tok) return NULL;
@@ -630,7 +655,7 @@ static void read_define(CppContext *ctx) {
 }
 
 /*
- * #define
+ * #undef
  * (WG14/N1256 6.10.5 Scope of macro definisions, paragraph 2)
  */
 static void read_undef(CppContext *ctx) {
@@ -671,7 +696,27 @@ static void read_directive(CppContext *ctx) {
 }
 
 /*==============================================================================
- * Entry function.
+ * Entry function for the main C compiler.
+ *
+ * read_token() reads preprocessing tokens by calling read_cpp_token(), which is
+ * defined in lex.c.  There are six types of tokens can be returned from
+ * read_cpp_token().
+ *
+ *     identifier
+ *     pp-number
+ *     character-constant
+ *     string-literal
+ *     punctuator
+ *     newline
+ *
+ * read_token() evaluates preprocessing directives (such as "#define") appearing
+ * in the sequence of preprocessing tokens, as well as expanding macros.  The
+ * resulting tokens are then converted to ordinary tokens before returning to
+ * the main compiler.
+ *
+ * Preprocessing numbers will be converted to integer or float numbers.
+ * Punctuators to keywords.  Identifiers to keywords (if reserved words) or
+ * retained.  Newline tokens removed.
  */
 
 Token *read_token(ReadContext *readctx) {
