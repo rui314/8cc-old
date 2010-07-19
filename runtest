@@ -411,6 +411,14 @@ runtest '"a\\\"b"' $'\n#define STR(x) #x\nprintf("%s", STR("a\\\\\\\"b"));'
 runtest '7' $'\n#define CONC(x, y) x ## y\nint ab=7; printf("%d", CONC(a, b));'
 
 #
+# #undef
+#
+/bin/echo -e '\n#undef'
+runtest '3' $'int X=3;\n#define X 17\n#undef X\nprintf("%d", X);'
+# It is not an error if undef's argument is not defined
+runtest '3' $'int X=3;\n#undef X\nprintf("%d", X);'
+
+#
 # Predefined macros
 #
 /bin/echo -e '\nPredefined macros...'

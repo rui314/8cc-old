@@ -630,6 +630,20 @@ static void read_define(CppContext *ctx) {
 }
 
 /*
+ * #define
+ * (WG14/N1256 6.10.5 Scope of macro definisions, paragraph 2)
+ */
+static void read_undef(CppContext *ctx) {
+    Token *name = read_cpp_token(ctx);
+    if (!name || name->toktype != TOKTYPE_IDENT)
+        error_token(name, "undef works only to an identifier, but got '%s'", token_to_string(name));
+    Token *next = read_cpp_token(ctx);
+    if (!next || next->toktype != TOKTYPE_NEWLINE)
+        error_token(next, "newline expected, but got '%s'", token_to_string(next));
+    dict_delete(ctx->defs, name->val.str);
+}
+
+/*
  * #error
  * (WG14/N1256 6.10.5 Error directive)
  */
@@ -648,6 +662,8 @@ static void read_directive(CppContext *ctx) {
     Token *tok;
     if (read_if(ctx, "define"))
         read_define(ctx);
+    else if (read_if(ctx, "undef"))
+        read_undef(ctx);
     else if ( (tok = read_if(ctx, "error")) )
         read_error_dir(ctx, tok);
     else
