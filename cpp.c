@@ -61,6 +61,7 @@ typedef struct Macro {
     // For object-like and function-like
     int nargs;
     List *repl;
+    bool is_varg;
     // For special macros
     special_macro_handler *fn;
 } Macro;
@@ -69,14 +70,16 @@ static Macro *make_obj_macro(List *repl) {
     Macro *r = malloc(sizeof(Macro));
     r->type = MACRO_OBJ;
     r->repl = repl;
+    r->is_varg = false;
     return r;
 }
 
-static Macro *make_func_macro(int nargs, List *repl) {
+static Macro *make_func_macro(List *repl, int nargs, bool is_varg) {
     Macro *r = malloc(sizeof(Macro));
     r->type = MACRO_FUNC;
     r->nargs = nargs;
     r->repl = repl;
+    r->is_varg = is_varg;
     return r;
 }
 
@@ -308,7 +311,8 @@ static List *read_args(CppContext *ctx, Macro *macro) {
             list_push(r, arg);
             break;
         }
-        if (is_punct(tok, ',')) {
+        bool in_threedots = macro->is_varg && LIST_LEN(r) + 1 == macro->nargs;
+        if (is_punct(tok, ',') && !in_threedots) {
             list_push(r, arg);
             arg = make_list();
             continue;
@@ -334,10 +338,13 @@ static List *read_args(CppContext *ctx, Macro *macro) {
      * The argument list is set to empty here if macro takes no parameters and
      * argument is empty.
      */
-    if (macro->nargs != 0)
-        return r;
-    if (LIST_LEN(r) == 1 && LIST_LEN((List *)LIST_REF(r, 0)) == 0)
+    if (macro->nargs == 0 && LIST_LEN(r) == 1 && LIST_LEN((List *)LIST_REF(r, 0)) == 0)
         list_pop(r);
+
+    if ((macro->is_varg && LIST_LEN(r) < macro->nargs)
+        || (!macro->is_varg && LIST_LEN(r) != macro->nargs))
+        error_token(tok, "Macro argument number does not match");
+
     return r;
 }
 
@@ -551,6 +558,7 @@ static Token *expand(CppContext *ctx) {
 static void read_function_like_define(CppContext *ctx, String *name) {
     Dict *param = make_string_dict();
     List *repl = make_list();
+    bool is_varg = false;
 
     // Read macro pameters
     for (Token *tok = read_cpp_token(ctx);
@@ -567,10 +575,11 @@ static void read_function_like_define(CppContext *ctx, String *name) {
             error_token(tok, "missing ')' in macro parameter list");
         if (is_punct(tok, KEYWORD_THREEDOTS)) {
             Token *subst = make_token(ctx, TOKTYPE_MACRO_PARAM, (TokenValue)dict_size(param));
-            dict_put(param, tok->val.str, subst);
+            dict_put(param, to_string("__VA_ARGS__"), subst);
             Token *tok1 = read_cpp_token(ctx);
             if (!is_punct(tok1, ')'))
                 error_token(tok1, "')' expected, but got '%s'", token_to_string(tok1));
+            is_varg = true;
             break;
         }
         if (tok->toktype != TOKTYPE_IDENT)
@@ -592,7 +601,7 @@ static void read_function_like_define(CppContext *ctx, String *name) {
         }
         list_push(repl, tok);
     }
-    dict_put(ctx->defs, name, make_func_macro(dict_size(param), repl));
+    dict_put(ctx->defs, name, make_func_macro(repl, dict_size(param), is_varg));
 }
 
 /*

@@ -388,6 +388,12 @@ runtest '7' $'\n#define FUNC_LIKE(a) ( a )\nprintf("%d", FUNC_LIKE(7));'
 runtest '7' $'\n#define FUNC_LIKE( a )( /* note the white space */ \\\na /* other stuff on this line\n*/ )\nprintf("%d", FUNC_LIKE(7));'
 
 #
+# CPP variable argument list
+#
+/bin/echo -e '\n__VA_ARGS__'
+runtest 'foo' $'\n#define p(...) printf(__VA_ARGS__)\np("%s", "foo");'
+
+#
 # CPP # operator
 #
 /bin/echo -e '\nPreprocessor # operator...'

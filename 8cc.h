@@ -138,7 +138,7 @@ extern void warn(char *format, ...);
 extern void vwarn(char *format, va_list ap);
 extern ATTRIBUTE((noreturn)) void print_parse_error(int line, int column, char *msg, va_list ap);
 
-#define panic(fmt, ...) error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
+#define panic(fmt, ...) error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
 
 /*============================================================
  * Byte String
