@@ -394,7 +394,7 @@ runtest '7' $'\n#define FUNC_LIKE( a )( /* note the white space */ \\\na /* othe
 runtest 'foo' $'\n#define p(...) printf(__VA_ARGS__)\np("%s", "foo");'
 
 #
-# CPP # operator
+# # operator
 #
 /bin/echo -e '\nPreprocessor # operator...'
 runtest 'abc' $'\n#define STR(x) #x\nprintf("%s", STR(abc));'
@@ -405,7 +405,7 @@ runtest "'0' '\xfe'" $'\n#define STR(x) #x\nprintf("%s", STR('"'0' '\\xfe'));"
 runtest '"a\\\"b"' $'\n#define STR(x) #x\nprintf("%s", STR("a\\\\\\\"b"));'
 
 #
-# CPP ## operator
+# ## operator
 #
 /bin/echo -e '\nPreprocessor ## operator...'
 runtest '7' $'\n#define CONC(x, y) x ## y\nint ab=7; printf("%d", CONC(a, b));'
@@ -417,6 +417,17 @@ runtest '7' $'\n#define CONC(x, y) x ## y\nint ab=7; printf("%d", CONC(a, b));'
 runtest '3' $'int X=3;\n#define X 17\n#undef X\nprintf("%d", X);'
 # It is not an error if undef's argument is not defined
 runtest '3' $'int X=3;\n#undef X\nprintf("%d", X);'
+
+#
+# #if, #elif, #else and #endif
+#
+/bin/echo -e '\n#if'
+runtest 'a' $'\n#define X\nprintf(\n#if defined(X)\n"a"\n);'
+runtest 'a' $'\n#define X\nprintf(\n#if defined(X)\n"a"\n#else\n"b"\n#endif\n);'
+runtest 'b' $'printf(\n#if defined(X)\n"a"\n#endif\n"b");'
+runtest 'b' $'printf(\n#if defined(X)\n"a"\n#else\n"b"\n#endif\n);'
+runtest 'b' $'printf(\n#if defined(X)\n# if foo\n# else\n# endif\n# if bar\n# endif\n"a"\n#else\n"b"\n#endif\n);'
+runtest 'b' $'printf(\n#if defined(X)\n# ifdef\n# endif\n# ifndef\n# endif\n"a"\n#else\n"b"\n#endif\n);'
 
 #
 # Predefined macros

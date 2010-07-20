@@ -59,6 +59,7 @@ CppContext *make_cpp_context(File *file) {
     r->defs = make_string_dict();
     r->ungotten = make_list();
     r->in_macro = false;
+    r->incl = make_list();
     define_predefined_macros(r);
     return r;
 }
@@ -509,6 +510,76 @@ static Token *read_cpp_token_int(CppContext *ctx) {
             error_cpp_ctx(ctx, "unimplemented '%c'", c);
         }
     }
+}
+
+/*==============================================================================
+ * Preprocessor conditional inclusion.
+ *
+ * If a condition of #if, #ifdef, #ifndef or #elif is false, we don't actually
+ * need to parse the subsequent tokens until #elif or #endif appears.
+ * skip_cond_incl() skips parsing functions and directly reads characters from
+ * file.  As the function toches the file rather than parsed tokens, this is
+ * defeined in this file rather than in cpp.c.
+ */
+
+static void skip_char(CppContext *ctx) { read_char(ctx); }
+static void skip_string(CppContext *ctx) { read_str(ctx); }
+
+void skip_line(CppContext *ctx) {
+    for (;;) {
+        int c = readc(ctx->file);
+        if (c == '\n')
+            return;
+        if (c == EOF)
+            error_cpp_ctx(ctx, "unterminated conditional inclusion");
+        if (c == '\'')
+            skip_char(ctx);
+        else if (c == '"')
+            skip_string(ctx);
+    }
+}
+
+CondInclType skip_cond_incl(CppContext *ctx) {
+    assert(LIST_IS_EMPTY(ctx->ungotten));
+    CondInclType r;
+    int nest = 0;
+    for (;;) {
+        skip_whitespace(ctx);
+        if (!next_char_is(ctx->file, '#')) {
+            skip_line(ctx);
+            continue;
+        }
+        Token *tok = read_cpp_token(ctx);
+        if (tok->toktype == TOKTYPE_NEWLINE)
+            continue;
+        if (tok->toktype != TOKTYPE_IDENT) {
+            skip_line(ctx);
+            continue;
+        }
+        if (!strcmp(STRING_BODY(tok->val.str), "if")
+            || !strcmp(STRING_BODY(tok->val.str), "ifdef")
+            || !strcmp(STRING_BODY(tok->val.str), "ifndef")) {
+            nest++;
+        } else if (!nest && !strcmp(STRING_BODY(tok->val.str), "else")) {
+            r = COND_ELSE;
+            break;
+        } else if (!nest && !strcmp(STRING_BODY(tok->val.str), "elif")) {
+            r = COND_ELIF;
+            break;
+        } else if (!strcmp(STRING_BODY(tok->val.str), "endif")) {
+            if (nest) {
+                nest--;
+            } else {
+                r = COND_ENDIF;
+                break;
+            }
+        }
+        skip_line(ctx);
+    }
+    Token *tok = read_cpp_token(ctx);
+    if (tok && tok->toktype != TOKTYPE_NEWLINE)
+        error_token(tok, "newline expected, but got '%s'", token_to_string(tok));
+    return r;
 }
 
 /*==============================================================================

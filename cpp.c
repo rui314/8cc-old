@@ -44,6 +44,13 @@ static bool is_punct(Token *tok, int v) {
     return tok->toktype == TOKTYPE_PUNCT && tok->val.i == v;
 }
 
+static void expect_newline(CppContext *ctx) {
+    Token *tok = read_cpp_token(ctx);
+    if (!tok || tok->toktype != TOKTYPE_NEWLINE)
+        error_token(tok, "newline expected, but got '%s'", token_to_string(tok));
+
+}
+
 /*==============================================================================
  * Data structure representing a macro
  */
@@ -577,6 +584,93 @@ static Token *expand(CppContext *ctx) {
  * Preprocessor directives.
  */
 
+static int is_defined(CppContext *ctx, Token *tok) {
+    if (!tok || tok->toktype != TOKTYPE_IDENT)
+        error_token(tok, "identifier expected, but got '%s'", token_to_string(tok));
+    return dict_has(ctx->defs, tok->val.str) ? 1 : 0;
+}
+
+/*
+ * Reads defined unary operator of the form "defined <identifier>" or
+ * "defined(<identifier>)".  The token "defined" is already read when the
+ * function is called.
+ *
+ * (WG14/N1256 6.10.1 Conditional inclusion, paragraph 1)
+ */
+static int read_defined(CppContext *ctx) {
+    Token *tok = read_cpp_token(ctx);
+    if (is_punct(tok, '(')) {
+        tok = read_cpp_token(ctx);
+        Token *tok1 = read_cpp_token(ctx);
+        if (!tok1 || !is_punct(tok1, ')'))
+            error_token(tok1, "')' expected, but got '%s'", token_to_string(tok1));
+    }
+    return is_defined(ctx, tok);
+}
+
+/*
+ * Handles #if, #elif, #ifdef and #ifndef.
+ * (WG14/N1256 6.10.1 Conditional inclusion)
+ */
+static int read_constant_expr(CppContext *ctx) {
+    if (read_if(ctx, "defined"))
+        return read_defined(ctx);
+    panic("only defined() is implemented");
+}
+
+static int read_ifdef(CppContext *ctx) {
+    int r = is_defined(ctx, read_cpp_token(ctx));
+    expect_newline(ctx);
+    return r;
+}
+
+static void handle_cond_incl(CppContext *ctx, CondInclType type) {
+    bool cond;
+    switch (type) {
+    case COND_IF:
+        cond = read_constant_expr(ctx);
+        break;
+    case COND_IFDEF:
+        cond = read_ifdef(ctx);
+        break;
+    case COND_IFNDEF:
+        cond = !read_ifdef(ctx);
+        break;
+    case COND_ELIF:
+        error_cpp_ctx(ctx, "stray #elif");
+    case COND_ELSE:
+        expect_newline(ctx);
+        if (LIST_IS_EMPTY(ctx->incl))
+            error_cpp_ctx(ctx, "stray #else");
+        bool in_else = (bool)(intptr)list_pop(ctx->incl);
+        if (in_else)
+            error_cpp_ctx(ctx, "#else appears twice");
+        CondInclType type1 = skip_cond_incl(ctx);
+        if (type1 == COND_ELIF)
+            error_cpp_ctx(ctx, "stray #elif");
+        if (type1 == COND_ELSE)
+            error_cpp_ctx(ctx, "stray #else");
+        return;
+    case COND_ENDIF:
+        expect_newline(ctx);
+        if (LIST_IS_EMPTY(ctx->incl))
+            error_cpp_ctx(ctx, "stray #endif");
+        list_pop(ctx->incl);
+        return;
+    }
+    if (cond) {
+        list_push(ctx->incl, (void *)false);
+        return;
+    }
+    // skip_cond_incl() returns one of COND_ELIF, COND_ELSE or COND_ENDIF.
+    CondInclType type1 = skip_cond_incl(ctx);
+    if (type1 == COND_ELIF)
+        handle_cond_incl(ctx, COND_IF);
+    else if (type1 == COND_ELSE) {
+        list_push(ctx->incl, (void *)true);
+    }
+}
+
 /*
  * Reads function-like macro definition.
  */
@@ -662,9 +756,7 @@ static void read_undef(CppContext *ctx) {
     Token *name = read_cpp_token(ctx);
     if (!name || name->toktype != TOKTYPE_IDENT)
         error_token(name, "undef works only to an identifier, but got '%s'", token_to_string(name));
-    Token *next = read_cpp_token(ctx);
-    if (!next || next->toktype != TOKTYPE_NEWLINE)
-        error_token(next, "newline expected, but got '%s'", token_to_string(next));
+    expect_newline(ctx);
     dict_delete(ctx->defs, name->val.str);
 }
 
@@ -685,14 +777,20 @@ static void read_error_dir(CppContext *ctx, Token *define) {
 
 static void read_directive(CppContext *ctx) {
     Token *tok;
-    if (read_if(ctx, "define"))
-        read_define(ctx);
-    else if (read_if(ctx, "undef"))
-        read_undef(ctx);
-    else if ( (tok = read_if(ctx, "error")) )
+    if (read_if(ctx, "define"))      read_define(ctx);
+    else if (read_if(ctx, "undef"))  read_undef(ctx);
+    else if (read_if(ctx, "if"))     handle_cond_incl(ctx, COND_IF);
+    else if (read_if(ctx, "elif"))   handle_cond_incl(ctx, COND_ELIF);
+    else if (read_if(ctx, "else"))   handle_cond_incl(ctx, COND_ELSE);
+    else if (read_if(ctx, "ifdef"))  handle_cond_incl(ctx, COND_IFDEF);
+    else if (read_if(ctx, "ifndef")) handle_cond_incl(ctx, COND_IFNDEF);
+    else if (read_if(ctx, "endif"))  handle_cond_incl(ctx, COND_ENDIF);
+    else if ( (tok = read_if(ctx, "error")) ) {
         read_error_dir(ctx, tok);
-    else
-        error_cpp_ctx(ctx, "'#' must be followed by 'define' for now");
+    } else {
+        Token *tok = read_cpp_token(ctx);
+        error_token(tok, "unsupported preprocessor directive: '%s'", token_to_string(tok));
+    }
 }
 
 /*==============================================================================

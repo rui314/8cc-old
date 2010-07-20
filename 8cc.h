@@ -356,6 +356,10 @@ typedef struct Token {
     List *hideset;
 } Token;
 
+typedef enum {
+    COND_IF, COND_ELIF, COND_ELSE, COND_IFDEF, COND_IFNDEF, COND_ENDIF,
+} CondInclType;
+
 typedef struct CppContext {
     File *file;
     bool at_bol;
@@ -365,6 +369,8 @@ typedef struct CppContext {
     List *ungotten;
     // Never read file if true
     bool in_macro;
+    // Used by conditional inclusion, such as #if.
+    List *incl;
 } CppContext;
 
 extern Token *read_cpp_token(CppContext *ctx);
@@ -373,6 +379,7 @@ extern Token *make_token(CppContext *ctx, TokType type, TokenValue val);
 extern Token *make_str_literal(CppContext *ctx, String *val);
 extern Token *make_cppnum(CppContext *ctx, String *val);
 extern bool is_next_space(CppContext *ctx);
+extern CondInclType skip_cond_incl(CppContext *ctx);
 
 extern CppContext *make_cpp_context(File *file);
 extern void unget_cpp_token(CppContext *ctx, Token *tok);
