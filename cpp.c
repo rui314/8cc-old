@@ -44,7 +44,7 @@ static bool is_punct(Token *tok, int v) {
     return tok->toktype == TOKTYPE_PUNCT && tok->val.i == v;
 }
 
-static void expect_newline(CppContext *ctx) {
+void expect_newline(CppContext *ctx) {
     Token *tok = read_cpp_token(ctx);
     if (!tok || tok->toktype != TOKTYPE_NEWLINE)
         error_token(tok, "newline expected, but got '%s'", token_to_string(tok));
@@ -666,9 +666,8 @@ static void handle_cond_incl(CppContext *ctx, CondInclType type) {
     CondInclType type1 = skip_cond_incl(ctx);
     if (type1 == COND_ELIF)
         handle_cond_incl(ctx, COND_IF);
-    else if (type1 == COND_ELSE) {
+    else if (type1 == COND_ELSE)
         list_push(ctx->incl, (void *)true);
-    }
 }
 
 static bool read_funclike_define_args(CppContext *ctx, Dict *param) {

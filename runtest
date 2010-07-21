@@ -403,16 +403,34 @@ runtest 'abc' $'\n#define STR(x) #x\nprintf("%s", STR(abc));'
 runtest '1abc' $'\n#define STR(x, y) x, #y\nprintf("%d%s", STR(1, abc));'
 runtest '123' $'\n#define STR(x) #x\nprintf("%s", STR(123));'
 runtest '123 abc' $'\n#define STR(x) #x\nprintf("%s", STR(123 abc));'
-runtest "'0' '\xfe'" $'\n#define STR(x) #x\nprintf("%s", STR('"'0' '\\xfe'));"
+runtest "'0' '\xfe'" $'\n#define STR(x) #x\nprintf("%s", STR('"'0' '\xfe'));"
 runtest '"a\\\"b"' $'\n#define STR(x) #x\nprintf("%s", STR("a\\\\\\\"b"));'
 runtest '()' $'\n#define C(x) #x\nprintf(C(()));'
-runtest '4.0' $'\n#define CAT(x, y) x ## y\nprintf("%.1f\n", CAT(4, .4));'
+runtest '4.4' $'\n#define CAT(x, y) x ## y\nprintf("%.1f\n", CAT(4, .4));'
 
 #
 # ## operator
 #
 /bin/echo -e '\nPreprocessor ## operator...'
 runtest '7' $'\n#define CONC(x, y) x ## y\nint ab=7; printf("%d", CONC(a, b));'
+
+#
+# Tricky function-like macros
+#
+/bin/echo -e '\nTricky macros...'
+runtest 'a1' '
+#define PRINTF(x, ...) printf(x, __VA_ARGS__)
+#define FN PRINTF(
+#define RPAREN )
+#define ARGS "a%d\n", 1
+#define FOO(x,y,z) x y z
+FOO(FN, ARGS, RPAREN);'
+runtest 'x ## y' '
+#define hash_hash # ## #
+#define mkstr(a) # a
+#define in_between(a) mkstr(a)
+#define join(c, d) in_between(c hash_hash d)
+printf("%s", join(x, y));'
 
 #
 # #undef
@@ -429,9 +447,12 @@ runtest '3' $'int X=3;\n#undef X\nprintf("%d", X);'
 runtest 'a' $'\n#define X\nprintf(\n#if defined(X)\n"a"\n);'
 runtest 'a' $'\n#define X\nprintf(\n#if defined(X)\n"a"\n#else\n"b"\n#endif\n);'
 runtest 'b' $'printf(\n#if defined(X)\n"a"\n#endif\n"b");'
-runtest 'b' $'printf(\n#if defined(X)\n"a"\n#else\n"b"\n#endif\n);'
+runtest 'b' $'printf(\n#if defined(X)\n'"'a'"$'\n#else\n"b"\n#endif\n);'
 runtest 'b' $'printf(\n#if defined(X)\n# if foo\n# else\n# endif\n# if bar\n# endif\n"a"\n#else\n"b"\n#endif\n);'
 runtest 'b' $'printf(\n#if defined(X)\n# ifdef\n# endif\n# ifndef\n# endif\n"a"\n#else\n"b"\n#endif\n);'
+runtest 'b' $'printf(\n#ifdef X\n      # ifdef\n# endif\n# ifndef\n# endif\n"a"\n#else\n"b"\n#endif\n);'
+runtest 'a' $'printf(\n#ifndef X\n"a"\n#else\n"b"\n#endif\n);'
+runtest 'c' $'printf(\n#if defined(X)\n"a"\n#elif defined(Y)\n"b"\n#else\n"c"\n#endif\n);'
 
 #
 # Predefined macros
@@ -444,6 +465,12 @@ runtest 1 'printf("%d", __LINE__);'
 runtest 1 'printf("%d", __STDC__);'
 runtest 1 'printf("%d", __STDC_HOSTED__);'
 runtest 199901 'printf("%d", __STDC_VERSION__);'
+
+#
+# Bigraphs
+#
+/bin/echo -e '\nBigraphs'
+runtest '[ ] { } ##' $'\n#define FOO(x) %:x\nprintf("%s\n", FOO(<: :> <% %> %:%:));'
 
 rm -f .tmpTEST$$ .tmpTEST$$.o
 echo

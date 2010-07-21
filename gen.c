@@ -201,19 +201,6 @@ static void add_reloc(Section *text, long off, char *sym, char *section, int typ
 }
 
 
-int type_bits(Ctype *ctype) {
-    switch (ctype->type) {
-    case CTYPE_FLOAT: return 64;
-    case CTYPE_PTR:   return 64;
-    case CTYPE_ARRAY: return 64;
-    case CTYPE_LONG:  return 64;
-    case CTYPE_INT:   return 32;
-    case CTYPE_SHORT: return 16;
-    case CTYPE_CHAR:  return  8;
-    default: panic("unknown type: %d", ctype->type);
-    }
-}
-
 // MOV rdi/rsi/rdx/rcx/r8/r9, rax
 static u32 push_arg[] = { 0xc78948, 0xc68948, 0xc28948, 0xc18948, 0xc08949, 0xc18949 };
 

@@ -380,6 +380,7 @@ typedef struct CppContext {
 } CppContext;
 
 extern Token *read_cpp_token(CppContext *ctx);
+extern void expect_newline(CppContext *ctx);
 extern Token *copy_token(Token *tok);
 extern Token *make_token(CppContext *ctx, TokType type, TokenValue val);
 extern Token *make_str_literal(CppContext *ctx, String *val);

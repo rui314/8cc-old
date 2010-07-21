@@ -52,6 +52,7 @@
 /*==============================================================================
  * Functions to make CPP processing context.
  */
+
 CppContext *make_cpp_context(File *file) {
     CppContext *r = malloc(sizeof(CppContext));
     r->file = file;
@@ -89,6 +90,21 @@ Token *peek_cpp_token(CppContext *ctx) {
     return tok;
 }
 
+static bool next_two_chars(CppContext *ctx, char c0, char c1) {
+    int v0 = readc(ctx->file);
+    if (c0 != v0) {
+        unreadc(v0, ctx->file);
+        return false;
+    }
+    int v1 = readc(ctx->file);
+    if (c1 != v1) {
+        unreadc(v1, ctx->file);
+        unreadc(v0, ctx->file);
+        return false;
+    }
+    return true;
+}
+
 /*==============================================================================
  * Functions to make tokens.
  */
@@ -100,6 +116,7 @@ Token *copy_token(Token *tok) {
     r->line = tok->line;
     r->column = tok->column;
     r->hideset = tok->hideset;
+    r->space = tok->space;
     return r;
 }
 
@@ -286,11 +303,10 @@ static char read_escape_char(File *file) {
             error("line %d:%d: hexdigit expected, but got '%c'", file->line, file->column, c);
         r = hextodec(c);
         c = readc(file);
-        if (isxdigit(c)) {
+        if (isxdigit(c))
             r = r * 16 + hextodec(c);
-        } else {
+        else
             unreadc(c, file);
-        }
         return r;
     default: return (char)c;
     }
@@ -335,12 +351,13 @@ static String *read_str(CppContext *ctx) {
  */
 static char read_char(CppContext *ctx) {
     int c = readc(ctx->file);
-    switch (c) {
-    case EOF:
+    if (c == EOF)
         error_cpp_ctx(ctx, "premature end of input file while reading a literal character");
-    case '\\': return read_escape_char(ctx->file);
-    default: return (char)c;
-    }
+    char r = (c != '\\') ? c : read_escape_char(ctx->file);
+    c = readc(ctx->file);
+    if (c != '\'')
+        error_cpp_ctx(ctx, "'\'' (single quote) expected, but got '%c'", c);
+    return r;
 }
 
 static String *read_ident(File *file, char c0) {
@@ -424,13 +441,8 @@ static Token *read_cpp_token_int(CppContext *ctx) {
                 return make_punct(ctx, KEYWORD_TWOSHARPS);
             return make_punct(ctx, '#');
         case '.': {
-            int c1 = readc(ctx->file);
-            if (c1 == '.') {
-                int c2 = readc(ctx->file);
-                if (c2 != '.')
-                    error_cpp_ctx(ctx, "'...' expected, but got '..%c'", c2);
+            if (next_two_chars(ctx, '.', '.'))
                 return make_punct(ctx, KEYWORD_THREEDOTS);
-            }
             if (isdigit(peekc(ctx->file)))
                 return read_cppnum(ctx, c);
             return make_punct(ctx, '.');
@@ -440,12 +452,8 @@ static Token *read_cpp_token_int(CppContext *ctx) {
             return read_cppnum(ctx, c);
         case '"':
             return make_str_literal(ctx, read_str(ctx));
-        case '\'': {
-            Token *r = make_char_const(ctx, read_char(ctx));
-            if (!next_char_is(ctx->file, '\''))
-                error_cpp_ctx(ctx, "single quote expected, but got %c", readc(ctx->file));
-            return r;
-        }
+        case '\'':
+            return make_char_const(ctx, read_char(ctx));
 
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
         case 'h': case 'i': case 'j': case 'k': case 'l': case 'm': case 'n':
@@ -490,12 +498,10 @@ static Token *read_cpp_token_int(CppContext *ctx) {
             return make_punct(ctx, ':');
         case '%':
             if (next_char_is(ctx->file, '>'))
-                return make_punct(ctx, ']');
+                return make_punct(ctx, '}');
             if (next_char_is(ctx->file, ':')) {
-                Token *next = read_cpp_token_int(ctx);
-                if (next && next->toktype == TOKTYPE_PUNCT && next->val.i == '#')
+                if (next_two_chars(ctx, '%', ':'))
                     return make_punct(ctx, KEYWORD_TWOSHARPS);
-                unget_cpp_token(ctx, next);
                 return make_punct(ctx, '#');
             }
             return maybe_read_equal(ctx, '%', KEYWORD_A_MOD);
@@ -543,7 +549,6 @@ void skip_line(CppContext *ctx) {
 
 CondInclType skip_cond_incl(CppContext *ctx) {
     assert(LIST_IS_EMPTY(ctx->ungotten));
-    CondInclType r;
     int nest = 0;
     for (;;) {
         skip_whitespace(ctx);
@@ -563,25 +568,20 @@ CondInclType skip_cond_incl(CppContext *ctx) {
             || !strcmp(STRING_BODY(tok->val.str), "ifndef")) {
             nest++;
         } else if (!nest && !strcmp(STRING_BODY(tok->val.str), "else")) {
-            r = COND_ELSE;
-            break;
+            expect_newline(ctx);
+            return COND_ELSE;
         } else if (!nest && !strcmp(STRING_BODY(tok->val.str), "elif")) {
-            r = COND_ELIF;
-            break;
+            return COND_ELIF;
         } else if (!strcmp(STRING_BODY(tok->val.str), "endif")) {
             if (nest) {
                 nest--;
             } else {
-                r = COND_ENDIF;
-                break;
+                expect_newline(ctx);
+                return COND_ENDIF;
             }
         }
         skip_line(ctx);
     }
-    Token *tok = read_cpp_token(ctx);
-    if (tok && tok->toktype != TOKTYPE_NEWLINE)
-        error_token(tok, "newline expected, but got '%s'", token_to_string(tok));
-    return r;
 }
 
 /*==============================================================================
