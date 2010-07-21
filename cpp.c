@@ -303,26 +303,30 @@ static void pushback(CppContext *ctx, List *ts) {
  * Reads comma-separated arguments of function-like macro invocation.  Comma
  * characters in matching parentheses are not considered as separator.
  *
+ * If there is no terminating ')', we'll pushback all tokens and returns NULL,
+ * so that macro expander continue processing the tokens without expanding the
+ * macro.
+ *
  * (WG14/N1256 6.10.3 Macro replacement, sentence 10)
  */
-static List *read_args(CppContext *ctx, Macro *macro) {
+static List *read_args_int(CppContext *ctx, Macro *macro) {
     List *r = make_list();
     List *arg = make_list();
-    List *ts = make_list();
+    List *buf = make_list();
     int depth = 0;
 
     Token *tok = peek_cpp_token(ctx);
     if (!tok || !is_punct(tok, '('))
         return NULL;
     read_cpp_token(ctx);
-    list_push(ts, tok);
+    list_push(buf, tok);
 
     for (tok = read_cpp_token(ctx); ; tok = read_cpp_token(ctx)) {
         if (!tok) {
-            pushback(ctx, ts);
+            pushback(ctx, buf);
             return NULL;
         }
-        list_push(ts, tok);
+        list_push(buf, tok);
         if (tok->toktype == TOKTYPE_NEWLINE)
             continue;
         if (depth) {
@@ -336,7 +340,7 @@ static List *read_args(CppContext *ctx, Macro *macro) {
         if (is_punct(tok, ')')) {
             unget_cpp_token(ctx, tok);
             list_push(r, arg);
-            break;
+            return r;
         }
         bool in_threedots = macro->is_varg && LIST_LEN(r) + 1 == macro->nargs;
         if (is_punct(tok, ',') && !in_threedots) {
@@ -346,6 +350,11 @@ static List *read_args(CppContext *ctx, Macro *macro) {
         }
         list_push(arg, tok);
     }
+}
+
+static List *read_args(CppContext *ctx, Macro *macro) {
+    List *args = read_args_int(ctx, macro);
+    if (!args) return NULL;
 
     /*
      * In CPP syntax, we cannot distinguish zero-argument macro invocation from
@@ -365,14 +374,13 @@ static List *read_args(CppContext *ctx, Macro *macro) {
      * The argument list is set to empty here if macro takes no parameters and
      * the argument is empty.
      */
-    if (macro->nargs == 0 && LIST_LEN(r) == 1 && LIST_LEN((List *)LIST_REF(r, 0)) == 0)
-        list_pop(r);
+    if (macro->nargs == 0 && LIST_LEN(args) == 1 && LIST_LEN((List *)LIST_REF(args, 0)) == 0)
+        list_pop(args);
 
-    if ((macro->is_varg && LIST_LEN(r) < macro->nargs)
-        || (!macro->is_varg && LIST_LEN(r) != macro->nargs))
-        error_token(tok, "Macro argument number does not match");
-
-    return r;
+    if ((macro->is_varg && LIST_LEN(args) < macro->nargs)
+        || (!macro->is_varg && LIST_LEN(args) != macro->nargs))
+        error_cpp_ctx(ctx, "Macro argument number does not match");
+    return args;
 }
 
 static List *add_hide_set(List *ts, List *hideset) {
@@ -634,7 +642,7 @@ static void handle_cond_incl(CppContext *ctx, CondInclType type) {
         expect_newline(ctx);
         if (LIST_IS_EMPTY(ctx->incl))
             error_cpp_ctx(ctx, "stray #else");
-        bool in_else = (bool)(intptr)list_pop(ctx->incl);
+        bool in_else = (intptr)list_pop(ctx->incl);
         if (in_else)
             error_cpp_ctx(ctx, "#else appears twice");
         CondInclType type1 = skip_cond_incl(ctx);
@@ -663,18 +671,8 @@ static void handle_cond_incl(CppContext *ctx, CondInclType type) {
     }
 }
 
-/*
- * Reads function-like macro definition.
- */
-static void read_function_like_define(CppContext *ctx, String *name) {
-    Dict *param = make_string_dict();
-    List *repl = make_list();
-    bool is_varg = false;
-
-    // Read macro pameters
-    for (Token *tok = read_cpp_token(ctx);
-         tok;
-         tok = read_cpp_token(ctx)) {
+static bool read_funclike_define_args(CppContext *ctx, Dict *param) {
+    for (Token *tok = read_cpp_token(ctx); tok; tok = read_cpp_token(ctx)) {
         if (is_punct(tok, ')'))
             break;
         if (dict_size(param)) {
@@ -690,15 +688,18 @@ static void read_function_like_define(CppContext *ctx, String *name) {
             Token *tok1 = read_cpp_token(ctx);
             if (!is_punct(tok1, ')'))
                 error_token(tok1, "')' expected, but got '%s'", token_to_string(tok1));
-            is_varg = true;
-            break;
+            return true;
         }
         if (tok->toktype != TOKTYPE_IDENT)
             error_token(tok, "identifier expected, but got '%s'", token_to_string(tok));
         Token *subst = make_token(ctx, TOKTYPE_MACRO_PARAM, (TokenValue)dict_size(param));
         dict_put(param, tok->val.str, subst);
     }
+    return false;
+}
 
+static List *read_funclike_define_body(CppContext *ctx, Dict *param) {
+    List *repl = make_list();
     // Read macro replacement list
     for (Token *tok = read_cpp_token(ctx);
          tok && tok->toktype != TOKTYPE_NEWLINE;
@@ -712,6 +713,16 @@ static void read_function_like_define(CppContext *ctx, String *name) {
         }
         list_push(repl, tok);
     }
+    return repl;
+}
+
+/*
+ * Reads function-like macro definition.
+ */
+static void read_funclike_define(CppContext *ctx, String *name) {
+    Dict *param = make_string_dict();
+    bool is_varg = read_funclike_define_args(ctx, param);
+    List *repl = read_funclike_define_body(ctx, param);
     dict_put(ctx->defs, name, make_func_macro(repl, dict_size(param), is_varg));
 }
 
@@ -728,7 +739,7 @@ static void read_define(CppContext *ctx) {
     Token *tok = read_cpp_token(ctx);
 
     if (!is_space && tok && is_punct(tok, '(')) {
-        read_function_like_define(ctx, name->val.str);
+        read_funclike_define(ctx, name->val.str);
         return;
     }
 
