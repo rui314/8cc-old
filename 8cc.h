@@ -354,6 +354,10 @@ typedef struct Token {
     int column;
     // Used in preprocessor macro expansion.
     List *hideset;
+    // True if token follows space character.  Used only when concatenating
+    // tokens for # operator (the only case we need to preserve existence of
+    // space.)
+    List *space;
 } Token;
 
 typedef enum {

@@ -449,7 +449,7 @@ Token *stringize(Token *tmpl, List *arg) {
     String *s = make_string();
     for (int i = 0; i < LIST_LEN(arg); i++) {
         Token *tok = LIST_REF(arg, i);
-        if (STRING_LEN(s))
+        if (STRING_LEN(s) && tok->space)
             o1(s, ' ');
         switch (tok->toktype) {
         case TOKTYPE_IDENT:

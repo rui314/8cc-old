@@ -88,17 +88,6 @@ Token *peek_cpp_token(CppContext *ctx) {
     return tok;
 }
 
-static bool next_chars_are(File *file, char *str) {
-    for (int i = 0; str[i]; i++) {
-        if (next_char_is(file, str[i]))
-            continue;
-        while (i-- >= 0)
-            unreadc(str[i], file);
-        return false;
-    }
-    return true;
-}
-
 /*==============================================================================
  * Functions to make tokens.
  */
@@ -124,6 +113,7 @@ Token *make_token(CppContext *ctx, TokType type, TokenValue val) {
         r->line = r->column = 0;
     }
     r->hideset = make_list();
+    r->space = false;
     return r;
 }
 
@@ -202,7 +192,7 @@ static void skip_line_comment(CppContext *ctx) {
  *     [_a-zA-Z]
  */
 static Token *read_cppnum(CppContext *ctx, int c) {
-    // c0 must be [0-9] or '.'
+    // c must be [0-9] or '.'
     String *buf = make_string();
     o1(buf, c);
     if (c == '.') {
@@ -432,10 +422,18 @@ static Token *read_cpp_token_int(CppContext *ctx) {
             if (next_char_is(ctx->file, '#'))
                 return make_punct(ctx, KEYWORD_TWOSHARPS);
             return make_punct(ctx, '#');
-        case '.':
-            if (next_chars_are(ctx->file, ".."))
+        case '.': {
+            int c1 = readc(ctx->file);
+            if (c1 == '.') {
+                int c2 = readc(ctx->file);
+                if (c2 != '.')
+                    error_cpp_ctx(ctx, "'...' expected, but got '..%c'", c2);
                 return make_punct(ctx, KEYWORD_THREEDOTS);
+            }
+            if (isdigit(peekc(ctx->file)))
+                return read_cppnum(ctx, c);
             return make_punct(ctx, '.');
+        }
         case '0': case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8': case '9':
             return read_cppnum(ctx, c);
@@ -492,10 +490,13 @@ static Token *read_cpp_token_int(CppContext *ctx) {
         case '%':
             if (next_char_is(ctx->file, '>'))
                 return make_punct(ctx, ']');
-            if (next_chars_are(ctx->file, ":%:"))
-                return make_punct(ctx, KEYWORD_TWOSHARPS);
-            if (next_char_is(ctx->file, ':'))
+            if (next_char_is(ctx->file, ':')) {
+                Token *next = read_cpp_token_int(ctx);
+                if (next && next->toktype == TOKTYPE_PUNCT && next->val.i == '#')
+                    return make_punct(ctx, KEYWORD_TWOSHARPS);
+                unget_cpp_token(ctx, next);
                 return make_punct(ctx, '#');
+            }
             return maybe_read_equal(ctx, '%', KEYWORD_A_MOD);
 
         case '>':
@@ -613,7 +614,9 @@ bool is_next_space(CppContext *ctx) {
  */
 Token *read_cpp_token(CppContext *ctx) {
     Token *tok = read_cpp_token_int(ctx);
-    while (tok && tok->toktype == TOKTYPE_SPACE)
+    while (tok && tok->toktype == TOKTYPE_SPACE) {
         tok = read_cpp_token_int(ctx);
+        tok->space = true;
+    }
     return tok;
 }
