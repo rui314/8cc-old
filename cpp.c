@@ -67,25 +67,25 @@ typedef struct Macro {
     int type;
     // For object-like and function-like
     int nargs;
-    List *repl;
+    List *body;
     bool is_varg;
     // For special macros
     special_macro_handler *fn;
 } Macro;
 
-static Macro *make_obj_macro(List *repl) {
+static Macro *make_obj_macro(List *body) {
     Macro *r = malloc(sizeof(Macro));
     r->type = MACRO_OBJ;
-    r->repl = repl;
+    r->body = body;
     r->is_varg = false;
     return r;
 }
 
-static Macro *make_func_macro(List *repl, int nargs, bool is_varg) {
+static Macro *make_func_macro(List *body, int nargs, bool is_varg) {
     Macro *r = malloc(sizeof(Macro));
     r->type = MACRO_FUNC;
     r->nargs = nargs;
-    r->repl = repl;
+    r->body = body;
     r->is_varg = is_varg;
     return r;
 }
@@ -493,10 +493,10 @@ Token *stringize(Token *tmpl, List *arg) {
  */
 static List *subst(CppContext *ctx, Macro *macro, List *args, List *hideset) {
     List *r = make_list();
-    for (int i = 0; i < LIST_LEN(macro->repl); i++) {
-        bool islast = (i == LIST_LEN(macro->repl) - 1);
-        Token *t0 = LIST_REF(macro->repl, i);
-        Token *t1 = islast ? NULL : LIST_REF(macro->repl, i + 1);
+    for (int i = 0; i < LIST_LEN(macro->body); i++) {
+        bool islast = (i == LIST_LEN(macro->body) - 1);
+        Token *t0 = LIST_REF(macro->body, i);
+        Token *t1 = islast ? NULL : LIST_REF(macro->body, i + 1);
         bool t0_param = t0->toktype == TOKTYPE_MACRO_PARAM;
         bool t1_param = !islast && t1->toktype == TOKTYPE_MACRO_PARAM;
 
@@ -551,16 +551,16 @@ static Token *expand(CppContext *ctx) {
     if (!tok) return NULL;
     if (tok->toktype != TOKTYPE_IDENT)
         return tok;
-    String *s = tok->val.str;
-    if (list_in(tok->hideset, s))
+    String *name = tok->val.str;
+    if (list_in(tok->hideset, name))
         return tok;
-    Macro *macro = dict_get(ctx->defs, s);
+    Macro *macro = dict_get(ctx->defs, name);
     if (!macro)
         return tok;
 
     switch (macro->type) {
     case MACRO_OBJ: {
-        List *ts = subst(ctx, macro, make_list(), list_union1(tok->hideset, s));
+        List *ts = subst(ctx, macro, make_list(), list_union1(tok->hideset, name));
         pushback(ctx, ts);
         return expand(ctx);
     }
@@ -569,7 +569,7 @@ static Token *expand(CppContext *ctx) {
         if (!args)
             return tok;
         Token *rparen = read_cpp_token(ctx);
-        List *hideset = list_union1(list_intersect(tok->hideset, rparen->hideset), s);
+        List *hideset = list_union1(list_intersect(tok->hideset, rparen->hideset), name);
         List *ts = subst(ctx, macro, args, hideset);
         pushback(ctx, ts);
         return expand(ctx);
@@ -591,7 +591,7 @@ static int is_defined(CppContext *ctx, Token *tok) {
 }
 
 /*
- * Reads defined unary operator of the form "defined <identifier>" or
+ * Reads "defined" unary operator of the form "defined <identifier>" or
  * "defined(<identifier>)".  The token "defined" is already read when the
  * function is called.
  *
@@ -621,7 +621,10 @@ static int read_ifdef(CppContext *ctx) {
 }
 
 /*
- * Handles #if, #elif, #ifdef and #ifndef.
+ * Handles #if, #elif, #ifdef and #ifndef.  If condition does not meet, the
+ * function calls skip_cond_include(), defined in lex.c, to skip all tokens
+ * untilt the next #elif, #else of #endif.
+ *
  * (WG14/N1256 6.10.1 Conditional inclusion)
  */
 static void handle_cond_incl(CppContext *ctx, CondInclType type) {
@@ -670,10 +673,15 @@ static void handle_cond_incl(CppContext *ctx, CondInclType type) {
         list_push(ctx->incl, (void *)true);
 }
 
+/*
+ * Reads function-like macro arguments.  Returns true if the argument list ends
+ * with "...".  Otherwise false.
+ */
 static bool read_funclike_define_args(CppContext *ctx, Dict *param) {
-    for (Token *tok = read_cpp_token(ctx); tok; tok = read_cpp_token(ctx)) {
+    for (;;) {
+        Token *tok = read_cpp_token(ctx);
         if (is_punct(tok, ')'))
-            break;
+            return false;
         if (dict_size(param)) {
             if (!is_punct(tok, ','))
                 error_token(tok, "',' expected, but got '%s'", token_to_string(tok));
@@ -694,25 +702,25 @@ static bool read_funclike_define_args(CppContext *ctx, Dict *param) {
         Token *subst = make_token(ctx, TOKTYPE_MACRO_PARAM, (TokenValue)dict_size(param));
         dict_put(param, tok->val.str, subst);
     }
-    return false;
 }
 
 static List *read_funclike_define_body(CppContext *ctx, Dict *param) {
-    List *repl = make_list();
-    // Read macro replacement list
-    for (Token *tok = read_cpp_token(ctx);
-         tok && tok->toktype != TOKTYPE_NEWLINE;
-         tok = read_cpp_token(ctx)) {
+    List *body = make_list();
+    // Read macro body list
+    for (;;) {
+        Token *tok = read_cpp_token(ctx);
+        if (!tok || tok->toktype == TOKTYPE_NEWLINE)
+            return body;
         if (tok->toktype == TOKTYPE_IDENT) {
             Token *subst = dict_get(param, tok->val.str);
             if (subst) {
-                list_push(repl, subst);
+                list_push(body, subst);
                 continue;
             }
         }
-        list_push(repl, tok);
+        list_push(body, tok);
     }
-    return repl;
+    return body;
 }
 
 /*
@@ -721,8 +729,8 @@ static List *read_funclike_define_body(CppContext *ctx, Dict *param) {
 static void read_funclike_define(CppContext *ctx, String *name) {
     Dict *param = make_string_dict();
     bool is_varg = read_funclike_define_args(ctx, param);
-    List *repl = read_funclike_define_body(ctx, param);
-    dict_put(ctx->defs, name, make_func_macro(repl, dict_size(param), is_varg));
+    List *body = read_funclike_define_body(ctx, param);
+    dict_put(ctx->defs, name, make_func_macro(body, dict_size(param), is_varg));
 }
 
 /*
@@ -742,12 +750,12 @@ static void read_define(CppContext *ctx) {
         return;
     }
 
-    List *repl = make_list();
+    List *body = make_list();
     while (tok && tok->toktype != TOKTYPE_NEWLINE) {
-        list_push(repl, tok);
+        list_push(body, tok);
         tok = read_cpp_token(ctx);
     }
-    dict_put(ctx->defs, name->val.str, make_obj_macro(repl));
+    dict_put(ctx->defs, name->val.str, make_obj_macro(body));
 }
 
 /*
@@ -769,7 +777,7 @@ static void read_undef(CppContext *ctx) {
 static void read_error_dir(CppContext *ctx, Token *define) {
     String *buf = make_string();
     Token *tok = read_cpp_token(ctx);
-    while(tok &&  tok->toktype != TOKTYPE_NEWLINE) {
+    while(tok && tok->toktype != TOKTYPE_NEWLINE) {
         o1(buf, ' ');
         string_append(buf, token_to_string(tok));
         tok = read_cpp_token(ctx);
