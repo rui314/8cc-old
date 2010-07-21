@@ -418,13 +418,6 @@ runtest '7' $'\n#define CONC(x, y) x ## y\nint ab=7; printf("%d", CONC(a, b));'
 # Tricky function-like macros
 #
 /bin/echo -e '\nTricky macros...'
-runtest 'a1' '
-#define PRINTF(x, ...) printf(x, __VA_ARGS__)
-#define FN PRINTF(
-#define RPAREN )
-#define ARGS "a%d\n", 1
-#define FOO(x,y,z) x y z
-FOO(FN, ARGS, RPAREN);'
 runtest 'x ## y' '
 #define hash_hash # ## #
 #define mkstr(a) # a

@@ -303,52 +303,43 @@ static void pushback(CppContext *ctx, List *ts) {
  * Reads comma-separated arguments of function-like macro invocation.  Comma
  * characters in matching parentheses are not considered as separator.
  *
- * If there is no terminating ')', we'll pushback all tokens and returns NULL,
- * so that macro expander continue processing the tokens without expanding the
- * macro.
- *
  * (WG14/N1256 6.10.3 Macro replacement, sentence 10)
  */
 static List *read_args_int(CppContext *ctx, Macro *macro) {
     List *r = make_list();
     List *arg = make_list();
-    List *buf = make_list();
     int depth = 0;
 
     Token *tok = peek_cpp_token(ctx);
     if (!tok || !is_punct(tok, '('))
         return NULL;
     read_cpp_token(ctx);
-    list_push(buf, tok);
 
-    for (tok = read_cpp_token(ctx); ; tok = read_cpp_token(ctx)) {
-        if (!tok) {
-            pushback(ctx, buf);
-            return NULL;
-        }
-        list_push(buf, tok);
-        if (tok->toktype == TOKTYPE_NEWLINE)
+    for (Token *tok1 = read_cpp_token(ctx); ; tok1 = read_cpp_token(ctx)) {
+        if (!tok1)
+            error_token(tok, "unterminated macro argument list");
+        if (tok1->toktype == TOKTYPE_NEWLINE)
             continue;
         if (depth) {
-            if (is_punct(tok, ')'))
+            if (is_punct(tok1, ')'))
                 depth--;
-            list_push(arg, tok);
+            list_push(arg, tok1);
             continue;
         }
-        if (is_punct(tok, '('))
+        if (is_punct(tok1, '('))
             depth++;
-        if (is_punct(tok, ')')) {
-            unget_cpp_token(ctx, tok);
+        if (is_punct(tok1, ')')) {
+            unget_cpp_token(ctx, tok1);
             list_push(r, arg);
             return r;
         }
         bool in_threedots = macro->is_varg && LIST_LEN(r) + 1 == macro->nargs;
-        if (is_punct(tok, ',') && !in_threedots) {
+        if (is_punct(tok1, ',') && !in_threedots) {
             list_push(r, arg);
             arg = make_list();
             continue;
         }
-        list_push(arg, tok);
+        list_push(arg, tok1);
     }
 }
 
