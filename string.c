@@ -113,3 +113,29 @@ void string_seek(String *b, int pos) {
         error("can't seek beyond the string boundary");
     b->pos = pos;
 }
+
+static void string_vprintf(String *b, char *format, va_list ap) {
+    char buf[256];
+    int required = vsnprintf(buf, sizeof(buf), format, ap);
+    if (required < sizeof(buf)) {
+        string_append(b, buf);
+        return;
+    }
+    char *p = malloc(required + 1);
+    vsnprintf(p, required + 1, format, ap);
+    string_append(b, p);
+}
+
+void string_printf(String *b, char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    string_vprintf(b, format, ap);
+}
+
+String *make_string_printf(char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    String *b = make_string();
+    string_vprintf(b, format, ap);
+    return b;
+}

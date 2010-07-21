@@ -34,7 +34,7 @@
 
 static Token *read_if(CppContext *ctx, char *str) {
     Token *tok = read_cpp_token(ctx);
-    if (tok->toktype == TOKTYPE_IDENT && !strcmp(STRING_BODY(tok->val.str), str))
+    if (tok && tok->toktype == TOKTYPE_IDENT && !strcmp(STRING_BODY(tok->val.str), str))
         return tok;
     unget_cpp_token(ctx, tok);
     return NULL;
@@ -115,7 +115,20 @@ static Dict *keyword_dict(void) {
     return dict;
 }
 
-static Token *ident_to_keyword(Token *tok) {
+static Dict *punct_dict(void) {
+    static Dict *dict;
+    if (dict) return dict;
+    dict = make_string_dict();
+#define KEYWORD(k, s)
+#define PUNCT(k, s) \
+    dict_put(dict, to_string(s), (void *)k);
+# include "keyword.h"
+#undef PUNCT
+#undef KEYWORD
+    return dict;
+}
+
+static Token *to_keyword_maybe(Token *tok) {
     assert(tok->toktype == TOKTYPE_IDENT);
     int id = (intptr)dict_get(keyword_dict(), tok->val.str);
     if (id) {
@@ -143,7 +156,7 @@ static Token *cppnum_to_num(Token *tok) {
 static Token *cpp_token_to_token(Token *tok) {
     tok->hideset = NULL;
     if (tok->toktype == TOKTYPE_IDENT)
-        return ident_to_keyword(tok);
+        return to_keyword_maybe(tok);
     if (tok->toktype == TOKTYPE_CPPNUM)
         return cppnum_to_num(tok);
     if (tok->toktype == TOKTYPE_PUNCT) {
@@ -171,15 +184,13 @@ static void def_special_macro(CppContext *ctx, char *name, special_macro_handler
 
 static Token *macro_date(CppContext *ctx, struct tm *now) {
     char *month[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-    char buf[20];
-    sprintf(buf, "%s %02d %04d", month[now->tm_mon], now->tm_mday, 1900 + now->tm_year);
-    return make_str_literal(ctx, to_string(buf));
+    String *s = make_string_printf("%s %02d %04d", month[now->tm_mon], now->tm_mday, 1900 + now->tm_year);
+    return make_str_literal(ctx, s);
 }
 
 static Token *macro_time(CppContext *ctx, struct tm *now) {
-    char buf[10];
-    sprintf(buf, "%02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
-    return make_str_literal(ctx, to_string(buf));
+    String *s = make_string_printf("%02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
+    return make_str_literal(ctx, s);
 }
 
 static Token *handle_file_macro(CppContext *ctx, Token *tok) {
@@ -191,10 +202,8 @@ static Token *handle_file_macro(CppContext *ctx, Token *tok) {
 
 static Token *handle_line_macro(CppContext *ctx, Token *tok) {
     Token *r = copy_token(tok);
-    char buf[10];
-    sprintf(buf, "%d", ctx->file->line);
     r->toktype = TOKTYPE_CPPNUM;
-    r->val.str = to_string(buf);
+    r->val.str = make_string_printf("%d", ctx->file->line);
     return r;
 }
 
@@ -291,8 +300,8 @@ static void pushback(CppContext *ctx, List *ts) {
 }
 
 /*
- * Reads arguments of function-like macro invocation.  Comma characters in
- * matching parentheses are not considered as separator.
+ * Reads comma-separated arguments of function-like macro invocation.  Comma
+ * characters in matching parentheses are not considered as separator.
  *
  * (WG14/N1256 6.10.3 Macro replacement, sentence 10)
  */
@@ -354,7 +363,7 @@ static List *read_args(CppContext *ctx, Macro *macro) {
      * identifiers, thus FOO() will be replaced with the empty.
      *
      * The argument list is set to empty here if macro takes no parameters and
-     * argument is empty.
+     * the argument is empty.
      */
     if (macro->nargs == 0 && LIST_LEN(r) == 1 && LIST_LEN((List *)LIST_REF(r, 0)) == 0)
         list_pop(r);
@@ -366,7 +375,7 @@ static List *read_args(CppContext *ctx, Macro *macro) {
     return r;
 }
 
-static List *hide_set_add(List *ts, List *hideset) {
+static List *add_hide_set(List *ts, List *hideset) {
     List *r = make_list();
     for (int i = 0; i < LIST_LEN(ts); i++) {
         Token *t = copy_token((Token *)LIST_REF(ts, i));
@@ -376,25 +385,13 @@ static List *hide_set_add(List *ts, List *hideset) {
     return r;
 }
 
-Dict *punct_dict(void) {
-    static Dict *dict;
-    if (dict) return dict;
-    dict = make_string_dict();
-#define KEYWORD(k, s)
-#define PUNCT(k, s) dict_put(dict, to_string(s), (void *)k);
-# include "keyword.h"
-#undef PUNCT
-#undef KEYWORD
-    return dict;
-}
-
-void stringize_char(char *buf, char c, char quote) {
+void stringize_char(String *b, char c, char quote) {
     if (!isascii(c))
-        sprintf(buf, "\\x%02x", (u8)c);
+        string_printf(b, "\\x%02x", (u8)c);
     else if (c == '\\' || c == quote)
-        sprintf(buf, "\\%c", c);
+        string_printf(b, "\\%c", c);
     else
-        sprintf(buf, "%c", c);
+        string_printf(b, "%c", c);
 }
 
 void paste(String *b, Token *tok) {
@@ -442,7 +439,7 @@ void glue_push(List *ls, Token *tok) {
 }
 
 /*
- * Make a string token representation of given tokens to a buffer.  Used by "#"
+ * Write a string representation of a given token to a buffer.  Used by "#"
  * operator.
  */
 Token *stringize(Token *tmpl, List *arg) {
@@ -461,20 +458,15 @@ Token *stringize(Token *tmpl, List *arg) {
             break;
         case TOKTYPE_CHAR: {
             // TODO: retain original spelling
-            char buf[10];
             o1(s, '\'');
-            stringize_char(buf, tok->val.i, '\'');
-            string_append(s, buf);
+            stringize_char(s, tok->val.i, '\'');
             string_append(s, "\'");
             break;
         }
         case TOKTYPE_STRING: {
             o1(s, '"');
-            for (char *p = STRING_BODY(tok->val.str); *p; p++) {
-                char buf[10];
-                stringize_char(buf, *p, '\"');
-                string_append(s, buf);
-            }
+            for (char *p = STRING_BODY(tok->val.str); *p; p++)
+                stringize_char(s, *p, '\"');
             string_append(s, "\"");
             break;
         }
@@ -539,7 +531,7 @@ static List *subst(CppContext *ctx, Macro *macro, List *args, List *hideset) {
         }
         list_push(r, t0);
     }
-    return hide_set_add(r, hideset);
+    return add_hide_set(r, hideset);
 }
 
 /*
@@ -608,10 +600,6 @@ static int read_defined(CppContext *ctx) {
     return is_defined(ctx, tok);
 }
 
-/*
- * Handles #if, #elif, #ifdef and #ifndef.
- * (WG14/N1256 6.10.1 Conditional inclusion)
- */
 static int read_constant_expr(CppContext *ctx) {
     if (read_if(ctx, "defined"))
         return read_defined(ctx);
@@ -624,6 +612,10 @@ static int read_ifdef(CppContext *ctx) {
     return r;
 }
 
+/*
+ * Handles #if, #elif, #ifdef and #ifndef.
+ * (WG14/N1256 6.10.1 Conditional inclusion)
+ */
 static void handle_cond_incl(CppContext *ctx, CondInclType type) {
     bool cond;
     switch (type) {
@@ -813,8 +805,8 @@ static void read_directive(CppContext *ctx) {
  * the main compiler.
  *
  * Preprocessing numbers will be converted to integer or float numbers.
- * Punctuators to keywords.  Identifiers to keywords (if reserved words) or
- * retained.  Newline tokens removed.
+ * Punctuators to keywords.  Identifiers to keywords (if reserved words) or keep
+ * as is.  Newline tokens removed.
  */
 
 Token *read_token(ReadContext *readctx) {

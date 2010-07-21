@@ -169,6 +169,8 @@ extern void o4(String *b, u32 data);
 extern void o8(String *b, u64 data);
 extern void align(String *b, int n);
 extern void string_seek(String *b, int pos);
+extern void string_printf(String *b, char *format, ...);
+extern String *make_string_printf(char *format, ...);
 
 /*============================================================
  * List
@@ -357,7 +359,7 @@ typedef struct Token {
     // True if token follows space character.  Used only when concatenating
     // tokens for # operator (the only case we need to preserve existence of
     // space.)
-    List *space;
+    bool space;
 } Token;
 
 typedef enum {

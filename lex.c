@@ -79,7 +79,8 @@ ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...) {
 }
 
 void unget_cpp_token(CppContext *ctx, Token *tok) {
-    list_push(ctx->ungotten, tok);
+    if (tok)
+        list_push(ctx->ungotten, tok);
 }
 
 Token *peek_cpp_token(CppContext *ctx) {
