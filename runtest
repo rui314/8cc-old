@@ -387,7 +387,7 @@ runtest '0' $'\n#define OBJ_LIKE /* white space */ (1-1) /* other */\nprintf("%d
 runtest '7' $'\n#define FUNC_LIKE(a) ( a )\nprintf("%d", FUNC_LIKE(7));'
 runtest '7' $'\n#define FUNC_LIKE( a )( /* note the white space */ \\\na /* other stuff on this line\n*/ )\nprintf("%d", FUNC_LIKE(7));'
 # More tests
-runtest '2' $'\nint A = 1;\n#define A 1+A\n#define B(x) x\nprintf("%d\n", B(A));'
+runtest '2' $'\nint A=1;\n#define A 1+A\n#define B(x) x\nprintf("%d\n", B(A));'
 
 #
 # CPP variable argument list

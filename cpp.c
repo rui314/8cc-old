@@ -103,8 +103,7 @@ static Macro *make_special_macro(special_macro_handler *fn) {
 
 static Dict *keyword_dict(void) {
     static Dict *dict;
-    if (dict != NULL)
-        return dict;
+    if (dict) return dict;
     dict = make_string_dict();
 #define KEYWORD(id_, str_) \
     dict_put(dict, to_string(str_), (void *)id_);
@@ -265,7 +264,7 @@ void define_predefined_macros(CppContext *ctx) {
  * http://www.spinellis.gr/blog/20060626/
  */
 
-static Token *expand(CppContext *ctx);
+static Token *expand_one(CppContext *ctx);
 
 CppContext *make_virt_cpp_context(CppContext *ctx, List *ts) {
     CppContext *r = make_cpp_context(NULL);
@@ -278,18 +277,18 @@ CppContext *make_virt_cpp_context(CppContext *ctx, List *ts) {
 
 /*
  * Expands all macros in a given token list, as if they consisted the rest of
- * the source file.  A new preprocessing contests are created, and the tokens
+ * the source file.  A new preprocessing contexts are created, and the tokens
  * are pushed to the context so that subsequent read_cpp_token() will get them,
  * as if these were the content of a file.
  *
- * expand() and expand_all() calls each other to get the fully expanded form of
- * a macro.
+ * expand_one() and expand_all() calls each other to get the fully expanded form
+ * of the given tokens.
  */
 static List *expand_all(CppContext *ctx, List *ts) {
     List *r = make_list();
     CppContext *virt = make_virt_cpp_context(ctx, list_reverse(ts));
     Token *tok;
-    while ((tok = expand(virt)) != NULL)
+    while ((tok = expand_one(virt)) != NULL)
         list_push(r, tok);
     return r;
 }
@@ -343,6 +342,10 @@ static List *read_args_int(CppContext *ctx, Macro *macro) {
     }
 }
 
+/*
+ * Reads macro arguments.  If the number of macro arguments does not match with
+ * the number of parameters, it will raise an error.
+ */
 static List *read_args(CppContext *ctx, Macro *macro) {
     List *args = read_args_int(ctx, macro);
     if (!args) return NULL;
@@ -374,17 +377,24 @@ static List *read_args(CppContext *ctx, Macro *macro) {
     return args;
 }
 
-static List *add_hide_set(List *ts, List *hideset) {
+/*
+ * Added a given hide set to tokens in a given list.
+ */
+static List *add_hide_set(List *tokens, List *hideset) {
     List *r = make_list();
-    for (int i = 0; i < LIST_LEN(ts); i++) {
-        Token *t = copy_token((Token *)LIST_REF(ts, i));
+    for (int i = 0; i < LIST_LEN(tokens); i++) {
+        Token *t = copy_token((Token *)LIST_REF(tokens, i));
         t->hideset = list_union(t->hideset, hideset);
         list_push(r, t);
     }
     return r;
 }
 
-void stringize_char(String *b, char c, char quote) {
+/*
+ * Writes a string representation of a given character to a buffer.  If the
+ * character is quote, it'll be esacaped with backslash.
+ */
+static void stringize_char(String *b, char c, char quote) {
     if (!isascii(c))
         string_printf(b, "\\x%02x", (u8)c);
     else if (c == '\\' || c == quote)
@@ -393,7 +403,7 @@ void stringize_char(String *b, char c, char quote) {
         string_printf(b, "%c", c);
 }
 
-void paste(String *b, Token *tok) {
+static void paste(String *b, Token *tok) {
     switch (tok->toktype) {
     case TOKTYPE_IDENT:
     case TOKTYPE_CPPNUM:
@@ -410,7 +420,7 @@ void paste(String *b, Token *tok) {
 /*
  * Joins given two tokens and returns it.  Used by "##" operator.
  */
-Token *glue_tokens(Token *t0, Token *t1) {
+static Token *glue_tokens(Token *t0, Token *t1) {
     String *b = make_string();
     paste(b, t0);
     paste(b, t1);
@@ -431,17 +441,20 @@ Token *glue_tokens(Token *t0, Token *t1) {
     return r;
 }
 
-void glue_push(List *ls, Token *tok) {
+/*
+ * Joins a given token with the last token of a list.
+ */
+static void glue_push(List *ls, Token *tok) {
     assert(!LIST_IS_EMPTY(ls));
     Token *last = list_pop(ls);
     list_push(ls, glue_tokens(last, tok));
 }
 
 /*
- * Write a string representation of a given token to a buffer.  Used by "#"
- * operator.
+ * Write a string representation of a given token sequence.  Used by
+ * "#" operator.
  */
-Token *stringize(Token *tmpl, List *arg) {
+static Token *stringize(Token *tmpl, List *arg) {
     String *s = make_string();
     for (int i = 0; i < LIST_LEN(arg); i++) {
         Token *tok = LIST_REF(arg, i);
@@ -480,7 +493,7 @@ Token *stringize(Token *tmpl, List *arg) {
 }
 
 /*
- * Substitutes parameters in macro replacement list with actual arguments.
+ * Substitutes parameters in macro definition body with actual arguments.
  */
 static List *subst(CppContext *ctx, Macro *macro, List *args, List *hideset) {
     List *r = make_list();
@@ -537,33 +550,31 @@ static List *subst(CppContext *ctx, Macro *macro, List *args, List *hideset) {
  * Reads a token from a given preprocessing context, expands it if macro, and
  * returns it.
  */
-static Token *expand(CppContext *ctx) {
+static Token *expand_one(CppContext *ctx) {
     Token *tok = read_cpp_token(ctx);
     if (!tok) return NULL;
     if (tok->toktype != TOKTYPE_IDENT)
         return tok;
     String *name = tok->val.str;
-    if (list_in(tok->hideset, name))
-        return tok;
     Macro *macro = dict_get(ctx->defs, name);
     if (!macro)
+        return tok;
+    if (list_in(tok->hideset, name))
         return tok;
 
     switch (macro->type) {
     case MACRO_OBJ: {
         List *ts = subst(ctx, macro, make_list(), list_union1(tok->hideset, name));
         pushback(ctx, ts);
-        return expand(ctx);
+        return expand_one(ctx);
     }
     case MACRO_FUNC: {
         List *args = read_args(ctx, macro);
-        if (!args)
-            return tok;
         Token *rparen = read_cpp_token(ctx);
         List *hideset = list_union1(list_intersect(tok->hideset, rparen->hideset), name);
         List *ts = subst(ctx, macro, args, hideset);
         pushback(ctx, ts);
-        return expand(ctx);
+        return expand_one(ctx);
     }
     case MACRO_SPECIAL:
         return macro->fn(ctx, tok);
@@ -575,10 +586,10 @@ static Token *expand(CppContext *ctx) {
  * Preprocessor directives.
  */
 
-static int is_defined(CppContext *ctx, Token *tok) {
+static bool is_defined(CppContext *ctx, Token *tok) {
     if (!tok || tok->toktype != TOKTYPE_IDENT)
         error_token(tok, "identifier expected, but got '%s'", token_to_string(tok));
-    return dict_has(ctx->defs, tok->val.str) ? 1 : 0;
+    return dict_has(ctx->defs, tok->val.str);
 }
 
 /*
@@ -599,12 +610,19 @@ static int read_defined(CppContext *ctx) {
     return is_defined(ctx, tok);
 }
 
+/*
+ * Reads an constant expression for #if directive.
+ */
 static int read_constant_expr(CppContext *ctx) {
     if (read_if(ctx, "defined"))
         return read_defined(ctx);
     panic("only defined() is implemented");
 }
 
+/*
+ * #ifdef
+ * (WG14/N1256 6.10.1 Conditional inclusion, paragraph 5)
+ */
 static int read_ifdef(CppContext *ctx) {
     int r = is_defined(ctx, read_cpp_token(ctx));
     expect_newline(ctx);
@@ -614,7 +632,7 @@ static int read_ifdef(CppContext *ctx) {
 /*
  * Handles #if, #elif, #ifdef and #ifndef.  If condition does not meet, the
  * function calls skip_cond_include(), defined in lex.c, to skip all tokens
- * untilt the next #elif, #else of #endif.
+ * until the next #elif, #else of #endif.
  *
  * (WG14/N1256 6.10.1 Conditional inclusion)
  */
@@ -695,6 +713,14 @@ static bool read_funclike_define_args(CppContext *ctx, Dict *param) {
     }
 }
 
+/*
+ * Reads function-like macro body.  Macro body is a sequence of tokens ends with
+ * a newline.
+ *
+ * Macro parameters in the body will be replaced with a special token whose type
+ * is TOKTYPE_MACRO_PARAM.  When macro is executed, these tokens will then be
+ * replaced with macro arguments.
+ */
 static List *read_funclike_define_body(CppContext *ctx, Dict *param) {
     List *body = make_list();
     // Read macro body list
@@ -765,7 +791,7 @@ static void read_undef(CppContext *ctx) {
  * #error
  * (WG14/N1256 6.10.5 Error directive)
  */
-static void read_error_dir(CppContext *ctx, Token *define) {
+static void read_error_directive(CppContext *ctx, Token *define) {
     String *buf = make_string();
     Token *tok = read_cpp_token(ctx);
     while(tok && tok->toktype != TOKTYPE_NEWLINE) {
@@ -787,7 +813,7 @@ static void read_directive(CppContext *ctx) {
     else if (read_if(ctx, "ifndef")) handle_cond_incl(ctx, COND_IFNDEF);
     else if (read_if(ctx, "endif"))  handle_cond_incl(ctx, COND_ENDIF);
     else if ( (tok = read_if(ctx, "error")) ) {
-        read_error_dir(ctx, tok);
+        read_error_directive(ctx, tok);
     } else {
         Token *tok = read_cpp_token(ctx);
         error_token(tok, "unsupported preprocessor directive: '%s'", token_to_string(tok));
@@ -795,7 +821,7 @@ static void read_directive(CppContext *ctx) {
 }
 
 /*==============================================================================
- * Entry function for the main C compiler.
+ * Entry function of the preprocessor.
  *
  * read_token() reads preprocessing tokens by calling read_cpp_token(), which is
  * defined in lex.c.  There are six types of tokens can be returned from
@@ -838,6 +864,6 @@ Token *read_token(ReadContext *readctx) {
         }
         ctx->at_bol = false;
         unget_cpp_token(ctx, tok);
-        return cpp_token_to_token(expand(ctx));
+        return cpp_token_to_token(expand_one(ctx));
     }
 }
