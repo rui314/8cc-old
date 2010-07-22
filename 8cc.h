@@ -309,6 +309,7 @@ typedef struct File {
 
 extern File *make_file(FILE *stream, char *filename);
 extern File *open_file(char *path);
+extern void close_file(File *file);
 extern void unreadc(int c, File *file);
 extern int peekc(File *file);
 extern int readc(File *file);
@@ -369,6 +370,8 @@ typedef enum {
 typedef struct CppContext {
     File *file;
     bool at_bol;
+    // For #include.
+    List *file_stack;
     // Macro definitions.
     Dict *defs;
     // Pushback buffer for preprocessing tokens.
@@ -387,8 +390,10 @@ extern Token *make_str_literal(CppContext *ctx, String *val);
 extern Token *make_cppnum(CppContext *ctx, String *val);
 extern bool is_next_space(CppContext *ctx);
 extern CondInclType skip_cond_incl(CppContext *ctx);
+extern String *read_header_name(CppContext *ctx, bool *std);
 
 extern CppContext *make_cpp_context(File *file);
+extern void push_header_file(CppContext *ctx, String *path);
 extern void unget_cpp_token(CppContext *ctx, Token *tok);
 extern Token *peek_cpp_token(CppContext *ctx);
 extern ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...);

@@ -451,14 +451,14 @@ static void glue_push(List *ls, Token *tok) {
 }
 
 /*
- * Write a string representation of a given token sequence.  Used by
- * "#" operator.
+ * Join tokens in a given list.  If sep is true, a space is put
+ * between tokens.  If false, no separator.
  */
-static Token *stringize(Token *tmpl, List *arg) {
+static String *join_tokens(List *arg, bool sep) {
     String *s = make_string();
     for (int i = 0; i < LIST_LEN(arg); i++) {
         Token *tok = LIST_REF(arg, i);
-        if (STRING_LEN(s) && tok->space)
+        if (sep && STRING_LEN(s) && tok->space)
             o1(s, ' ');
         switch (tok->toktype) {
         case TOKTYPE_IDENT:
@@ -486,9 +486,17 @@ static Token *stringize(Token *tmpl, List *arg) {
             panic("invalid token type: %d", tok->toktype);
         }
     }
+    return s;
+}
+
+/*
+ * Write a string representation of a given token sequence.  Used by
+ * # operator.
+ */
+static Token *stringize(Token *tmpl, List *arg) {
     Token *r = copy_token(tmpl);
     r->toktype = TOKTYPE_STRING;
-    r->val.str = s;
+    r->val.str = join_tokens(arg, true);
     return r;
 }
 
@@ -787,6 +795,61 @@ static void read_undef(CppContext *ctx) {
     dict_delete(ctx->defs, name->val.str);
 }
 
+
+/*
+ * Reads a file name of #include directive.  If the file name is quoted with <>,
+ * "std" will set to true.  If quoted with doublequote, set to false.  We use
+ * expand_one() rather than read_cpp_token(), because macros are allowed to be
+ * used in #include.
+ * (WG14/N1256 6.10.2 Source file inclusion)
+ */
+static String *read_cpp_header_name(CppContext *ctx, bool *std) {
+    if (LIST_IS_EMPTY(ctx->ungotten)) {
+        String *name = read_header_name(ctx, std);
+        if (name)
+            return name;
+    }
+
+    Token *tok = expand_one(ctx);
+    if (!tok || tok->toktype == TOKTYPE_NEWLINE)
+        error_token(tok, "expected file name, but got '%s'", token_to_string(tok));
+    if (tok->toktype == TOKTYPE_STRING) {
+        *std = false;
+        return tok->val.str;
+    }
+    List *tokens = make_list();
+    if (is_punct(tok, '<')) {
+        for (;;) {
+            Token *tok = expand_one(ctx);
+            if (!tok || tok->toktype == TOKTYPE_NEWLINE)
+                error_token(tok, "premature end of header name");
+            if (is_punct(tok, '>'))
+                break;
+            list_push(tokens, tok);
+        }
+        *std = true;
+        return join_tokens(tokens, false);
+    }
+    error_token(tok, "'<' expected, but got '%s'", token_to_string(tok));
+}
+
+static void do_include(CppContext *ctx, String *file, bool std) {
+    if (std)
+        error_cpp_ctx(ctx, "#include <...> is not supported yet");
+    push_header_file(ctx, file);
+}
+
+/*
+ * #include
+ * (WG14/N1256 6.10.2 Source file inclusion)
+ */
+static void handle_include(CppContext *ctx) {
+    bool std;
+    String *file = read_cpp_header_name(ctx, &std);
+    expect_newline(ctx);
+    do_include(ctx, file, std);
+}
+
 /*
  * #error
  * (WG14/N1256 6.10.5 Error directive)
@@ -804,14 +867,15 @@ static void read_error_directive(CppContext *ctx, Token *define) {
 
 static void read_directive(CppContext *ctx) {
     Token *tok;
-    if (read_if(ctx, "define"))      read_define(ctx);
-    else if (read_if(ctx, "undef"))  read_undef(ctx);
-    else if (read_if(ctx, "if"))     handle_cond_incl(ctx, COND_IF);
-    else if (read_if(ctx, "elif"))   handle_cond_incl(ctx, COND_ELIF);
-    else if (read_if(ctx, "else"))   handle_cond_incl(ctx, COND_ELSE);
-    else if (read_if(ctx, "ifdef"))  handle_cond_incl(ctx, COND_IFDEF);
-    else if (read_if(ctx, "ifndef")) handle_cond_incl(ctx, COND_IFNDEF);
-    else if (read_if(ctx, "endif"))  handle_cond_incl(ctx, COND_ENDIF);
+    if (read_if(ctx, "define"))       read_define(ctx);
+    else if (read_if(ctx, "undef"))   read_undef(ctx);
+    else if (read_if(ctx, "if"))      handle_cond_incl(ctx, COND_IF);
+    else if (read_if(ctx, "elif"))    handle_cond_incl(ctx, COND_ELIF);
+    else if (read_if(ctx, "else"))    handle_cond_incl(ctx, COND_ELSE);
+    else if (read_if(ctx, "ifdef"))   handle_cond_incl(ctx, COND_IFDEF);
+    else if (read_if(ctx, "ifndef"))  handle_cond_incl(ctx, COND_IFNDEF);
+    else if (read_if(ctx, "endif"))   handle_cond_incl(ctx, COND_ENDIF);
+    else if (read_if(ctx, "include")) handle_include(ctx);
     else if ( (tok = read_if(ctx, "error")) ) {
         read_error_directive(ctx, tok);
     } else {

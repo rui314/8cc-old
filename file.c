@@ -57,6 +57,10 @@ File *open_file(char *path) {
     return make_file(stream, path);
 }
 
+void close_file(File *file) {
+    fclose(file->stream);
+}
+
 void unreadc(int c, File *file) {
     if (c == EOF)
         return;

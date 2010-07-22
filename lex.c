@@ -57,12 +57,18 @@ CppContext *make_cpp_context(File *file) {
     CppContext *r = malloc(sizeof(CppContext));
     r->file = file;
     r->at_bol = true;
+    r->file_stack = make_list();
     r->defs = make_string_dict();
     r->ungotten = make_list();
     r->in_macro = false;
     r->incl = make_list();
     define_predefined_macros(r);
     return r;
+}
+
+void push_header_file(CppContext *ctx, String *path) {
+    list_push(ctx->file_stack, ctx->file);
+    ctx->file = open_file(STRING_BODY(path));
 }
 
 /*==============================================================================
@@ -585,6 +591,48 @@ CondInclType skip_cond_incl(CppContext *ctx) {
 }
 
 /*==============================================================================
+ * WG14/N1256 6.4.7 Header names
+ *
+ * #include directive needs special tokenize to read a token in <> or "".
+ *
+ * header-name:
+ *     < h-char-sequence >
+ *     " q-char-sequence "
+ * h-char-sequence:
+ *     [^>\n]+
+ * q-char-sequence:
+ *     [^"\n]+
+ */
+
+String *read_header_name(CppContext *ctx, bool *std) {
+    skip_whitespace(ctx);
+    char close;
+    int c = readc(ctx->file);
+    if (c == '"') {
+        close = '"';
+    } else if (c == '<') {
+        close = '>';
+    } else {
+        unreadc(c, ctx->file);
+        return NULL;
+    }
+
+    String *r = make_string();
+    for (;;) {
+        c = readc(ctx->file);
+        if (c == EOF || c == '\n')
+            error_cpp_ctx(ctx, "premature end of header name");
+        if (c == close)
+            break;
+        o1(r, c);
+    }
+    if (STRING_LEN(r) == 0)
+        error_cpp_ctx(ctx, "header name should not be empty");
+    o1(r, '\0');
+    return r;
+}
+
+/*==============================================================================
  * Public interfaces to be used by the preprocessor.
  */
 
@@ -618,6 +666,11 @@ Token *read_cpp_token(CppContext *ctx) {
     while (tok && tok->toktype == TOKTYPE_SPACE) {
         tok = read_cpp_token_int(ctx);
         tok->space = true;
+    }
+    if (!tok && !LIST_IS_EMPTY(ctx->file_stack)) {
+        close_file(ctx->file);
+        ctx->file = list_pop(ctx->file_stack);
+        return read_cpp_token(ctx);
     }
     return tok;
 }
