@@ -448,6 +448,12 @@ runtest 'a' $'printf(\n#ifndef X\n"a"\n#else\n"b"\n#endif\n);'
 runtest 'c' $'printf(\n#if defined(X)\n"a"\n#elif defined(Y)\n"b"\n#else\n"c"\n#endif\n);'
 
 #
+# Null directive
+#
+/bin/echo -e '\nNull directive'
+runtest 'x' $'\n#\nprintf("x");'
+
+#
 # Predefined macros
 #
 /bin/echo -e '\nPredefined macros...'

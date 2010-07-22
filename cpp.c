@@ -815,7 +815,10 @@ static void read_directive(CppContext *ctx) {
     else if ( (tok = read_if(ctx, "error")) ) {
         read_error_directive(ctx, tok);
     } else {
-        Token *tok = read_cpp_token(ctx);
+        tok = read_cpp_token(ctx);
+        if (tok && tok->toktype == TOKTYPE_NEWLINE)
+            // 6.10.7 NULL directive.  Do nothing.
+            return;
         error_token(tok, "unsupported preprocessor directive: '%s'", token_to_string(tok));
     }
 }
