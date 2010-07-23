@@ -465,20 +465,17 @@ static char *keyword_to_string(int v) {
 }
 
 char *token_to_string(Token *tok) {
-    char buf[20];
     String *r = make_string();
     switch (tok->toktype) {
     case TOKTYPE_KEYWORD:
     case TOKTYPE_PUNCT:
         if (tok->val.i < 128)
-            snprintf(buf, sizeof(buf), "%c", tok->val.i);
+            string_printf(r, "%c", tok->val.i);
         else
-            snprintf(buf, sizeof(buf), "%s", keyword_to_string(tok->val.i));
-        string_append(r, buf);
+            string_printf(r, "%s", keyword_to_string(tok->val.i));
         break;
     case TOKTYPE_CHAR:
-        snprintf(buf, sizeof(buf), "'%c'", tok->val.i);
-        string_append(r, buf);
+        string_printf(r, "'%c'", tok->val.i);
         break;
     case TOKTYPE_IDENT:
         string_append(r, STRING_BODY(tok->val.str));
@@ -487,16 +484,13 @@ char *token_to_string(Token *tok) {
         string_append(r, STRING_BODY(tok->val.str));
         break;
     case TOKTYPE_INT:
-        snprintf(buf, sizeof(buf), "%d", tok->val.i);
-        string_append(r, buf);
+        string_printf(r, "%d", tok->val.i);
         break;
     case TOKTYPE_FLOAT:
-        snprintf(buf, sizeof(buf), "%f", tok->val.f);
-        string_append(r, buf);
+        string_printf(r, "%f", tok->val.f);
         break;
     case TOKTYPE_CPPNUM:
-        snprintf(buf, sizeof(buf), "%s", STRING_BODY(tok->val.str));
-        string_append(r, buf);
+        string_printf(r, "%s", STRING_BODY(tok->val.str));
         break;
     case TOKTYPE_SPACE:       panic("got TOKTYPE_SPACE");
     case TOKTYPE_NEWLINE:     panic("got TOKTYPE_NEWLINE");
