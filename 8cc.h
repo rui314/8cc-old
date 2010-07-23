@@ -393,7 +393,7 @@ extern CondInclType skip_cond_incl(CppContext *ctx);
 extern String *read_header_name(CppContext *ctx, bool *std);
 
 extern CppContext *make_cpp_context(File *file);
-extern void push_header_file(CppContext *ctx, String *path);
+extern void do_include(CppContext *ctx, String *path);
 extern void unget_cpp_token(CppContext *ctx, Token *tok);
 extern Token *peek_cpp_token(CppContext *ctx);
 extern ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...);

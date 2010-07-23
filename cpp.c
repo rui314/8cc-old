@@ -833,10 +833,12 @@ static String *read_cpp_header_name(CppContext *ctx, bool *std) {
     error_token(tok, "'<' expected, but got '%s'", token_to_string(tok));
 }
 
-static void do_include(CppContext *ctx, String *file, bool std) {
-    if (std)
-        error_cpp_ctx(ctx, "#include <...> is not supported yet");
-    push_header_file(ctx, file);
+/*
+ * Find a header file for a given header name.  If header was quoted
+ * with <>, std is true.  Otherwise false.
+ */
+static String *resolve_header(CppContext *ctx, String *header, bool std) {
+    return header;
 }
 
 /*
@@ -845,9 +847,10 @@ static void do_include(CppContext *ctx, String *file, bool std) {
  */
 static void handle_include(CppContext *ctx) {
     bool std;
-    String *file = read_cpp_header_name(ctx, &std);
+    String *header = read_cpp_header_name(ctx, &std);
     expect_newline(ctx);
-    do_include(ctx, file, std);
+    String *path = resolve_header(ctx, header, std);
+    do_include(ctx, path);
 }
 
 /*
