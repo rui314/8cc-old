@@ -1,7 +1,5 @@
 *.o
 8cc
-test
-tests
 tmp*
 .tmp*
 *#
@@ -9,3 +7,4 @@ tmp*
 nqueen
 *.orig
 *.rej
+run

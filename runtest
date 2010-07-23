@@ -2,8 +2,6 @@
 export LANG=
 fail=0
 
-./tests || fail=$((fail+1))
-
 runtest_int() {
     local msg=$(echo "$2"|perl -0777 -pe 's/\n/ /g')
     /bin/echo -En "  $msg ... "

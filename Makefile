@@ -12,9 +12,11 @@ tests: $(OBJS1) tests.o 8cc.h
 	$(CC) -Wall $(CFLAGS) -o $@ tests.o $(OBJS1)
 
 clean:
-	-rm -f 8cc $(OBJS) *.o test tests nqueen .tmpTEST*
+	-rm -f 8cc $(OBJS) *.o nqueen .tmpTEST*
+	@cd test; $(MAKE) clean
 
-test: tests 8cc
+test: all
+	@cd test; $(MAKE) test
 	@./runtest
 
 nqueen: 8cc sample/nqueen.c
