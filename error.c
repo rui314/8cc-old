@@ -34,7 +34,7 @@ static void print(char *pre, char *format, va_list ap) {
     fprintf(stderr, "\n");
 }
 
-ATTRIBUTE((noreturn)) static void verror(char *format, va_list ap) {
+static NORETURN void verror(char *format, va_list ap) {
     print("ERROR: ", format, ap);
     exit(-1);
 }

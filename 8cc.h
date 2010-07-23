@@ -123,18 +123,18 @@ typedef intptr_t intptr;
 #define R_X86_64_PC8 15
 
 #ifdef __GNUC__
-# define ATTRIBUTE(x) __attribute__(x)
+# define NORETURN __attribute__((noreturn))
 #else
-# define ATTRIBUTE(x)
+# define NORETURN
 #endif
 
 /*============================================================
  * Common
  */
 
-extern ATTRIBUTE((noreturn)) void error(char *format, ...);
+extern NORETURN void error(char *format, ...);
 extern void warn(char *format, ...);
-extern ATTRIBUTE((noreturn)) void print_parse_error(int line, int column, char *msg, va_list ap);
+extern NORETURN void print_parse_error(int line, int column, char *msg, va_list ap);
 
 #define panic(fmt, ...) error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
 
@@ -393,7 +393,7 @@ extern CppContext *make_cpp_context(File *file);
 extern void do_include(CppContext *ctx, String *path);
 extern void unget_cpp_token(CppContext *ctx, Token *tok);
 extern Token *peek_cpp_token(CppContext *ctx);
-extern ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...);
+extern NORETURN void error_cpp_ctx(CppContext *ctx, char *msg, ...);
 
 /*
  * A special value indicating that the result of macro expansion
@@ -491,7 +491,7 @@ extern List *parse(File *file, Elf *elf);
 extern int ctype_sizeof(Ctype *ctype);
 extern ReadContext *make_read_context(File *file, Elf *elf, CppContext *ctx);
 extern char *token_to_string(Token *tok);
-extern ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...);
+extern NORETURN void error_token(Token *tok, char *msg, ...);
 
 /*============================================================
  * Code generator

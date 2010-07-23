@@ -79,7 +79,7 @@ static bool iswhitespace(int c) {
     return c == ' ' || c == '\t' || c == '\f' || c == '\v';
 }
 
-ATTRIBUTE((noreturn)) void error_cpp_ctx(CppContext *ctx, char *msg, ...) {
+NORETURN void error_cpp_ctx(CppContext *ctx, char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     print_parse_error(ctx->file->line, ctx->file->column, msg, ap);

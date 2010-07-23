@@ -69,13 +69,13 @@ static void read_stmt(ReadContext *ctx);
  * Error handlers
  */
 
-ATTRIBUTE((noreturn)) void error_token(Token *tok, char *msg, ...) {
+NORETURN void error_token(Token *tok, char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     print_parse_error(tok->line, tok->column, msg, ap);
 }
 
-static ATTRIBUTE((noreturn)) void error_ctx(ReadContext *ctx, char *msg, ...) {
+static NORETURN void error_ctx(ReadContext *ctx, char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     print_parse_error(ctx->file->line, ctx->file->column, msg, ap);
