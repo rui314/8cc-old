@@ -60,12 +60,27 @@
 /* First 16 bytes of ELF file on x86-64. */
 static u8 elf_ident[] = {0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-Elf *new_elf(void) {
+static Elf *make_elf(void) {
     Elf *elf = malloc(sizeof(Elf));
     elf->sections = make_list();
     elf->shnum = 0;
     elf->symtabnum = 0;
     elf->syms = make_string_dict();
+    return elf;
+}
+
+Elf *new_elf(void) {
+    Elf *elf = make_elf();
+
+    Section *data = make_section(".data", SHT_PROGBITS);
+    data->flags = SHF_ALLOC | SHF_WRITE;
+    data->align = 4;
+    add_section(elf, data);
+
+    Section *text = make_section(".text", SHT_PROGBITS);
+    text->flags = SHF_ALLOC | SHF_EXECINSTR;
+    text->align = 16;
+    add_section(elf, text);
     return elf;
 }
 

@@ -5,7 +5,7 @@ fail=0
 runtest_int() {
     local msg=$(echo "$2"|perl -0777 -pe 's/\n/ /g')
     /bin/echo -En "  $msg ... "
-    echo "$3" | ./8cc - .tmpTEST$$.o
+    echo "$3" | ../8cc - .tmpTEST$$.o
     gcc -o .tmpTEST$$ .tmpTEST$$.o
     local result="`./.tmpTEST$$`"
     if [ "$result" = "$1" ]; then
@@ -349,125 +349,6 @@ runtest 'Hello world' 'char *p="Hello " "world"; printf("%s", p);'
 /bin/echo -e '\nFlonum type conversion...'
 runtest '3.0' 'float f=3; printf("%.1f", f);'
 runtest '3' 'int i=3.0; printf("%d", i);'
-
-#
-# CPP #define
-#
-/bin/echo -e '\n#define...'
-runtest '3' $'\n#define MSG "%d"\n # define NUM  3 \nprintf(MSG, NUM);'
-runtest '3' $'\n#define FOO(x) x\nprintf("%d", FOO(3));'
-runtest '3' $'\n#define FOO() 3\nprintf("%d", FOO());'
-runtest '3' $'\n#define FOO(x) 3\nprintf("%d", FOO());'
-runtest '3' $'\n#define FOO(x) 3\nprintf("%d", FOO(bar));'
-runtest '5' $'\n#define FOO (x)\nint x=5; printf("%d", FOO);'
-runtest '34' $'\n#define FOO(x, y) x, y\nprintf("%d%d", FOO(3, 4));'
-
-#
-# Recursively expanded macros.
-#
-/bin/echo -e '\nNested macros...'
-runtest 'ok' $'\n#define FOO() "ok"\n#define BAR FOO()\nprintf("%s", BAR);'
-runtest 'ok' $'\n#define FOO() "ok"\n#define BAR() FOO()\nprintf("%s", BAR());'
-# Examples in 6.10.3.5
-runtest 'vers2' $'\n#define str(s) # s\n#define xstr(s) str(s)\n#define INCFILE(n) vers ## n\nprintf("%s", xstr(INCFILE(2)));'
-runtest '1 3' $'int foo = 1;\n#define foo foo, 3\nprintf("%d %d\n", foo);'
-runtest 'hello:hello, world' $'\n#define glue(a, b) a ## b
-#define xglue(a, b) glue(a, b)
-#define HIGHLOW "hello"
-#define LOW LOW ", world"
-printf("%s:%s", glue(HIGH, LOW), xglue(HIGH, LOW));'
-runtest '123 45 67 89' $'\n#define t(x,y,z) x ## y ## z
-printf("%d %d %d %d", t(1,2,3), t(,4,5), t(6,,7), t(8,9,));'
-runtest '10 11 12' $'\n#define t(x,y,z) x ## y ## z
-printf("%d %d %d", t(10,,), t(,11,), t(,,12) t(,,));'
-runtest '0' $'\n#define OBJ_LIKE (1-1)\nprintf("%d", OBJ_LIKE);'
-runtest '0' $'\n#define OBJ_LIKE /* white space */ (1-1) /* other */\nprintf("%d", OBJ_LIKE);'
-runtest '7' $'\n#define FUNC_LIKE(a) ( a )\nprintf("%d", FUNC_LIKE(7));'
-runtest '7' $'\n#define FUNC_LIKE( a )( /* note the white space */ \\\na /* other stuff on this line\n*/ )\nprintf("%d", FUNC_LIKE(7));'
-# More tests
-runtest '2' $'\nint A=1;\n#define A 1+A\n#define B(x) x\nprintf("%d\n", B(A));'
-
-#
-# CPP variable argument list
-#
-/bin/echo -e '\n__VA_ARGS__'
-runtest 'foo' $'\n#define p(...) printf(__VA_ARGS__)\np("%s", "foo");'
-
-#
-# # operator
-#
-/bin/echo -e '\nPreprocessor # operator...'
-runtest 'abc' $'\n#define STR(x) #x\nprintf("%s", STR(abc));'
-runtest '1abc' $'\n#define STR(x, y) x, #y\nprintf("%d%s", STR(1, abc));'
-runtest '123' $'\n#define STR(x) #x\nprintf("%s", STR(123));'
-runtest '123 abc' $'\n#define STR(x) #x\nprintf("%s", STR(123 abc));'
-runtest "'0' '\xfe'" $'\n#define STR(x) #x\nprintf("%s", STR('"'0' '\xfe'));"
-runtest '"a\\\"b"' $'\n#define STR(x) #x\nprintf("%s", STR("a\\\\\\\"b"));'
-runtest '()' $'\n#define C(x) #x\nprintf(C(()));'
-runtest '4.4' $'\n#define CAT(x, y) x ## y\nprintf("%.1f\n", CAT(4, .4));'
-
-#
-# ## operator
-#
-/bin/echo -e '\nPreprocessor ## operator...'
-runtest '7' $'\n#define CONC(x, y) x ## y\nint ab=7; printf("%d", CONC(a, b));'
-
-#
-# Tricky function-like macros
-#
-/bin/echo -e '\nTricky macros...'
-runtest 'x ## y' '
-#define hash_hash # ## #
-#define mkstr(a) # a
-#define in_between(a) mkstr(a)
-#define join(c, d) in_between(c hash_hash d)
-printf("%s", join(x, y));'
-
-#
-# #undef
-#
-/bin/echo -e '\n#undef'
-runtest '3' $'int X=3;\n#define X 17\n#undef X\nprintf("%d", X);'
-# It is not an error if undef's argument is not defined
-runtest '3' $'int X=3;\n#undef X\nprintf("%d", X);'
-
-#
-# #if, #elif, #else and #endif
-#
-/bin/echo -e '\n#if'
-runtest 'a' $'\n#define X\nprintf(\n#if defined(X)\n"a"\n);'
-runtest 'a' $'\n#define X\nprintf(\n#if defined(X)\n"a"\n#else\n"b"\n#endif\n);'
-runtest 'b' $'printf(\n#if defined(X)\n"a"\n#endif\n"b");'
-runtest 'b' $'printf(\n#if defined(X)\n'"'a'"$'\n#else\n"b"\n#endif\n);'
-runtest 'b' $'printf(\n#if defined(X)\n# if foo\n# else\n# endif\n# if bar\n# endif\n"a"\n#else\n"b"\n#endif\n);'
-runtest 'b' $'printf(\n#if defined(X)\n# ifdef\n# endif\n# ifndef\n# endif\n"a"\n#else\n"b"\n#endif\n);'
-runtest 'b' $'printf(\n#ifdef X\n      # ifdef\n# endif\n# ifndef\n# endif\n"a"\n#else\n"b"\n#endif\n);'
-runtest 'a' $'printf(\n#ifndef X\n"a"\n#else\n"b"\n#endif\n);'
-runtest 'c' $'printf(\n#if defined(X)\n"a"\n#elif defined(Y)\n"b"\n#else\n"c"\n#endif\n);'
-
-#
-# Null directive
-#
-/bin/echo -e '\nNull directive'
-runtest 'x' $'\n#\nprintf("x");'
-
-#
-# Predefined macros
-#
-/bin/echo -e '\nPredefined macros...'
-runtest 1 'printf("%d", __8CC__);'
-runtest "$(date '+%b %d %Y')" 'printf("%s", __DATE__);'
-runtest '-' 'printf("%s", __FILE__);'
-runtest 1 'printf("%d", __LINE__);'
-runtest 1 'printf("%d", __STDC__);'
-runtest 1 'printf("%d", __STDC_HOSTED__);'
-runtest 199901 'printf("%d", __STDC_VERSION__);'
-
-#
-# Bigraphs
-#
-/bin/echo -e '\nBigraphs'
-runtest '[ ] { } ##' $'\n#define FOO(x) %:x\nprintf("%s\n", FOO(<: :> <% %> %:%:));'
 
 rm -f .tmpTEST$$ .tmpTEST$$.o
 echo

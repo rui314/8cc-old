@@ -46,7 +46,7 @@ static bool is_punct(Token *tok, int v) {
 
 void expect_newline(CppContext *ctx) {
     Token *tok = read_cpp_token(ctx);
-    if (!tok || tok->toktype != TOKTYPE_NEWLINE)
+    if (tok && tok->toktype != TOKTYPE_NEWLINE)
         error_token(tok, "newline expected, but got '%s'", token_to_string(tok));
 
 }
@@ -153,6 +153,8 @@ static Token *cppnum_to_num(Token *tok) {
 }
 
 static Token *cpp_token_to_token(Token *tok) {
+    if (!tok)
+        return NULL;
     tok->hideset = NULL;
     if (tok->toktype == TOKTYPE_IDENT)
         return to_keyword_maybe(tok);

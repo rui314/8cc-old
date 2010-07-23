@@ -17,7 +17,6 @@ clean:
 
 test: all
 	@cd test; $(MAKE) test
-	@./runtest
 
 nqueen: 8cc sample/nqueen.c
 	./8cc sample/nqueen.c nqueen.o

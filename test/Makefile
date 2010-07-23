@@ -11,6 +11,7 @@ alltests: $(OBJS) main.o
 
 test: alltests
 	@./alltests
+	@./test.sh
 
 clean:
 	-rm -f *.o alltests
