@@ -885,6 +885,16 @@ static void handle_line_directive(CppContext *ctx) {
 }
 
 /*
+ * #pragma
+ * (WG14/N1256 6.10.5 6.10.6 Pragma directive)
+ *
+ * No pragmas including standard C's are not supported for now.
+ */
+static void handle_pragma(CppContext *ctx) {
+    error_cpp_ctx(ctx, "No pragmas supported");
+}
+
+/*
  * #error
  * (WG14/N1256 6.10.5 Error directive)
  */
@@ -911,6 +921,7 @@ static void read_directive(CppContext *ctx) {
     else if (read_if(ctx, "endif"))   handle_cond_incl(ctx, COND_ENDIF);
     else if (read_if(ctx, "include")) handle_include(ctx);
     else if (read_if(ctx, "line"))    handle_line_directive(ctx);
+    else if (read_if(ctx, "pragma"))  handle_pragma(ctx);
     else if ( (tok = read_if(ctx, "error")) ) {
         read_error_directive(ctx, tok);
     } else {
