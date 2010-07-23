@@ -609,8 +609,10 @@ String *read_header_name(CppContext *ctx, bool *std) {
     char close;
     int c = readc(ctx->file);
     if (c == '"') {
+        *std = false;
         close = '"';
     } else if (c == '<') {
+        *std = true;
         close = '>';
     } else {
         unreadc(c, ctx->file);

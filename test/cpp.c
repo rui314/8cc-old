@@ -1,13 +1,22 @@
 #include "unittest.h"
 #include "../cpp.c"
 
-static List *parse_string(char *str) {
+static ReadContext *make_test_read_context(char *str) {
     FILE *stream = create_file(str);
     File *file = make_file(stream, "-");
     Elf *elf = new_elf();
     CppContext *cppctx = make_cpp_context(file);
-    ReadContext *ctx = make_read_context(file, elf, cppctx);
+    return make_read_context(file, elf, cppctx);
+}
 
+static CppContext *make_test_cpp_context(char *str) {
+    FILE *stream = create_file(str);
+    File *file = make_file(stream, "-");
+    return make_cpp_context(file);
+}
+
+static List *parse_string(char *str) {
+    ReadContext *ctx = make_test_read_context(str);
     List *expanded = make_list();
     for (Token *tok = read_token(ctx); tok; tok = read_token(ctx))
         list_push(expanded, tok);
@@ -352,4 +361,37 @@ TEST(cpp_predefined_macros) {
 TEST(cpp_bigraph) {
     test("[ ] { } # ##;",
          "<: :> <% %> %: %:%:;");
+}
+
+/*
+ * #include
+ */
+TEST(cpp_include) {
+    bool std;
+
+    CppContext *ctx = make_test_cpp_context("<foo>");
+    String *header = read_cpp_header_name(ctx, &std);
+    EQ_STR("foo", STRING_BODY(header));
+    EQ(std, true);
+
+    ctx = make_test_cpp_context("\"bar\"");
+    header = read_cpp_header_name(ctx, &std);
+    EQ_STR("bar", STRING_BODY(header));
+    EQ(std, false);
+}
+
+TEST(cpp_include_buffered) {
+    bool std;
+
+    CppContext *ctx = make_test_cpp_context("<foo>");
+    peek_cpp_token(ctx);
+    String *header = read_cpp_header_name(ctx, &std);
+    EQ_STR("foo", STRING_BODY(header));
+    EQ(std, true);
+
+    ctx = make_test_cpp_context("\"bar\"");
+    peek_cpp_token(ctx);
+    header = read_cpp_header_name(ctx, &std);
+    EQ_STR("bar", STRING_BODY(header));
+    EQ(std, false);
 }
