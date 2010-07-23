@@ -34,12 +34,12 @@ static void print(char *pre, char *format, va_list ap) {
     fprintf(stderr, "\n");
 }
 
-void verror(char *format, va_list ap) {
+ATTRIBUTE((noreturn)) static void verror(char *format, va_list ap) {
     print("ERROR: ", format, ap);
     exit(-1);
 }
 
-void vwarn(char *format, va_list ap) {
+static void vwarn(char *format, va_list ap) {
     print("WARN: ", format, ap);
 }
 

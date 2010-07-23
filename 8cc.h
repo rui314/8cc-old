@@ -133,9 +133,7 @@ typedef intptr_t intptr;
  */
 
 extern ATTRIBUTE((noreturn)) void error(char *format, ...);
-extern ATTRIBUTE((noreturn)) void verror(char *format, va_list ap);
 extern void warn(char *format, ...);
-extern void vwarn(char *format, va_list ap);
 extern ATTRIBUTE((noreturn)) void print_parse_error(int line, int column, char *msg, va_list ap);
 
 #define panic(fmt, ...) error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
@@ -290,7 +288,6 @@ typedef struct Elf {
 
 extern Elf *new_elf(void);
 extern void write_elf(FILE *outfile, Elf *elf);
-extern void add_section(Elf *elf, Section *sect);
 extern Section *find_section(Elf *elf, char *name);
 
 /*============================================================
@@ -461,8 +458,6 @@ typedef struct ReadContext {
     CppContext *cppctx;
 } ReadContext;
 
-extern void unget_token(ReadContext *ctx, Token *tok); // for test
-
 typedef union Cvalue {
     char c;
     int i;
@@ -540,10 +535,8 @@ typedef struct Inst {
 } Inst;
 
 extern void assemble(Elf *elf, List *fns);
-extern Section *make_section(char *name, int type);
 extern Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined);
 
-extern Inst *make_inst0(int op);
 extern Inst *make_inst1(int op, void *v0);
 extern Inst *make_inst2(int op, void *v0, void *v1);
 extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);

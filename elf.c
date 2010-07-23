@@ -69,22 +69,7 @@ static Elf *make_elf(void) {
     return elf;
 }
 
-Elf *new_elf(void) {
-    Elf *elf = make_elf();
-
-    Section *data = make_section(".data", SHT_PROGBITS);
-    data->flags = SHF_ALLOC | SHF_WRITE;
-    data->align = 4;
-    add_section(elf, data);
-
-    Section *text = make_section(".text", SHT_PROGBITS);
-    text->flags = SHF_ALLOC | SHF_EXECINSTR;
-    text->align = 16;
-    add_section(elf, text);
-    return elf;
-}
-
-Section *make_section(char *name, int type) {
+static Section *make_section(char *name, int type) {
     Section *sect = malloc(sizeof(Section));
     sect->body = make_string();
     sect->name = malloc(strlen(name) + 1);
@@ -101,9 +86,24 @@ Section *make_section(char *name, int type) {
     return sect;
 }
 
-void add_section(Elf *elf, Section *sect) {
+static void add_section(Elf *elf, Section *sect) {
     list_push(elf->sections, sect);
     sect->shndx = LIST_LEN(elf->sections);
+}
+
+Elf *new_elf(void) {
+    Elf *elf = make_elf();
+
+    Section *data = make_section(".data", SHT_PROGBITS);
+    data->flags = SHF_ALLOC | SHF_WRITE;
+    data->align = 4;
+    add_section(elf, data);
+
+    Section *text = make_section(".text", SHT_PROGBITS);
+    text->flags = SHF_ALLOC | SHF_EXECINSTR;
+    text->align = 16;
+    add_section(elf, text);
+    return elf;
 }
 
 /*============================================================

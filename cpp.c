@@ -268,7 +268,7 @@ void define_predefined_macros(CppContext *ctx) {
 
 static Token *expand_one(CppContext *ctx);
 
-CppContext *make_virt_cpp_context(CppContext *ctx, List *ts) {
+static CppContext *make_virt_cpp_context(CppContext *ctx, List *ts) {
     CppContext *r = make_cpp_context(NULL);
     r->at_bol = false;
     r->defs = ctx->defs;

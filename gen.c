@@ -47,7 +47,7 @@ typedef struct CompiledVar {
     int off;
 } CompiledVar;
 
-CompiledVar *make_compiled_var(int off) {
+static CompiledVar *make_compiled_var(int off) {
     CompiledVar *r = malloc(sizeof(CompiledVar));
     r->off = off;
     return r;
@@ -62,7 +62,7 @@ typedef struct Context {
     int sp;
 } Context;
 
-Context *make_context(Elf *elf) {
+static Context *make_context(Elf *elf) {
     Context *r = malloc(sizeof(Context));
     r->elf = elf;
     r->text = find_section(elf, ".text")->body;
@@ -95,7 +95,7 @@ Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type,
     return sym;
 }
 
-Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend) {
+static Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend) {
     Reloc *rel = malloc(sizeof(Reloc));
     rel->off = off;
     rel->sym = sym;
@@ -116,10 +116,6 @@ static Inst *make_inst(int op, int narg) {
     r->op = op;
     r->args = (0 < narg) ? make_list() : NULL;
     return r;
-}
-
-Inst *make_inst0(int op) {
-    return make_inst(op, 0);
 }
 
 Inst *make_inst1(int op, void *v0) {
@@ -742,7 +738,7 @@ static void handle_jmp(Context *ctx, Inst *inst) {
     }
 }
 
-void handle_return(Context *ctx, Inst *inst) {
+static void handle_return(Context *ctx, Inst *inst) {
     Var *retval = LIST_REF(inst->args, 0);
     load_rax(ctx, retval);
     emit1(ctx, 0xc9); // LEAVE
@@ -841,7 +837,7 @@ static void handle_block(Context *ctx, Block *block) {
     }
 }
 
-void save_params(Context *ctx, Function *func) {
+static void save_params(Context *ctx, Function *func) {
     for (int i = 0; i < LIST_LEN(func->params); i++) {
         Var *param = LIST_REF(func->params, i);
         emit3(ctx, pop_arg[i]);
@@ -849,7 +845,7 @@ void save_params(Context *ctx, Function *func) {
     }
 }
 
-void assemble1(Context *ctx, Function *func) {
+static void assemble1(Context *ctx, Function *func) {
     emit1(ctx, 0x55); // PUSH rbp
     emit3(ctx, 0xe58948); // MOV rbp, rsp
 

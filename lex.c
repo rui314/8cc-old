@@ -539,7 +539,7 @@ static Token *read_cpp_token_int(CppContext *ctx) {
 static void skip_char(CppContext *ctx) { read_char(ctx); }
 static void skip_string(CppContext *ctx) { read_str(ctx); }
 
-void skip_line(CppContext *ctx) {
+static void skip_line(CppContext *ctx) {
     for (;;) {
         int c = readc(ctx->file);
         if (c == '\n')

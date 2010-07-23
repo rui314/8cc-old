@@ -185,7 +185,7 @@ int ctype_sizeof(Ctype *ctype) {
  * Basic block
  */
 
-Block *make_block() {
+static Block *make_block() {
     Block *r = malloc(sizeof(Block));
     r->pos = -1;
     r->code = make_list();
@@ -291,7 +291,7 @@ static Var *unary_conv(ReadContext *ctx, Var *var) {
 /*
  * See C:ARM p.198 6.3.4 The Usual Binary Conversions.
  */
-Ctype *binary_type_conv(Var *v0, Var *v1) {
+static Ctype *binary_type_conv(Var *v0, Var *v1) {
     if (is_flonum(v0->ctype) || is_flonum(v1->ctype))
         return make_ctype(CTYPE_FLOAT);
     return (ctype_sizeof(v0->ctype) < ctype_sizeof(v1->ctype)) ? v1->ctype : v0->ctype;
@@ -434,7 +434,7 @@ static bool is_keyword(Token *tok, int type) {
     return tok->toktype == TOKTYPE_KEYWORD && tok->val.i == type;
 }
 
-void unget_token(ReadContext *ctx, Token *tok) {
+static void unget_token(ReadContext *ctx, Token *tok) {
     list_push(ctx->ungotten, tok);
 }
 
@@ -538,7 +538,7 @@ static void process_continue(ReadContext *ctx, Token *tok) {
  *     character-constant
  *     string-constant
  */
-Var *read_primary_expr(ReadContext *ctx) {
+static Var *read_primary_expr(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     switch (tok->toktype) {
     case TOKTYPE_CHAR:
@@ -595,7 +595,7 @@ Var *read_primary_expr(ReadContext *ctx) {
  *     postdecrement-expression
  *     compound-literal
  */
-Var *read_postfix_expr(ReadContext *ctx) {
+static Var *read_postfix_expr(ReadContext *ctx) {
     return read_primary_expr(ctx);
 }
 
@@ -1022,7 +1022,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
  * function-specifier:
  *     "inline"
  */
-Ctype *read_declaration_spec(ReadContext *ctx) {
+static Ctype *read_declaration_spec(ReadContext *ctx) {
     Ctype *r = NULL;
     Token *tok;
     enum { NONE, SIGNED, UNSIGNED } sign = NONE;
@@ -1085,7 +1085,7 @@ Ctype *read_declaration_spec(ReadContext *ctx) {
     error_token(tok, "both 'signed' and 'unsigned' in declaration specifiers");
 }
 
-Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
+static Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
     int size;
     if (next_token_is(ctx, ']')) {
         size = -1;
@@ -1123,7 +1123,7 @@ Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
  * simple-declarator:
  *     identifier
  */
-Var *read_direct_declarator(ReadContext *ctx, Ctype *ctype) {
+static Var *read_direct_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *r = make_var(ctype);
     Token *tok = read_ident(ctx);
     r->name = tok->val.str;
@@ -1139,7 +1139,7 @@ Var *read_direct_declarator(ReadContext *ctx, Ctype *ctype) {
  * pointer:
  *     "*" type-qualifier* pointer?
  */
-Var *read_pointer_declarator(ReadContext *ctx, Ctype *ctype) {
+static Var *read_pointer_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *r = next_token_is(ctx, '*')
         ? read_pointer_declarator(ctx, ctype)
         : read_direct_declarator(ctx, ctype);
@@ -1152,7 +1152,7 @@ Var *read_pointer_declarator(ReadContext *ctx, Ctype *ctype) {
  *     pointer-declarator
  *     direct-declarator
  */
-Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
+static Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
     if (next_token_is(ctx, '*')) {
         return read_pointer_declarator(ctx, ctype);
     }
@@ -1177,7 +1177,7 @@ Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
  *     pointer-declarator
  *     direct-declarator
  */
-Var *read_initializer(ReadContext *ctx) {
+static Var *read_initializer(ReadContext *ctx) {
     return read_assign_expr(ctx);
 }
 
@@ -1186,7 +1186,7 @@ Var *read_initializer(ReadContext *ctx) {
  *     declarator
  *     declarator "=" initializer
  */
-void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
+static void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *var = read_declarator(ctx, ctype);
     add_local_var(ctx, var->name, var);
     if (next_token_is(ctx, '=')) {
