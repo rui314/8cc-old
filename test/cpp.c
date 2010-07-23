@@ -343,6 +343,19 @@ TEST(cpp_null_directive) {
 }
 
 /*
+ * #line
+ */
+TEST(cpp_line_directive) {
+    test("50",
+         "#line 50\n"
+         "__LINE__");
+
+    test("50 \"foo\"",
+         "#line 50 \"foo\"\n"
+         "__LINE__ __FILE__");
+}
+
+/*
  * Predefined macros
  */
 TEST(cpp_predefined_macros) {

@@ -856,6 +856,35 @@ static void handle_include(CppContext *ctx) {
 }
 
 /*
+ * #line
+ * (WG14/N1256 6.10.4 Line control)
+ *
+ * Line directive must be one of the following form in macro-expanded form:
+ *
+ *     #line digit-sequence
+ *     #line digit-sequence "s-char-sequenceopt"
+ */
+static void handle_line_directive(CppContext *ctx) {
+    Token *tok = expand_one(ctx);
+    if (!tok || tok->toktype != TOKTYPE_CPPNUM)
+        error_token(tok, "number expected, but got '%s'", token_to_string(tok));
+    int line = cppnum_to_num(tok)->val.i;
+
+    tok = expand_one(ctx);
+    if (tok && tok->toktype == TOKTYPE_NEWLINE) {
+        ctx->file->line = line;
+        return;
+    }
+    if (tok && tok->toktype == TOKTYPE_STRING) {
+        expect_newline(ctx);
+        ctx->file->line = line;
+        ctx->file->filename = tok->val.str;
+        return;
+    }
+    error_token(tok, "filename expected, but got '%s'", token_to_string(tok));
+}
+
+/*
  * #error
  * (WG14/N1256 6.10.5 Error directive)
  */
@@ -881,6 +910,7 @@ static void read_directive(CppContext *ctx) {
     else if (read_if(ctx, "ifndef"))  handle_cond_incl(ctx, COND_IFNDEF);
     else if (read_if(ctx, "endif"))   handle_cond_incl(ctx, COND_ENDIF);
     else if (read_if(ctx, "include")) handle_include(ctx);
+    else if (read_if(ctx, "line"))    handle_line_directive(ctx);
     else if ( (tok = read_if(ctx, "error")) ) {
         read_error_directive(ctx, tok);
     } else {
