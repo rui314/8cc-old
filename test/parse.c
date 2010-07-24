@@ -88,3 +88,17 @@ TEST(read_unget_token) {
     TEST_READ_KEYWORDS(ctx, '(');
 }
 
+/*
+ * A function used by sizeof operator.
+ */
+TEST(ctype_sizeof) {
+    EQ(1, ctype_sizeof(make_ctype(CTYPE_CHAR)));
+    EQ(2, ctype_sizeof(make_ctype(CTYPE_SHORT)));
+    EQ(4, ctype_sizeof(make_ctype(CTYPE_INT)));
+    EQ(8, ctype_sizeof(make_ctype(CTYPE_LONG)));
+    EQ(8, ctype_sizeof(make_ctype_ptr(make_ctype(CTYPE_CHAR))));
+    EQ(8, ctype_sizeof(make_ctype_ptr(make_ctype(CTYPE_INT))));
+    EQ(8, ctype_sizeof(make_ctype_ptr(make_ctype_ptr((make_ctype(CTYPE_INT))))));
+    EQ(20, ctype_sizeof(make_ctype_array(make_ctype(CTYPE_CHAR), 20)));
+    EQ(36, ctype_sizeof(make_ctype_array(make_ctype_array(make_ctype(CTYPE_INT), 3), 3)));
+}

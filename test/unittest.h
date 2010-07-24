@@ -42,14 +42,14 @@
 extern List* test_funcs;
 
 #define TEST(name)                                     \
-    static void name(void);                            \
-    CONSTRUCTOR static void name ## _TEST_INIT(void) { \
+    static void TEST_##name(void);                     \
+    CONSTRUCTOR static void name##_TEST_INIT(void) {   \
         if (!test_funcs)                               \
             test_funcs = make_list();                  \
-        list_push(test_funcs, name);                   \
+        list_push(test_funcs, TEST_##name);            \
         list_push(test_funcs, #name);                  \
     }                                                  \
-    static void name(void)
+    static void TEST_##name(void)
 
 #define RUN_TESTS()                                         \
     int main(int argc, char **argv) {                       \
