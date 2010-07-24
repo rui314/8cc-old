@@ -33,9 +33,10 @@
 
 #define SWAP(type, x, y) do { type tmp_ = x; x = y; y = tmp_; } while (0)
 
+Var *read_comma_expr(ReadContext *ctx);
+
 static void emit_assign(ReadContext *ctx, Var *v0, Var *v1);
 static Var *read_assign_expr(ReadContext *ctx);
-static Var *read_comma_expr(ReadContext *ctx);
 static Var *read_unary_expr(ReadContext *ctx);
 static Var *read_func_call(ReadContext *ctx, Token *fntok);
 static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0);
@@ -160,6 +161,20 @@ int ctype_sizeof(Ctype *ctype) {
     }
 }
 
+bool ctype_equal(Ctype *ctype, int type) {
+    if (ctype->ptr) return false;
+    if (ctype->type != type) return false;
+    return true;
+}
+
+static bool require_consts(ReadContext *ctx, Var *v0, Var *v1) {
+    return ctx->in_const_expr
+        && v0->stype == VAR_IMM
+        && v1->stype == VAR_IMM
+        && v0->ctype->type == CTYPE_INT
+        && v1->ctype->type == CTYPE_INT;
+}
+
 /*============================================================
  * Basic block
  */
@@ -185,6 +200,7 @@ ReadContext *make_read_context(File *file, Elf *elf, CppContext *cppctx) {
     r->label = make_string_dict();
     r->label_tbf = make_string_dict();
     r->cppctx = cppctx;
+    r->in_const_expr = false;
     return r;
 }
 
@@ -276,7 +292,31 @@ static Ctype *binary_type_conv(Var *v0, Var *v1) {
     return (ctype_sizeof(v0->ctype) < ctype_sizeof(v1->ctype)) ? v1->ctype : v0->ctype;
 }
 
+static Var *calc_const(int op, Var *v0, Var *v1) {
+    switch (op) {
+#define RETURN_IMM(c_, op_) \
+    case c_: return make_imm(CTYPE_INT, (Cvalue)(v0->val.i op_ v1->val.i))
+    RETURN_IMM('+', +);
+    RETURN_IMM('-', -);
+    RETURN_IMM('/', /);
+    RETURN_IMM('*', *);
+    RETURN_IMM('%', %);
+    RETURN_IMM('<', <);
+    RETURN_IMM('>', >);
+    RETURN_IMM('^', ^);
+    RETURN_IMM('|', |);
+    RETURN_IMM(OP_SHL, <<);
+    RETURN_IMM(OP_SHR, >>);
+#undef RETURN_IMM
+    default:
+        panic("operator %d is not supported yet", op);
+    }
+}
+
 static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
+    if (require_consts(ctx, v0, v1))
+        return calc_const(op, v0, v1);
+
     switch (op) {
     case '+': {
         // C:ARM p.229 7.6.2 Additive Operators.
@@ -324,6 +364,8 @@ static Var *emit_arith(ReadContext *ctx, int op, Var *v0, Var *v1) {
 }
 
 static Var *emit_arith_inst3(ReadContext *ctx, int op, Var *v0, Var *v1) {
+    if (require_consts(ctx, v0, v1))
+        return calc_const(op, v0, v1);
     Var *r = make_var(binary_type_conv(v0, v1));
     emit(ctx, make_inst3(op, r, v0, v1));
     return r;
@@ -414,7 +456,8 @@ static bool is_keyword(Token *tok, int type) {
 }
 
 static void unget_token(ReadContext *ctx, Token *tok) {
-    list_push(ctx->ungotten, tok);
+    if (tok)
+        list_push(ctx->ungotten, tok);
 }
 
 static Token *peek_token(ReadContext *ctx) {
@@ -471,8 +514,10 @@ char *token_to_string(Token *tok) {
     case TOKTYPE_CPPNUM:
         string_printf(r, "%s", STRING_BODY(tok->val.str));
         break;
+    case TOKTYPE_NEWLINE:
+        string_printf(r, "\\n");
+        break;
     case TOKTYPE_SPACE:       panic("got TOKTYPE_SPACE");
-    case TOKTYPE_NEWLINE:     panic("got TOKTYPE_NEWLINE");
     case TOKTYPE_INVALID:     panic("got TOKTYPE_INVALID");
     case TOKTYPE_MACRO_PARAM: panic("got TOKTYPE_MACRO_PARAM");
     }
@@ -713,7 +758,7 @@ static Var *read_unary_expr(ReadContext *ctx) {
  * 15      ,                               left
  */
 static int prec(Token *tok) {
-    if (tok->toktype != TOKTYPE_KEYWORD)
+    if (!tok || tok->toktype != TOKTYPE_KEYWORD)
         return -1;
     switch (tok->val.i) {
     case '[':
@@ -792,8 +837,11 @@ static Var *read_assign_expr(ReadContext *ctx) {
  * comma-expression:
  *     assignment-expression
  *     comma-expression "," assignment-expression
+ *
+ * This function is public because it is used by preprocessor to evaluate #if
+ * directive.
  */
-static Var *read_comma_expr(ReadContext *ctx) {
+Var *read_comma_expr(ReadContext *ctx) {
     return read_expr1(ctx, read_unary_expr(ctx), 15);
 }
 

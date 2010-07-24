@@ -247,11 +247,11 @@ void define_predefined_macros(CppContext *ctx) {
 
 static Token *expand_one(CppContext *ctx);
 
-static CppContext *make_virt_cpp_context(CppContext *ctx, List *ts) {
+static CppContext *make_virt_cpp_context(CppContext *ctx, List *tokens) {
     CppContext *r = make_cpp_context(NULL);
     r->at_bol = false;
     r->defs = ctx->defs;
-    r->ungotten = ts;
+    r->ungotten = list_reverse(tokens);
     r->in_macro = true;
     return r;
 }
@@ -267,7 +267,7 @@ static CppContext *make_virt_cpp_context(CppContext *ctx, List *ts) {
  */
 static List *expand_all(CppContext *ctx, List *ts) {
     List *r = make_list();
-    CppContext *virt = make_virt_cpp_context(ctx, list_reverse(ts));
+    CppContext *virt = make_virt_cpp_context(ctx, ts);
     Token *tok;
     while ((tok = expand_one(virt)) != NULL)
         list_push(r, tok);
@@ -588,7 +588,7 @@ static bool is_defined(CppContext *ctx, Token *tok) {
  *
  * (WG14/N1256 6.10.1 Conditional inclusion, paragraph 1)
  */
-static int read_defined(CppContext *ctx) {
+static Token *read_defined(CppContext *ctx) {
     Token *tok = read_cpp_token(ctx);
     if (is_punct(tok, '(')) {
         tok = read_cpp_token(ctx);
@@ -596,16 +596,52 @@ static int read_defined(CppContext *ctx) {
         if (!tok1 || !is_punct(tok1, ')'))
             error_token(tok1, "')' expected, but got '%s'", token_to_string(tok1));
     }
-    return is_defined(ctx, tok);
+    Token *r = copy_token(tok);
+    r->toktype = TOKTYPE_CPPNUM;
+    r->val.i = is_defined(ctx, tok);
+    return r;
 }
 
 /*
- * Reads an constant expression for #if directive.
+ * Evaluate a given tokens as an integer constant expression and returns the
+ * result.
+ */
+static int eval_const_expr(CppContext *cppctx, List *tokens) {
+    if (LIST_LEN(tokens) == 1 && ((Token *)LIST_REF(tokens, 0))->toktype == TOKTYPE_CPPNUM)
+        return ((Token *)LIST_REF(tokens, 0))->val.i;
+
+    CppContext *virt = make_virt_cpp_context(cppctx, tokens);
+    ReadContext *readctx = make_read_context(cppctx->file, NULL, virt);
+    readctx->in_const_expr = true;
+    Var *var = read_comma_expr(readctx);
+
+    Token *tok = read_token(readctx);
+    if (tok)
+        error_token(tok, "newline expected, but got '%s'", token_to_string(tok));
+
+    assert(var->stype == VAR_IMM);
+    if (!ctype_equal(var->ctype, CTYPE_INT))
+        error_cpp_ctx(cppctx, "integer expected");
+    return var->val.i;
+}
+
+/*
+ * Reads an constant expression for #if directive.  In preprocessor constant
+ * expression, all undefined identifiers are replaced with 0.
+ *
+ * (WG14/N1256 6.10.1 * Conditional inclusion, paragraph 4)
  */
 static int read_constant_expr(CppContext *ctx) {
-    if (read_if(ctx, "defined"))
-        return read_defined(ctx);
-    panic("only defined() is implemented");
+    List *tokens = make_list();
+    for (;;) {
+        Token *tok = expand_one(ctx);
+        if (!tok || tok->toktype == TOKTYPE_NEWLINE)
+            break;
+        if (tok->toktype == TOKTYPE_IDENT && !strcmp("defined", STRING_BODY(tok->val.str)))
+            tok = read_defined(ctx);
+        list_push(tokens, tok);
+    }
+    return eval_const_expr(ctx, tokens);
 }
 
 /*

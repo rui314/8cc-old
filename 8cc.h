@@ -406,6 +406,8 @@ extern void define_predefined_macros(CppContext *ctx);
  * Parser
  */
 
+struct Var;
+
 /*
  * Represents basic block of program.  Code must contain one of OP_RETURN OP_JMP
  * or OP_IF which is the end of the basic block.  Other instructions following
@@ -447,8 +449,10 @@ typedef struct ReadContext {
     // label and the block is stored to the dictionary.  Such blocks are
     // processed when the labels are read.
     Dict *label_tbf;
-    // For CPP
+    // For CPP.
     CppContext *cppctx;
+    // True if constant expression is needed.
+    bool in_const_expr;
 } ReadContext;
 
 typedef union Cvalue {
@@ -482,8 +486,10 @@ typedef struct Ctype {
 extern void parser_init(); // for testing
 extern List *parse(File *file, Elf *elf);
 extern int ctype_sizeof(Ctype *ctype);
+extern bool ctype_equal(Ctype *ctype, int type);
 extern ReadContext *make_read_context(File *file, Elf *elf, CppContext *ctx);
 extern char *token_to_string(Token *tok);
+extern struct Var *read_comma_expr(ReadContext *ctx);
 extern NORETURN void error_token(Token *tok, char *msg, ...);
 
 /*============================================================

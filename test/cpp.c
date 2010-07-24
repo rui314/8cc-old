@@ -339,6 +339,28 @@ TEST(cpp_conditional_include) {
 }
 
 /*
+ * Integer constant expression
+ */
+TEST(cpp_constant_expr) {
+    test("a",
+         "#if 1 + 2\n"
+         "a\n"
+         "#endif");
+    test("b",
+         "#if 1 - 1\n"
+         "a\n"
+         "#else\n"
+         "b\n"
+         "#endif");
+    test("a",
+         "#if 2 / 1\n"
+         "a\n"
+         "#else\n"
+         "b\n"
+         "#endif");
+}
+
+/*
  * Null directive
  */
 TEST(cpp_null_directive) {
