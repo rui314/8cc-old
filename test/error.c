@@ -7,9 +7,10 @@
 #include "../error.c"
 
 TEST(error) {
-    on_error_dst = malloc(sizeof(jmp_buf));
-    if (!setjmp(*on_error_dst))
-        error("foo");
-    on_error_dst = NULL;
-    EQ_STR("ERROR: foo", STRING_BODY(on_error_msg));
+    Exception *e = make_exception();
+    if (CATCH_ERROR(e)) {
+        EQ_STR("ERROR: foo", STRING_BODY(e->msg));
+        return;
+    }
+    error("foo");
 }

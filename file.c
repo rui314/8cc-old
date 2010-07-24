@@ -8,7 +8,11 @@
 #include "8cc.h"
 
 /*
- * A wrapper object for stdio's FILE.
+ * A wrapper object for stdio's FILE.  You can pushback up to two characters to
+ * a File.
+ *
+ * You can parse C source by peeking one character.  The only case I know of
+ * where you have to peek two characters is %:%: (bigraph token ##).
  */
 
 File *make_file(FILE *stream, char *filename) {

@@ -7,8 +7,13 @@
 
 #include "8cc.h"
 
-jmp_buf *on_error_dst;
-String *on_error_msg;
+Exception *current_handler;
+
+Exception *make_exception(void) {
+    Exception *e = malloc(sizeof(Exception));
+    e->msg = NULL;
+    return e;
+}
 
 static void print(char *pre, char *format, va_list ap) {
     fprintf(stderr, "%s", pre);
@@ -17,11 +22,13 @@ static void print(char *pre, char *format, va_list ap) {
 }
 
 static NORETURN void verror(char *format, va_list ap) {
-    if (on_error_dst) {
-        on_error_msg = make_string();
-        string_append(on_error_msg, "ERROR: ");
-        string_vprintf(on_error_msg, format, ap);
-        longjmp(*on_error_dst, 1);
+    if (current_handler) {
+        Exception *e = current_handler;
+        current_handler = NULL;
+        e->msg = make_string();
+        string_append(e->msg, "ERROR: ");
+        string_vprintf(e->msg, format, ap);
+        longjmp(e->jmpbuf, 1);
     }
     print("ERROR: ", format, ap);
     exit(-1);

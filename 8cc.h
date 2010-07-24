@@ -145,8 +145,14 @@ extern String *make_string_printf(char *format, ...);
  * Error Handlers
  */
 
-extern jmp_buf *on_error_dst;
-extern String *on_error_msg;
+typedef struct Exception {
+    jmp_buf jmpbuf;
+    String *msg;
+} Exception;
+
+extern Exception *current_handler;
+
+#define CATCH_ERROR(e_) (current_handler = (e_), setjmp((e_)->jmpbuf))
 
 extern NORETURN void error(char *format, ...);
 extern void warn(char *format, ...);
