@@ -285,13 +285,22 @@ extern Section *find_section(Elf *elf, char *name);
  * File
  */
 
+#define FILE_STDIO  1
+#define FILE_STRING 2
+
 typedef struct File {
+    int type;  // FILE_STDIO or FILE_STRING
+    // If FILE_STDIO
     FILE *stream;
+    // If FILE_STRING
+    char *buf;
+    int pos;
+
     int line;
     int column;
     int last_column;
     String *filename;
-    int ungotten;
+    int ungotten[2];
     bool eof_flag;
 } File;
 

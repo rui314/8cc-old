@@ -6,13 +6,28 @@
 #include "unittest.h"
 #include "../file.c"
 
+static File *mkfile(char *str) {
+    return make_string_file(to_string(str));
+}
+
 /*
  * File IO
  */
 
-TEST(file_unreadc) {
+TEST(stdio_file) {
     FILE *stream = create_file("a\n");
-    File *file = make_file(stream, "-");
+    File *file = make_file(stream, "foo");
+    EQ_STR(STRING_BODY(file->filename), "foo");
+    EQ_CHAR('a', readc(file));
+}
+
+TEST(string_file) {
+    File *file = mkfile("a\n");
+    EQ_CHAR('a', readc(file));
+}
+
+TEST(file_unreadc) {
+    File *file = mkfile("a\n");
     EQ(1, file->line);
     EQ(1, file->column);
     EQ_CHAR('a', readc(file));
@@ -29,8 +44,7 @@ TEST(file_unreadc) {
 }
 
 TEST(file_next_char_is) {
-    FILE *stream = create_file("ab");
-    File *file = make_file(stream, "-");
+    File *file = mkfile("ab");
     EQ(false, next_char_is(file, 'b'));
     EQ(false, next_char_is(file, 'b'));
     EQ(true,  next_char_is(file, 'a'));
@@ -39,10 +53,7 @@ TEST(file_next_char_is) {
 }
 
 TEST(file_simple) {
-    char *data = "ab\nc\r\r\nd\r";
-    FILE *stream = create_file(data);
-    File *file = make_file(stream, "foo");
-    EQ_STR(STRING_BODY(file->filename), "foo");
+    File *file = mkfile("ab\nc\r\r\nd\r");
 
     EQ(1, file->line);
     EQ(1, file->column);
@@ -64,9 +75,7 @@ TEST(file_simple) {
 }
 
 TEST(file_backslash_at_eol) {
-    char *data = "2\\\n0\\\r\n10";
-    FILE *stream = create_file(data);
-    File *file = make_file(stream, "foo");
+    File *file = mkfile("2\\\n0\\\r\n10");
 
     EQ(1, file->line);
     EQ(1, file->column);
