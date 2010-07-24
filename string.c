@@ -25,7 +25,7 @@ String *to_string(char *str) {
     int needed = strlen(str) + 1;
     if (size < needed) size <<= 1;
     String *r = make_string_int(size);
-    out(r, str, needed);
+    string_append(r, str);
     return r;
 }
 

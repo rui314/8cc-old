@@ -25,8 +25,7 @@ static NORETURN void verror(char *format, va_list ap) {
     if (current_handler) {
         Exception *e = current_handler;
         current_handler = NULL;
-        e->msg = make_string();
-        string_append(e->msg, "ERROR: ");
+        e->msg = to_string("ERROR: ");
         string_vprintf(e->msg, format, ap);
         longjmp(e->jmpbuf, 1);
     }
@@ -51,8 +50,7 @@ void warn(char *format, ...) {
 }
 
 NORETURN void print_parse_error(int line, int column, char *msg, va_list ap) {
-    String *b = make_string();
-    string_printf(b, "Line %d:%d: ", line, column);
+    String *b = make_string_printf("Line %d:%d: ", line, column);
     string_append(b, msg);
     verror(STRING_BODY(b), ap);
 }

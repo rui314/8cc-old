@@ -824,9 +824,7 @@ static String *construct_path(String *path0, String *path1) {
     char *s1 = STRING_BODY(path1);
     if (!*s0)
         return path1;
-    String *r = make_string();
-    string_printf(r, "%s/%s", s0, s1);
-    return r;
+    return make_string_printf("%s/%s", s0, s1);
 }
 
 /*

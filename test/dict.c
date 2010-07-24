@@ -21,15 +21,13 @@ TEST(dict) {
 
     // test rehashing
     for (int i = 0; i < DICT_INITIAL_SIZE * 2; i++) {
-        char buf[] = "0123456789";
-        sprintf(buf, "key%d", i);
-        dict_put(dict, to_string(buf), (void *)(long)i);
+        String *b = make_string_printf("key%d", i);
+        dict_put(dict, b, (void *)(long)i);
     }
     EQ(1 + DICT_INITIAL_SIZE * 2, dict->nelem);
     for (int i = 0; i < DICT_INITIAL_SIZE * 2; i++) {
-        char buf[] = "0123456789";
-        sprintf(buf, "key%d", i);
-        EQ(i, (int)(long)dict_get(dict, to_string(buf)));
+        String *b = make_string_printf("key%d", i);
+        EQ(i, (int)(long)dict_get(dict, b));
     }
 
     // Store duplicate key
