@@ -114,7 +114,7 @@ void string_seek(String *b, int pos) {
     b->pos = pos;
 }
 
-static void string_vprintf(String *b, char *format, va_list ap) {
+void string_vprintf(String *b, char *format, va_list ap) {
     char buf[256];
     int required = vsnprintf(buf, sizeof(buf), format, ap);
     if (required < sizeof(buf)) {

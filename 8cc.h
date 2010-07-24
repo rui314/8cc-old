@@ -34,6 +34,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -129,16 +130,6 @@ typedef intptr_t intptr;
 #endif
 
 /*============================================================
- * Common
- */
-
-extern NORETURN void error(char *format, ...);
-extern void warn(char *format, ...);
-extern NORETURN void print_parse_error(int line, int column, char *msg, va_list ap);
-
-#define panic(fmt, ...) error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
-
-/*============================================================
  * Byte String
  */
 
@@ -167,8 +158,22 @@ extern void o4(String *b, u32 data);
 extern void o8(String *b, u64 data);
 extern void align(String *b, int n);
 extern void string_seek(String *b, int pos);
+extern void string_vprintf(String *b, char *format, va_list ap);
 extern void string_printf(String *b, char *format, ...);
 extern String *make_string_printf(char *format, ...);
+
+/*============================================================
+ * Error Handlers
+ */
+
+extern jmp_buf *on_error_dst;
+extern String *on_error_msg;
+
+extern NORETURN void error(char *format, ...);
+extern void warn(char *format, ...);
+extern NORETURN void print_parse_error(int line, int column, char *msg, va_list ap);
+
+#define panic(fmt, ...) error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
 
 /*============================================================
  * List
