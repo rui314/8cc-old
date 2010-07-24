@@ -62,13 +62,14 @@ CppContext *make_cpp_context(File *file) {
     r->ungotten = make_list();
     r->in_macro = false;
     r->incl = make_list();
+    r->include_path = make_list();
     define_predefined_macros(r);
     return r;
 }
 
-void do_include(CppContext *ctx, String *path) {
+void do_include(CppContext *ctx, File *file) {
     list_push(ctx->file_stack, ctx->file);
-    ctx->file = open_file(STRING_BODY(path));
+    ctx->file = file;
 }
 
 /*==============================================================================

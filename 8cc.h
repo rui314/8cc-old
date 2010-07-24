@@ -189,6 +189,7 @@ typedef struct List {
 #define LIST_IS_EMPTY(lis) ((lis)->len == 0)
 
 extern List *make_list(void);
+extern List *make_list1(void *e);
 extern void list_push(List *list, void *e);
 extern void list_push(List *list, void *e);
 extern void *list_pop(List *list);
@@ -377,6 +378,8 @@ typedef struct CppContext {
     bool in_macro;
     // Used by conditional inclusion, such as #if.
     List *incl;
+    // System include paths
+    List *include_path;
 } CppContext;
 
 extern Token *read_cpp_token(CppContext *ctx);
@@ -390,7 +393,7 @@ extern CondInclType skip_cond_incl(CppContext *ctx);
 extern String *read_header_name(CppContext *ctx, bool *std);
 
 extern CppContext *make_cpp_context(File *file);
-extern void do_include(CppContext *ctx, String *path);
+extern void do_include(CppContext *ctx, File *file);
 extern void unget_cpp_token(CppContext *ctx, Token *tok);
 extern Token *peek_cpp_token(CppContext *ctx);
 extern NORETURN void error_cpp_ctx(CppContext *ctx, char *msg, ...);

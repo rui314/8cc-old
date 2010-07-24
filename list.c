@@ -42,6 +42,12 @@ List *make_list(void) {
     return make_list_int(LIST_INITIAL_SIZE);
 }
 
+List *make_list1(void *e) {
+    List *r = make_list();
+    list_push(r, e);
+    return r;
+}
+
 static void ensure_room(List *list) {
     if (list->len < list->nalloc) return;
     int newsize = list->nalloc * 2;

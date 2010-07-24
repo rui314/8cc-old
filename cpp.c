@@ -805,19 +805,20 @@ static void read_undef(CppContext *ctx) {
  * used in #include.
  * (WG14/N1256 6.10.2 Source file inclusion)
  */
-static String *read_cpp_header_name(CppContext *ctx, bool *std) {
+static void read_cpp_header_name(CppContext *ctx, String **name, bool *std) {
     if (LIST_IS_EMPTY(ctx->ungotten)) {
-        String *name = read_header_name(ctx, std);
+        *name = read_header_name(ctx, std);
         if (name)
-            return name;
+            return;
     }
 
     Token *tok = expand_one(ctx);
     if (!tok || tok->toktype == TOKTYPE_NEWLINE)
         error_token(tok, "expected file name, but got '%s'", token_to_string(tok));
     if (tok->toktype == TOKTYPE_STRING) {
+        *name = tok->val.str;
         *std = false;
-        return tok->val.str;
+        return;
     }
     List *tokens = make_list();
     if (is_punct(tok, '<')) {
@@ -829,18 +830,41 @@ static String *read_cpp_header_name(CppContext *ctx, bool *std) {
                 break;
             list_push(tokens, tok);
         }
+        *name = join_tokens(tokens, false);
         *std = true;
-        return join_tokens(tokens, false);
+        return;
     }
     error_token(tok, "'<' expected, but got '%s'", token_to_string(tok));
 }
 
 /*
- * Find a header file for a given header name.  If header was quoted
- * with <>, std is true.  Otherwise false.
+ * Constructs a file path by joining path0 and path1.
  */
-static String *resolve_header(CppContext *ctx, String *header, bool std) {
-    return header;
+static String *construct_path(String *path0, String *path1) {
+    char *s0 = STRING_BODY(path0);
+    char *s1 = STRING_BODY(path1);
+    if (!*s0)
+        return path1;
+    String *r = make_string();
+    string_printf(r, "%s/%s", s0, s1);
+    return r;
+}
+
+/*
+ * Find a header file for a given header name.  If header was quoted
+ * with <>, list "path" would include "/usr/include" and
+ * "/usr/local/include".  Otherwise just "".
+ */
+
+static File *open_header(CppContext *ctx, String *name, List *paths) {
+    for (int i = 0; i < LIST_LEN(paths); i++) {
+        String *path = construct_path((String *)LIST_REF(paths, i), name);
+        FILE *stream = fopen(STRING_BODY(path), "r");
+        if (!stream)
+            continue;
+        return make_file(stream, STRING_BODY(path));
+    }
+    error_cpp_ctx(ctx, "Cannot find header: '%s'", STRING_BODY(name));
 }
 
 /*
@@ -848,11 +872,16 @@ static String *resolve_header(CppContext *ctx, String *header, bool std) {
  * (WG14/N1256 6.10.2 Source file inclusion)
  */
 static void handle_include(CppContext *ctx) {
+    String *name;
     bool std;
-    String *header = read_cpp_header_name(ctx, &std);
+    read_cpp_header_name(ctx, &name, &std);
     expect_newline(ctx);
-    String *path = resolve_header(ctx, header, std);
-    do_include(ctx, path);
+
+    List *include_path = std
+        ? ctx->include_path
+        : make_list1(to_string(""));
+    File *file = open_header(ctx, name, include_path);
+    do_include(ctx, file);
 }
 
 /*

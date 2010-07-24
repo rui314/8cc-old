@@ -380,31 +380,47 @@ TEST(cpp_bigraph) {
  * #include
  */
 TEST(cpp_include) {
+    String *name;
     bool std;
 
     CppContext *ctx = make_test_cpp_context("<foo>");
-    String *header = read_cpp_header_name(ctx, &std);
-    EQ_STR("foo", STRING_BODY(header));
+    read_cpp_header_name(ctx, &name, &std);
+    EQ_STR("foo", STRING_BODY(name));
     EQ(std, true);
 
     ctx = make_test_cpp_context("\"bar\"");
-    header = read_cpp_header_name(ctx, &std);
-    EQ_STR("bar", STRING_BODY(header));
+    read_cpp_header_name(ctx, &name, &std);
+    EQ_STR("bar", STRING_BODY(name));
     EQ(std, false);
 }
 
 TEST(cpp_include_buffered) {
+    String *name;
     bool std;
 
     CppContext *ctx = make_test_cpp_context("<foo>");
     peek_cpp_token(ctx);
-    String *header = read_cpp_header_name(ctx, &std);
-    EQ_STR("foo", STRING_BODY(header));
+    read_cpp_header_name(ctx, &name, &std);
+    EQ_STR("foo", STRING_BODY(name));
     EQ(std, true);
 
     ctx = make_test_cpp_context("\"bar\"");
     peek_cpp_token(ctx);
-    header = read_cpp_header_name(ctx, &std);
-    EQ_STR("bar", STRING_BODY(header));
+    read_cpp_header_name(ctx, &name, &std);
+    EQ_STR("bar", STRING_BODY(name));
     EQ(std, false);
+}
+
+TEST(cpp_open_header) {
+    CppContext *ctx = make_test_cpp_context("");
+    List *paths = make_list();
+    list_push(paths, to_string("/"));
+    list_push(paths, to_string("/dev"));
+    list_push(paths, to_string(""));
+
+    File *file = open_header(ctx, to_string("null"), paths);
+    EQ_STR("/dev/null", STRING_BODY(file->filename));
+
+    file = open_header(ctx, to_string("../8cc.h"), paths);
+    EQ_STR("../8cc.h", STRING_BODY(file->filename));
 }
