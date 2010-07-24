@@ -14,4 +14,4 @@ test: alltests
 	@./test.sh
 
 clean:
-	-rm -f *.o alltests
+	-rm -f *.o alltests .tmpTEST*
