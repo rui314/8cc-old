@@ -74,7 +74,7 @@ Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type,
     return sym;
 }
 
-static Reloc *make_reloc(long off, char *sym, char *section, int type, u64 addend) {
+static Reloc *make_reloc(long off, char *sym, Section *section, int type, u64 addend) {
     Reloc *rel = malloc(sizeof(Reloc));
     rel->off = off;
     rel->sym = sym;
@@ -170,7 +170,7 @@ static int var_stack_pos(Context *ctx, Var *var) {
     return cvar->off;
 }
 
-static void add_reloc(Section *text, long off, char *sym, char *section, int type, u64 addend) {
+static void add_reloc(Section *text, long off, char *sym, Section *section, int type, u64 addend) {
     Reloc *rel = make_reloc(off, sym, section, type, addend);
     list_push(text->rels, rel);
 }
@@ -197,10 +197,11 @@ static void load_imm(Context *ctx, Var *var, u16 op) {
     }
     if (var->ctype->type == CTYPE_ARRAY) {
         Section *text = find_section(ctx->elf, ".text");
+        Section *data = find_section(ctx->elf, ".data");
         // MOV rax/r11, imm
         emit2(ctx, op);
         int off = var_abs_pos(ctx, var);
-        add_reloc(text, STRING_LEN(ctx->text), NULL, ".data", R_X86_64_64, off);
+        add_reloc(text, STRING_LEN(ctx->text), NULL, data, R_X86_64_64, off);
         emit8(ctx, 0);
         return;
     }

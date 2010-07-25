@@ -10,6 +10,8 @@
 
 List* test_funcs;
 
+static bool run_in_memory;
+
 void eq_str(int line, char *expected, char *got) {
     if (strcmp(expected, got))
         error("line %d: \"%s\" expected, but got \"%s\"", line, expected, got);
@@ -92,27 +94,37 @@ static void run_command(char *command, ...) {
         error("'%s' failed", command);
 }
 
+static String *read_fd(int fd) {
+    char buf[512];
+    String *b = make_string();
+    for (;;) {
+        int nread = read(fd, buf, sizeof(buf));
+        if (nread == 0) break;
+        out(b, buf, nread);
+    }
+    o1(b, '\0');
+    close(fd);
+    return b;
+}
+
+static int wait_child(pid_t pid) {
+    int status;
+    do {
+        if (waitpid(pid, &status, 0) < 0)
+            perror("waitpid failed:");
+    } while (!WIFEXITED(status));
+    return WEXITSTATUS(status);
+}
+
 static String *run_command_string(char *command) {
     int pipefd[2];
     pid_t pid;
-    int status;
     pipe(pipefd);
     if ( (pid = fork()) ) {
         close(pipefd[1]);
-        char buf[512];
-        String *b = make_string();
-        for (;;) {
-            int nread = read(pipefd[0], buf, sizeof(buf));
-            if (nread == 0) break;
-            out(b, buf, nread);
-        }
-        do {
-            if (waitpid(pid, &status, 0) < 0)
-                perror("waitpid failed:");
-        } while (!WIFEXITED(status));
-        if (WEXITSTATUS(status))
+        String *b = read_fd(pipefd[0]);
+        if (wait_child(pid))
             error("'%s' failed", command);
-        o1(b, '\0');
         return b;
     } else {
         close(pipefd[0]);
@@ -123,7 +135,30 @@ static String *run_command_string(char *command) {
     }
 }
 
+static void run_fast_test(char *expected, char *input) {
+    pid_t pid;
+    int pipefd[2];
+    pipe(pipefd);
+    if ( (pid = fork()) ) {
+        close(pipefd[1]);
+        String *b = read_fd(pipefd[0]);
+        if (wait_child(pid))
+            error("'%s' failed", input);
+        EQ_STR(expected, STRING_BODY(b));
+    } else {
+        close(pipefd[0]);
+        dup2(pipefd[1], 1);
+        close(pipefd[1]);
+        exit(run_string(input));
+    }
+}
+
 static void test(char *expected, char *input) {
+    if (run_in_memory) {
+        run_fast_test(expected, input);
+        return;
+    }
+
     char source[] = ".tmpTEST-src-XXXXXX";
     int fd = mkstemp(source);
     FILE *file = fdopen(fd, "w");
@@ -501,10 +536,16 @@ TEST(float_to_int) {
 
 int main(int argc, char **argv) {
     printf("Running unit tests ...\n");
-    pthread_mutex_lock(&test_lock);
-    nthreads = 4;
-    start_test_threads(nthreads);
-    while (nthreads)
-        pthread_cond_wait(&test_cond, &test_lock);
+    if (argc == 2 && !strcmp(argv[1], "-n")) {
+        run_in_memory = false;
+        thread_main(NULL);
+    } else {
+        run_in_memory = true;
+        pthread_mutex_lock(&test_lock);
+        nthreads = 4;
+        start_test_threads(nthreads);
+        while (nthreads)
+            pthread_cond_wait(&test_cond, &test_lock);
+    }
     printf("ALL TESTS PASSED\n");
 }

@@ -245,11 +245,13 @@ typedef struct Section {
     int flags;
     int align;
     int link;
-    List *rels;
+    List *rels; // list of Reloc
     int info;
     int entsize;
     int shndx;
     int symindex;
+    // For executing binary in memory.
+    void *memory_pos;
 } Section;
 
 typedef struct Symbol {
@@ -266,7 +268,7 @@ typedef struct Symbol {
 typedef struct Reloc {
     long off;
     char *sym;
-    char *section;
+    Section *section;
     int type;
     u64 addend;
 } Reloc;
@@ -281,6 +283,7 @@ typedef struct Elf {
 extern Elf *new_elf(void);
 extern void write_elf(FILE *outfile, Elf *elf);
 extern Section *find_section(Elf *elf, char *name);
+extern Symbol *find_symbol(Elf *elf, char *name);
 
 /*============================================================
  * File
@@ -555,3 +558,9 @@ extern Inst *make_instn(int op, List *args);
 extern bool is_flonum(Ctype *ctype);
 
 #endif /* ECC_H */
+
+/*============================================================
+ * Code executor
+ */
+
+extern int run_string(char *code);

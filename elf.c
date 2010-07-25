@@ -62,6 +62,7 @@ static Section *make_section(char *name, int type) {
     sect->info = 0;
     sect->entsize = 0;
     sect->symindex = 0;
+    sect->memory_pos = NULL;
     return sect;
 }
 
@@ -175,7 +176,7 @@ static void add_symtab(Elf *elf) {
  * Relocations
  */
 
-static Symbol *find_symbol(Elf *elf, char *name) {
+Symbol *find_symbol(Elf *elf, char *name) {
     Symbol *sym = dict_get(elf->syms, to_string(name));
     if (!sym)
         error("cannot find symbol '%s'", name);
@@ -195,7 +196,7 @@ static void add_reloc(Elf *elf) {
             if (rel->sym) {
                 o8(b, ELF64_R_INFO(find_symbol(elf, rel->sym)->index, rel->type));
             } else {
-                o8(b, ELF64_R_INFO(find_section(elf, rel->section)->symindex, rel->type));
+                o8(b, ELF64_R_INFO(rel->section->symindex, rel->type));
             }
             o8(b, rel->addend);
         }
