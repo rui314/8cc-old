@@ -152,8 +152,9 @@ typedef struct Exception {
 
 extern Exception *current_handler;
 
-#define CATCH_ERROR(e_) (current_handler = (e_), setjmp((e_)->jmpbuf))
+#define TRY(e_) (current_handler = (e_), !setjmp((e_)->jmpbuf))
 
+extern Exception *make_exception(void);
 extern NORETURN void error(char *format, ...);
 extern void warn(char *format, ...);
 extern NORETURN void print_parse_error(int line, int column, char *msg, va_list ap);

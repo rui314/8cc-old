@@ -8,9 +8,7 @@
 
 TEST(error) {
     Exception *e = make_exception();
-    if (CATCH_ERROR(e)) {
-        EQ_STR("ERROR: foo", STRING_BODY(e->msg));
-        return;
-    }
-    error("foo");
+    if (TRY(e))
+        error("foo");
+    EQ_STR("ERROR: foo", STRING_BODY(e->msg));
 }
