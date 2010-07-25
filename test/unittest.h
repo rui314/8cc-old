@@ -44,4 +44,4 @@ extern List* test_funcs;
 
 extern void eq_str(int line, char *expected, char *got);
 extern void eq_char(int line, int expected, int got);
-extern FILE *create_file(char *content);
+extern File *mkfile(char *str);

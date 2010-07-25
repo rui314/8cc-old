@@ -19,17 +19,8 @@ void eq_char(int line, int expected, int got) {
     }
 }
 
-FILE *create_file(char *content) {
-    char tmpl[] = "tmpXXXXXX";
-    int fd = mkstemp(tmpl);
-    if (fd < 0) {
-        perror("fd: ");
-        exit(-1);
-    }
-    unlink(tmpl);
-    write(fd, content, strlen(content));
-    lseek(fd, 0, SEEK_SET);
-    return fdopen(fd, "r");
+File *mkfile(char *str) {
+    return make_string_file(to_string(str));
 }
 
 /*

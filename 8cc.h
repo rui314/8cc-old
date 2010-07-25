@@ -306,6 +306,7 @@ typedef struct File {
 } File;
 
 extern File *make_file(FILE *stream, char *filename);
+extern File *make_string_file(String *s);
 extern File *open_file(char *path);
 extern void close_file(File *file);
 extern void unreadc(int c, File *file);

@@ -7,17 +7,14 @@
 #include "../cpp.c"
 
 static ReadContext *make_test_read_context(char *str) {
-    FILE *stream = create_file(str);
-    File *file = make_file(stream, "-");
+    File *file = mkfile(str);
     Elf *elf = new_elf();
     CppContext *cppctx = make_cpp_context(file);
     return make_read_context(file, elf, cppctx);
 }
 
 static CppContext *make_test_cpp_context(char *str) {
-    FILE *stream = create_file(str);
-    File *file = make_file(stream, "-");
-    return make_cpp_context(file);
+    return make_cpp_context(mkfile(str));
 }
 
 static List *parse_string(char *str) {
