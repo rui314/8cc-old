@@ -5,7 +5,31 @@
  * This code is available under the simplified BSD license.  See LICENSE for details.
  */
 
-#define _GNU_SOURCE 1
+/*
+ * The functions in this file implements C script feature, that directly
+ * executes compiled code without writing it out to a file.
+ *
+ * In order to call the main function in the compiled code, we have to do the
+ * following steps:
+ *
+ *   - compiles a given string as C source,
+ *   - maps the resulting ELF sections to mmap()'ed memory regions,
+ *   - relocate if needed,
+ *   - and call the main function in the memory regions.
+ *
+ * A special care need to be taken for reloation.  In x86-64, RIP-relative CALL
+ * instruction supports only 2^32 offset.  That means you cannot jump beyond
+ * 2^31 bytes backward or fowrad from a CALL instruction.  It is very common
+ * that libarry functions used by a program is far beyond the limit.  We need to
+ * use a jump table as a workaround.
+ *
+ * We allocate a jump table close to the memory region for the binary.  Offsets
+ * written for relocation refer the jump table.  Machine code to jump to the
+ * library functions are written to the jump offset, so that CALL instructions
+ * will jump to desired functions by indirection.
+ */
+
+#define _GNU_SOURCE 1  // for MAP_ANONYMOUS
 #include "8cc.h"
 #include <sys/mman.h>
 #include <dlfcn.h>
