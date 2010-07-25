@@ -418,6 +418,21 @@ TEST(cpp_include) {
     EQ(std, false);
 }
 
+/*
+ * #pragma and _Pragma()
+ */
+TEST(pragma) {
+    Exception *e = make_exception();
+    if (TRY(e))
+        parse_string("#pragma foo");
+    CONTAINS("No pragmas supported", STRING_BODY(e->msg));
+
+    if (TRY(e))
+        parse_string("_Pragma(\"foo\")");
+    CONTAINS("No pragmas supported", STRING_BODY(e->msg));
+}
+
+
 TEST(cpp_include_buffered) {
     String *name;
     bool std;

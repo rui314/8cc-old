@@ -17,6 +17,7 @@
 #define EQ(x, y) do { if ((x) != (y)) error("Line %d: must be the same: '%s' and '%s'", __LINE__, #x, #y); } while (0)
 #define EQ_CHAR(x, y) do { eq_char(__LINE__, (x), (y)); } while (0)
 #define EQ_STR(x, y)  do { eq_str(__LINE__, (x), (y)); } while (0)
+#define CONTAINS(x, y)  do { contains(__LINE__, (x), (y)); } while (0)
 
 extern List* test_funcs;
 
@@ -45,3 +46,4 @@ extern List* test_funcs;
 extern void eq_str(int line, char *expected, char *got);
 extern void eq_char(int line, int expected, int got);
 extern File *mkfile(char *str);
+extern void contains(int line, char *expected, char *got);

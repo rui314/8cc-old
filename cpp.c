@@ -34,7 +34,7 @@ void expect_newline(CppContext *ctx) {
  * Data structure representing a macro
  */
 
-typedef Token *special_macro_handler(CppContext *ctx, Token *tok);
+typedef void special_macro_handler(CppContext *ctx, Token *tok);
 
 // Object-like macro, function-like macro and special macro
 // (e.g. __FILE__ or __LINE__).
@@ -152,6 +152,8 @@ static Token *cpp_token_to_token(Token *tok) {
  * WG14/N1256 6.10.8 Predefined macro names.
  */
 
+static void handle_pragma(CppContext *ctx);
+
 static void def_obj_macro(CppContext *ctx, char *name, Token *tok) {
     List *list = make_list();
     list_push(list, tok);
@@ -173,18 +175,39 @@ static Token *macro_time(CppContext *ctx, struct tm *now) {
     return make_str_literal(ctx, s);
 }
 
-static Token *handle_file_macro(CppContext *ctx, Token *tok) {
-    Token *r = copy_token(tok);
-    r->toktype = TOKTYPE_STRING;
-    r->val.str = ctx->file->filename;
-    return r;
+static void handle_file_macro(CppContext *ctx, Token *tmpl) {
+    Token *tok = copy_token(tmpl);
+    tok->toktype = TOKTYPE_STRING;
+    tok->val.str = ctx->file->filename;
+    unget_cpp_token(ctx, tok);
 }
 
-static Token *handle_line_macro(CppContext *ctx, Token *tok) {
-    Token *r = copy_token(tok);
-    r->toktype = TOKTYPE_CPPNUM;
-    r->val.str = make_string_printf("%d", ctx->file->line);
-    return r;
+static void handle_line_macro(CppContext *ctx, Token *tmpl) {
+    Token *tok = copy_token(tmpl);
+    tok->toktype = TOKTYPE_CPPNUM;
+    tok->val.str = make_string_printf("%d", ctx->file->line);
+    unget_cpp_token(ctx, tok);
+}
+
+/*
+ * C99 6.10.9 Pragma operator.
+ *
+ * _Pragma("tokens ...") is equivalent to #pragma tokens ....
+ */
+static void handle_pragma_macro(CppContext *ctx, Token *ignore) {
+    Token *tok = read_cpp_token(ctx);
+    if (!is_punct(tok, '('))
+        error_token(tok, "'(' expected, but got '%s'", token_to_string(tok));
+    Token *body = read_cpp_token(ctx);
+    if (body->toktype != TOKTYPE_STRING)
+        error_token(body, "string expected, but got '%s'", token_to_string(body));
+    tok = read_cpp_token(ctx);
+    if (!is_punct(tok, ')'))
+        error_token(tok, "')' expected, but got '%s'", token_to_string(tok));
+
+    File *file = make_string_file(body->val.str);
+    do_include(ctx, file);
+    handle_pragma(ctx);
 }
 
 void define_predefined_macros(CppContext *ctx) {
@@ -200,6 +223,7 @@ void define_predefined_macros(CppContext *ctx) {
     def_obj_macro(ctx, "__TIME__", macro_time(ctx, &now));
     def_special_macro(ctx, "__FILE__", handle_file_macro);
     def_special_macro(ctx, "__LINE__", handle_line_macro);
+    def_special_macro(ctx, "_Pragma", handle_pragma_macro);
 }
 
 /*
@@ -566,7 +590,8 @@ static Token *expand_one(CppContext *ctx) {
         return expand_one(ctx);
     }
     case MACRO_SPECIAL:
-        return macro->fn(ctx, tok);
+        macro->fn(ctx, tok);
+        return expand_one(ctx);
     }
     panic("should not reach here");
 }

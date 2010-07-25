@@ -650,9 +650,10 @@ Token *read_cpp_token(CppContext *ctx) {
         tok->space = true;
     }
     if (!tok && !LIST_IS_EMPTY(ctx->file_stack)) {
+        Token *r = make_cpp_token(ctx, TOKTYPE_NEWLINE);
         close_file(ctx->file);
         ctx->file = list_pop(ctx->file_stack);
-        return read_cpp_token(ctx);
+        return r;
     }
     return tok;
 }
