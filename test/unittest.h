@@ -31,18 +31,6 @@ extern List* test_funcs;
     }                                                  \
     static void TEST_##name(void)
 
-#define RUN_TESTS()                                         \
-    int main(int argc, char **argv) {                       \
-        printf("Running unit tests ...\n");                 \
-        while (LIST_LEN(test_funcs) > 0) {                  \
-            char *name = (char *)list_pop(test_funcs);      \
-            printf("  %s\n", name);                         \
-            void (*fn)(void) = list_pop(test_funcs);        \
-            fn();                                           \
-        }                                                   \
-        printf("done\n");                                   \
-    }
-
 extern void eq_str(int line, char *expected, char *got);
 extern void eq_char(int line, int expected, int got);
 extern File *mkfile(char *str);

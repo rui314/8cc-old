@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c99 -Wall -g
+CFLAGS=-std=c99 -Wall -g -lpthread
 OBJS=string.o list.o gen.o lex.o cpp.o parse.o file.o dict.o error.o elf.o
 TESTS=string alltests
 
@@ -22,7 +22,6 @@ alltests: $(OBJS) main.o
 
 test: alltests
 	@./alltests
-	@./test.sh
 
 clean:
 	-rm -f *.o alltests .tmpTEST*
