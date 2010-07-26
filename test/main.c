@@ -550,7 +550,7 @@ int main(int argc, char **argv) {
     } else {
         run_in_memory = true;
         pthread_mutex_lock(&test_lock);
-        nthreads = 4;
+        nthreads = 1;
         start_test_threads(nthreads);
         while (nthreads)
             pthread_cond_wait(&test_cond, &test_lock);
