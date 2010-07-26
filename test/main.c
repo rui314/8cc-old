@@ -5,6 +5,7 @@
 
 #include "unittest.h"
 #include <pthread.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -173,7 +174,13 @@ static void test(char *expected, char *input) {
     fd = mkstemp(exec);
     close(fd);
 
-    run_command("../8cc", source, object, (char *)NULL);
+    struct stat statbuf;
+    if (stat("../8cc", &statbuf) == 0)
+        run_command("../8cc", source, object, (char *)NULL);
+    else if (stat("./8cc", &statbuf) == 0)
+        run_command("./8cc", source, object, (char *)NULL);
+    else
+        panic("8cc not found");
     unlink(source);
     run_command("gcc", "-o", exec, object, (char *)NULL);
     unlink(object);
