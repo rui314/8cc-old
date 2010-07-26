@@ -42,6 +42,7 @@ CppContext *make_cpp_context(File *file) {
     r->in_macro = false;
     r->incl = make_list();
     r->include_path = make_list();
+    r->tm = NULL;
     define_predefined_macros(r);
     return r;
 }

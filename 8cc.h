@@ -378,12 +378,14 @@ typedef struct CppContext {
     Dict *defs;
     // Pushback buffer for preprocessing tokens.
     List *ungotten;
-    // Never read file if true
+    // Never read file if true.
     bool in_macro;
     // Used by conditional inclusion, such as #if.
     List *incl;
-    // System include paths
+    // System include paths.
     List *include_path;
+    // For __DATE__ and __TIME__ macros.
+    struct tm *tm;
 } CppContext;
 
 extern Token *read_cpp_token(CppContext *ctx);

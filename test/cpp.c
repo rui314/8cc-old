@@ -6,15 +6,32 @@
 #include "unittest.h"
 #include "../cpp.c"
 
+static void set_date_time(CppContext *ctx) {
+    struct tm *tm = malloc(sizeof(struct tm));
+    tm->tm_sec = 2;    // seconds
+    tm->tm_min = 55;   // minutes
+    tm->tm_hour = 17;  // hours
+    tm->tm_mday = 5;   // day of the month
+    tm->tm_mon = 1;    // month
+    tm->tm_year = 80;  // year
+    tm->tm_wday = 0;   // day of the week
+    tm->tm_yday = 5;   // day in the year
+    tm->tm_isdst = 0;  // daylight saving time
+    ctx->tm = tm;
+}
+
 static ReadContext *make_test_read_context(char *str) {
     File *file = mkfile(str);
     Elf *elf = new_elf();
     CppContext *cppctx = make_cpp_context(file);
+    set_date_time(cppctx);
     return make_read_context(file, elf, cppctx);
 }
 
 static CppContext *make_test_cpp_context(char *str) {
-    return make_cpp_context(mkfile(str));
+    CppContext *ctx = make_cpp_context(mkfile(str));
+    set_date_time(ctx);
+    return ctx;
 }
 
 static List *parse_string(char *str) {
@@ -384,7 +401,8 @@ TEST(cpp_line_directive) {
  */
 TEST(cpp_predefined_macros) {
     test("1", "__8CC__");
-    // test("$(date '+%b %d %Y')", "__DATE__");
+    test("\"Feb 05 1980\"", "__DATE__");
+    test("\"17:55:02\"", "__TIME__");
     test("\"-\"", "__FILE__");
     test("1", "__LINE__");
     test("1", "__STDC__");

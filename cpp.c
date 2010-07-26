@@ -164,15 +164,34 @@ static void def_special_macro(CppContext *ctx, char *name, special_macro_handler
     dict_put(ctx->defs, to_string(name), make_special_macro(fn));
 }
 
-static Token *macro_date(CppContext *ctx, struct tm *now) {
-    char *month[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-    String *s = make_string_printf("%s %02d %04d", month[now->tm_mon], now->tm_mday, 1900 + now->tm_year);
-    return make_str_literal(ctx, s);
+/*
+ * Returns a struct tm representing now.  The result is cached in the context.
+ */
+static struct tm *get_tm(CppContext *ctx) {
+    if (ctx->tm)
+        return ctx->tm;
+    time_t timet = time(NULL);
+    struct tm *now = malloc(sizeof(struct tm));
+    localtime_r(&timet, now);
+    ctx->tm = now;
+    return now;
 }
 
-static Token *macro_time(CppContext *ctx, struct tm *now) {
-    String *s = make_string_printf("%02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
-    return make_str_literal(ctx, s);
+static void handle_date_macro(CppContext *ctx, Token *tmpl) {
+    Token *tok = copy_token(tmpl);
+    tok->toktype = TOKTYPE_STRING;
+    char *month[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    struct tm *now = get_tm(ctx);
+    tok->val.str = make_string_printf("%s %02d %04d", month[now->tm_mon], now->tm_mday, 1900 + now->tm_year);
+    unget_cpp_token(ctx, tok);
+}
+
+static void handle_time_macro(CppContext *ctx, Token *tmpl) {
+    Token *tok = copy_token(tmpl);
+    tok->toktype = TOKTYPE_STRING;
+    struct tm *now = get_tm(ctx);
+    tok->val.str = make_string_printf("%02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
+    unget_cpp_token(ctx, tok);
 }
 
 static void handle_file_macro(CppContext *ctx, Token *tmpl) {
@@ -211,16 +230,12 @@ static void handle_pragma_macro(CppContext *ctx, Token *ignore) {
 }
 
 void define_predefined_macros(CppContext *ctx) {
-    time_t timet = time(NULL);
-    struct tm now;
-    localtime_r(&timet, &now);
-
     def_obj_macro(ctx, "__8CC__", make_cppnum(ctx, to_string("1")));
     def_obj_macro(ctx, "__STDC__", make_cppnum(ctx, to_string("1")));
     def_obj_macro(ctx, "__STDC_HOSTED__", make_cppnum(ctx, to_string("1")));
     def_obj_macro(ctx, "__STDC_VERSION__", make_cppnum(ctx, to_string("199901L")));
-    def_obj_macro(ctx, "__DATE__", macro_date(ctx, &now));
-    def_obj_macro(ctx, "__TIME__", macro_time(ctx, &now));
+    def_special_macro(ctx, "__DATE__", handle_date_macro);
+    def_special_macro(ctx, "__TIME__", handle_time_macro);
     def_special_macro(ctx, "__FILE__", handle_file_macro);
     def_special_macro(ctx, "__LINE__", handle_line_macro);
     def_special_macro(ctx, "_Pragma", handle_pragma_macro);
