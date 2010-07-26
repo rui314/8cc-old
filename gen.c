@@ -513,8 +513,8 @@ static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
     Var *src1 = LIST_REF(inst->args, 2);
     emit1(ctx, 0x90);
     emit1(ctx, 0x90);
-    load_xmm0(ctx, src0);
-    load_xmm7(ctx, src1);
+    load_xmm0(ctx, src1);
+    load_xmm7(ctx, src0);
     // UCOMISD xmm0, xmm7
     emit4(ctx, 0xc72e0f66);
     emit3(ctx, op);
@@ -526,7 +526,9 @@ static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
 static void handle_less(Context *ctx, Inst *inst) {
     if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
         // SETL al
-        emit_cmp(ctx, inst, 0xc09c0f);
+        // emit_fcmp(ctx, inst, 0xc09c0f);
+        // SETA al
+        emit_fcmp(ctx, inst, 0xc0970f);
     } else {
         // SETL al
         emit_cmp(ctx, inst, 0xc09c0f);
@@ -535,12 +537,8 @@ static void handle_less(Context *ctx, Inst *inst) {
 
 static void handle_less_equal(Context *ctx, Inst *inst) {
     if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
-        // SETA al
-        // emit_fcmp(ctx, inst, 0xc0970f);
-        // SETLE al
-        // emit_fcmp(ctx, inst, 0xc09e0f);
-        // SETBE al
-        emit_fcmp(ctx, inst, 0xc0960f);
+        // SETAE al
+        emit_fcmp(ctx, inst, 0xc0930f);
     } else {
         // SETLE al
         emit_cmp(ctx, inst, 0xc09e0f);
