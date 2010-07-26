@@ -39,16 +39,6 @@ typedef struct JumpTable {
     int off;
 } JumpTable;
 
-static char **list_to_argv(List *args) {
-    char **r = malloc(sizeof(char *) * (LIST_LEN(args) + 1));
-    for (int i = 0; i < LIST_LEN(args); i++) {
-        String *s = LIST_REF(args, i);
-        r[i] = STRING_BODY(s);
-    }
-    r[LIST_LEN(args)] = NULL;
-    return r;
-}
-
 static void *allocate_memory(void *ptr, int size, bool exec) {
     int prot = PROT_READ | PROT_WRITE;
     prot |= exec ? PROT_EXEC : 0;
@@ -132,7 +122,7 @@ static int call_main(main_fn_type main_fn, int argc, char **argv) {
     return main_fn(argc, argv);
 }
 
-extern int run_main(Elf *elf, List *args) {
+int run_main(Elf *elf, int argc, char **argv) {
     for (int i = 0; i < LIST_LEN(elf->sections); i++)
         allocate((Section *)LIST_REF(elf->sections, i));
     JumpTable *tab = allocate_jump_table();
@@ -141,7 +131,7 @@ extern int run_main(Elf *elf, List *args) {
 
     Symbol *sym = find_symbol(elf, "main");
     main_fn_type main_fn = (void *)(((intptr)sym->section->memory_pos) + sym->value);
-    int r = call_main(main_fn, LIST_LEN(args), list_to_argv(args));
+    int r = call_main(main_fn, argc, argv);
 
     for (int i = 0; i < LIST_LEN(elf->sections); i++)
         release(LIST_REF(elf->sections, i));
@@ -153,5 +143,5 @@ int run_string(char *code) {
     Elf *elf = new_elf();
     List *fns = parse(file, elf);
     assemble(elf, fns);
-    return run_main(elf, make_list());
+    return run_main(elf, 1, (char *[]){ "-" });
 }

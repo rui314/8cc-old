@@ -562,7 +562,8 @@ extern bool is_flonum(Ctype *ctype);
 #endif /* ECC_H */
 
 /*============================================================
- * Code executor
+ * C script
  */
 
+extern int run_main(Elf *elf, int argc, char **argv);
 extern int run_string(char *code);
