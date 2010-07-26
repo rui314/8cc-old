@@ -118,17 +118,63 @@ static Token *to_keyword_maybe(Token *tok) {
     return tok;
 }
 
-static Token *cppnum_to_num(Token *tok) {
+static Token *cppnum_to_float(Token *tok) {
     Token *r = copy_token(tok);
-    char *p = STRING_BODY(tok->val.str);
-    if (strchr(p, '.')) {
-        r->toktype = TOKTYPE_FLOAT;
-        r->val.f = atof(p);
-    } else {
-        r->toktype = TOKTYPE_INT;
-        r->val.i = atoi(p);
-    }
+    r->toktype = TOKTYPE_FLOAT;
+    r->val.f = atof(STRING_BODY(tok->val.str));
     return r;
+}
+
+static Token *cppnum_to_int(Token *tok) {
+    char *p = STRING_BODY(tok->val.str);
+    int base = 10;
+    int val = 0;
+    // Read prefix such as "0" or "0x".
+    if (*p == '0') {
+        p++;
+        if (*p == 'x' || *p == 'X') {
+            base = 16;
+            p++;
+        } else if (*p == 'b' || *p == 'B') {
+            // Binary constant using '0b' prefix is GNU extension
+            base = 2;
+            p++;
+        } else {
+            base = 8;
+        }
+    }
+    // Read numbers until non-number character.
+    for (; *p; p++) {
+        int v;
+        if ('0' <= *p && *p <= '9')
+            v = *p - '0';
+        else if ('a' <= *p && *p <= 'f')
+            v = *p - 'a' + 10;
+        else if ('A' <= *p && *p <= 'F')
+            v = *p - 'A' + 10;
+        else
+            break;
+        if (v >= base)
+            error_token(tok, "invalid digit '%c' in base %d number", *p, base);
+        val *= base;
+        val += v;
+    }
+    // Ignore all suffixes for now
+    while (*p == 'U' || *p == 'u' || *p == 'L' || *p == 'l')
+        p++;
+    if (*p)
+        error_token(tok, "invalid char '%c' in a number '%s'", *p, STRING_BODY(tok->val.str));
+
+    Token *r = copy_token(tok);
+    r->toktype = TOKTYPE_INT;
+    r->val.i = val;
+    return r;
+}
+
+static Token *cppnum_to_num(Token *tok) {
+    return strchr(STRING_BODY(tok->val.str), '.')
+        ? cppnum_to_float(tok)
+        : cppnum_to_int(tok);
 }
 
 static Token *cpp_token_to_token(Token *tok) {

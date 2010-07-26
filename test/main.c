@@ -529,8 +529,16 @@ TEST(float_to_int) {
     test("3", "main(){int i=3.0; printf(\"%d\", i);}");
 }
 
-
 /*
+ * Binary, octal, and hexadecimal numbers
+ */
+TEST(numbers) {
+    test("511", "main(){printf(\"%d\", 0777);}");
+    test("255 255", "main(){printf(\"%d %d\", 0xff, 0XFF);}");
+    test("7 7", "main(){printf(\"%d %d\", 0b111, 0B111);}");
+}
+
+/*==============================================================================
  * Entry point
  */
 
