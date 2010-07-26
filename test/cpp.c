@@ -12,7 +12,7 @@ static void set_date_time(CppContext *ctx) {
     tm->tm_min = 55;   // minutes
     tm->tm_hour = 17;  // hours
     tm->tm_mday = 5;   // day of the month
-    tm->tm_mon = 1;    // month
+    tm->tm_mon = 0;    // month
     tm->tm_year = 80;  // year
     tm->tm_wday = 0;   // day of the week
     tm->tm_yday = 5;   // day in the year
@@ -401,7 +401,7 @@ TEST(cpp_line_directive) {
  */
 TEST(cpp_predefined_macros) {
     test("1", "__8CC__");
-    test("\"Feb 05 1980\"", "__DATE__");
+    test("\"Jan 05 1980\"", "__DATE__");
     test("\"17:55:02\"", "__TIME__");
     test("\"-\"", "__FILE__");
     test("1", "__LINE__");
