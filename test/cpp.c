@@ -477,7 +477,4 @@ TEST(cpp_open_header) {
 
     File *file = open_header(ctx, to_string("null"), paths);
     EQ_STR("/dev/null", STRING_BODY(file->filename));
-
-    file = open_header(ctx, to_string("../8cc.h"), paths);
-    EQ_STR("../8cc.h", STRING_BODY(file->filename));
 }
