@@ -19,14 +19,14 @@
  *
  * A special care need to be taken for reloation.  In x86-64, RIP-relative CALL
  * instruction supports only 2^32 offset.  That means you cannot jump beyond
- * 2^31 bytes backward or fowrad from a CALL instruction.  It is very common
- * that libarry functions used by a program is far beyond the limit.  We need to
- * use a jump table as a workaround.
+ * 2^31 bytes backward or forward from a CALL instruction.  It is very common
+ * that library functions used by a program are far beyond the limit.  We need
+ * to use a jump table as a workaround.
  *
  * We allocate a jump table close to the memory region for the binary.  Offsets
- * written for relocation refer the jump table.  Machine code to jump to the
- * library functions are written to the jump offset, so that CALL instructions
- * will jump to desired functions by indirection.
+ * written for relocation refer a jump table entry.  Machine code to jump to the
+ * library functions are written to the jump table entry, so that CALL
+ * instructions will jump to desired functions by indirection.
  */
 
 #define _GNU_SOURCE 1  // for MAP_ANONYMOUS
