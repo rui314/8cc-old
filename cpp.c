@@ -852,13 +852,25 @@ static List *read_funclike_define_body(CppContext *ctx, Dict *param) {
 }
 
 /*
+ * Stores a given macro to a CppContex.
+ *
+ * TODO: Print warning message if a macro is redefined.  Redefinition
+ * is valid only when the a one is the same as the old one. (C99
+ * 6.10.3p2)
+ */
+
+static void store_macro(CppContext *ctx, String *name, Macro *macro) {
+    dict_put(ctx->defs, name, macro);
+}
+
+/*
  * Reads function-like macro definition.
  */
 static void read_funclike_define(CppContext *ctx, String *name) {
     Dict *param = make_string_dict();
     bool is_varg = read_funclike_define_args(ctx, param);
     List *body = read_funclike_define_body(ctx, param);
-    dict_put(ctx->defs, name, make_func_macro(body, dict_size(param), is_varg));
+    store_macro(ctx, name, make_func_macro(body, dict_size(param), is_varg));
 }
 
 /*
@@ -883,7 +895,7 @@ static void read_define(CppContext *ctx) {
         list_push(body, tok);
         tok = read_cpp_token(ctx);
     }
-    dict_put(ctx->defs, name->val.str, make_obj_macro(body));
+    store_macro(ctx, name->val.str, make_obj_macro(body));
 }
 
 /*
