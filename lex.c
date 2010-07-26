@@ -300,6 +300,8 @@ static char read_escape_char(File *file) {
 }
 
 /*
+ * C99 6.4.5 String literals
+ *
  * string-constant:
  *     '"' s-char* '"'
  *     'L"' s-char* '"'
@@ -321,6 +323,8 @@ static String *read_str(CppContext *ctx) {
             break;
         case EOF:
             error_cpp_ctx(ctx, "premature end of input file while reading a literal string");
+        case '\n':
+            error_cpp_ctx(ctx, "newline is not allowed being in a string literal");
         default:
             o1(b, c);
         }
