@@ -252,10 +252,11 @@ static u32 push_xmm_arg[] = {
     0xe7100ff2, 0xef100ff2, 0xf7100ff2, 0xff100ff2,
 };
 
-static void load_imm(Context *ctx, Var *var, u16 op) {
+static void load_imm(Context *ctx, int reg, Var *var) {
     if (var->ctype->type == CTYPE_INT) {
-        // MOV rax/r11, imm
-        emit2(ctx, op);
+        // MOV reg, imm
+        emit_prefix(ctx, 8, 0, reg);
+        emit1(ctx, 0xb8 | (reg & 7));
         emit8(ctx, var->val.i);
         return;
     }
@@ -263,7 +264,8 @@ static void load_imm(Context *ctx, Var *var, u16 op) {
         Section *text = find_section(ctx->elf, ".text");
         Section *data = find_section(ctx->elf, ".data");
         // MOV rax/r11, imm
-        emit2(ctx, op);
+        emit_prefix(ctx, 8, 0, reg);
+        emit1(ctx, 0xb8 | (reg & 7));
         int off = var_abs_pos(ctx, var);
         add_reloc(text, STRING_LEN(ctx->text), NULL, data, R_X86_64_64, off);
         emit8(ctx, 0);
@@ -272,9 +274,9 @@ static void load_imm(Context *ctx, Var *var, u16 op) {
     panic("unsupported IMM ctype: %d", var->ctype->type);
 }
 
-static void load(Context *ctx, Var *var, int reg) {
+static void load(Context *ctx, int reg, Var *var) {
     if (var->stype == VAR_IMM) {
-        load_imm(ctx, var, 0xb848);
+        load_imm(ctx, reg, var);
         return;
     }
     int off = var_stack_pos(ctx, var);
@@ -291,28 +293,14 @@ static void load(Context *ctx, Var *var, int reg) {
         emit_memop(ctx, size, 0x8b, reg, RBP, off);
 }
 
-static void load_rax(Context *ctx, Var *var) {
-    if (var->stype == VAR_IMM)
-        load_imm(ctx, var, 0xb848);
-    else
-        load(ctx, var, RAX);
-}
-
-static void load_r11(Context *ctx, Var *var) {
-    if (var->stype == VAR_IMM)
-        load_imm(ctx, var, 0xbb49);
-    else
-        load(ctx, var, R11);
-}
-
-static void save_rax(Context *ctx, Var *dst) {
+static void save(Context *ctx, Var *dst, int reg) {
     int off = var_stack_pos(ctx, dst);
     int size = ctype_sizeof(dst->ctype);
-    // MOV [rbp+off], rax/eax/ax/al
+    // MOV [rbp+off], reg
     if (size == 1)
-        emit_memop(ctx, 1, 0x88, RAX, RBP, off);
+        emit_memop(ctx, 1, 0x88, reg, RBP, off);
     else
-        emit_memop(ctx, size, 0x89, RAX, RBP, off);
+        emit_memop(ctx, size, 0x89, reg, RBP, off);
 }
 
 static u64 flonum_to_u64(double d) {
@@ -396,7 +384,7 @@ static void handle_int_to_float(Context *ctx, Inst *inst) {
     Var *src = LIST_REF(inst->args, 1);
     assert(is_flonum(dst->ctype));
     assert(src->ctype->type == CTYPE_INT);
-    load_rax(ctx, src);
+    load(ctx, RAX, src);
     // cvtsi2sd xmm0, rax
     emit4(ctx, 0x2a0f48f2);
     emit1(ctx, 0xc0);
@@ -411,7 +399,7 @@ static void handle_float_to_int(Context *ctx, Inst *inst) {
     load_xmm0(ctx, src);
     // CVTTSD2SI eax, xmm0
     emit4(ctx, 0xc02c0ff2);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void handle_func_call(Context *ctx, Inst *inst) {
@@ -426,7 +414,7 @@ static void handle_func_call(Context *ctx, Inst *inst) {
             load_xmm7(ctx, var);
             emit4(ctx, push_xmm_arg[xmm++]);
         } else {
-            load_rax(ctx, var);
+            load(ctx, RAX, var);
             emit3(ctx, push_arg[gpr++]);
         }
     }
@@ -443,7 +431,7 @@ static void handle_func_call(Context *ctx, Inst *inst) {
 
     // Save function return value to the stack;
     Var *rval = LIST_REF(inst->args, 1);
-    save_rax(ctx, rval);
+    save(ctx, rval, RAX);
 }
 
 static void finish_func_call(Elf *elf, Dict *func, List *tbf) {
@@ -473,11 +461,11 @@ static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
         save_xmm0(ctx, dst);
         return;
     }
-    load_rax(ctx, src0);
-    load_r11(ctx, src1);
+    load(ctx, RAX, src0);
+    load(ctx, R11, src1);
     // ADD/SUB rax, r11
     emit3(ctx, add ? 0xd8014c : 0xd8294c);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void handle_imul(Context *ctx, Inst *inst) {
@@ -492,11 +480,11 @@ static void handle_imul(Context *ctx, Inst *inst) {
         save_xmm0(ctx, dst);
         return;
     }
-    load_rax(ctx, src0);
-    load_r11(ctx, src1);
+    load(ctx, RAX, src0);
+    load(ctx, R11, src1);
     // IMUL rax, r11
     emit4(ctx, 0xc3af0f49);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void handle_idiv(Context *ctx, Inst *inst) {
@@ -511,40 +499,40 @@ static void handle_idiv(Context *ctx, Inst *inst) {
         save_xmm0(ctx, dst);
         return;
     }
-    load_rax(ctx, src0);
-    load_r11(ctx, src1);
+    load(ctx, RAX, src0);
+    load(ctx, R11, src1);
     // XOR edx, edx
     emit2(ctx, 0xd231);
     // IDIV r11
     emit3(ctx, 0xfbf749);
-    save_rax(ctx, LIST_REF(inst->args, 0));
+    save(ctx, LIST_REF(inst->args, 0), RAX);
 }
 
 static void handle_not(Context *ctx, Inst *inst) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src = LIST_REF(inst->args, 1);
-    load_rax(ctx, src);
+    load(ctx, RAX, src);
     // TEST eax, eax
     emit2(ctx, 0xc085);
     // SETE al
     emit3(ctx, 0xc0940f);
     // MOVZBL eax, al
     emit3(ctx, 0xc0b60f);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void emit_cmp(Context *ctx, Inst *inst, u32 op) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
-    load_rax(ctx, src0);
-    load_r11(ctx, src1);
+    load(ctx, RAX, src0);
+    load(ctx, R11, src1);
     // CMP rax, r11
     emit3(ctx, 0xd8394c);
     emit3(ctx, op);
     // MOVZX eax, al
     emit3(ctx, 0xc0b60f);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
@@ -560,7 +548,7 @@ static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
     emit3(ctx, op);
     // MOVZX eax, al
     emit3(ctx, 0xc0b60f);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void handle_less(Context *ctx, Inst *inst) {
@@ -588,20 +576,20 @@ static void handle_less_equal(Context *ctx, Inst *inst) {
 static void handle_neg(Context *ctx, Inst *inst) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src = LIST_REF(inst->args, 1);
-    load_rax(ctx, src);
+    load(ctx, RAX, src);
     // NOT eax
     emit2(ctx, 0xd0f7);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void handle_inst3(Context *ctx, Inst *inst, u64 op) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
-    load_rax(ctx, src0);
-    load_r11(ctx, src1);
+    load(ctx, RAX, src0);
+    load(ctx, R11, src1);
     emit3(ctx, op);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void handle_and(Context *ctx, Inst *inst) {
@@ -613,12 +601,12 @@ static void handle_shift(Context *ctx, Inst *inst, u64 op) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
-    load_rax(ctx, src1);
+    load(ctx, RAX, src1);
     // MOV ecx, eax
     emit2(ctx, 0xc189);
-    load_rax(ctx, src0);
+    load(ctx, RAX, src0);
     emit3(ctx, op);
-    save_rax(ctx, dst);
+    save(ctx, dst, RAX);
 }
 
 static void handle_shl(Context *ctx, Inst *inst) {
@@ -650,8 +638,8 @@ static void handle_assign(Context *ctx, Inst *inst) {
         load_xmm0(ctx, val);
         save_xmm0(ctx, var);
     } else {
-        load_rax(ctx, val);
-        save_rax(ctx, var);
+        load(ctx, RAX, val);
+        save(ctx, var, RAX);
     }
 }
 
@@ -668,30 +656,30 @@ static void handle_address(Context *ctx, Inst *inst) {
     Var *p = LIST_REF(inst->args, 0);
     Var *v = LIST_REF(inst->args, 1);
     if (v->stype == VAR_IMM && v->ctype->type == CTYPE_ARRAY) {
-        load_rax(ctx, v);
+        load(ctx, RAX, v);
     } else {
         int off = var_stack_pos(ctx, v);
         // LEA rax, [ebp+off]
         emit3(ctx, 0x858d48);
         emit4(ctx, off);
     }
-    save_rax(ctx, p);
+    save(ctx, p, RAX);
 }
 
 static void handle_deref(Context *ctx, Inst *inst) {
     Var *v = LIST_REF(inst->args, 0);
     Var *p = LIST_REF(inst->args, 1);
-    load_rax(ctx, p);
+    load(ctx, RAX, p);
     // MOV rax, [rax]
     emit3(ctx, 0x008b48);
-    save_rax(ctx, v);
+    save(ctx, v, RAX);
 }
 
 static void handle_assign_deref(Context *ctx, Inst *inst) {
     Var *loc = LIST_REF(inst->args, 0);
     Var *v = LIST_REF(inst->args, 1);
-    load_rax(ctx, v);
-    load_r11(ctx, loc);
+    load(ctx, RAX, v);
+    load(ctx, R11, loc);
     // MOV [r11], rax
     emit3(ctx, 0x038949);
 }
@@ -701,7 +689,7 @@ static void handle_if(Context *ctx, Inst *inst) {
     Block *then = LIST_REF(inst->args, 1);
     Block *els = LIST_REF(inst->args, 2);
     Block *cont = LIST_REF(inst->args, 3);
-    load_rax(ctx, cond);
+    load(ctx, RAX, cond);
 
     // TEST rax, rax
     emit2(ctx, 0xc085);
@@ -758,7 +746,7 @@ static void handle_jmp(Context *ctx, Inst *inst) {
 
 static void handle_return(Context *ctx, Inst *inst) {
     Var *retval = LIST_REF(inst->args, 0);
-    load_rax(ctx, retval);
+    load(ctx, RAX, retval);
     emit1(ctx, 0xc9); // LEAVE
     emit1(ctx, 0xc3); // RET
 }
@@ -859,7 +847,7 @@ static void save_params(Context *ctx, Function *func) {
     for (int i = 0; i < LIST_LEN(func->params); i++) {
         Var *param = LIST_REF(func->params, i);
         emit3(ctx, pop_arg[i]);
-        save_rax(ctx, param);
+        save(ctx, param, RAX);
     }
 }
 
