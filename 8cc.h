@@ -512,6 +512,26 @@ extern NORETURN void error_token(Token *tok, char *msg, ...);
  * Code generator
  */
 
+// x86 general-purpose registers
+#define RAX 0
+#define RCX 1
+#define RDX 2
+#define RBX 3
+#define RSP 4
+#define RBP 5
+#define RSI 6
+#define RDI 7
+#define R8  8
+#define R9  9
+#define R10 10
+#define R11 11
+#define R12 12
+#define R13 13
+#define R14 14
+#define R15 15
+
+#define EXT_REG(x) ((x) >= R8)
+
 #define VAR_IMM    0
 #define VAR_EXTERN 1
 #define VAR_LOCAL  2

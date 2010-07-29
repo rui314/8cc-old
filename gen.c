@@ -84,7 +84,74 @@ static Reloc *make_reloc(long off, char *sym, Section *section, int type, u64 ad
     return rel;
 }
 
+/*==============================================================================
+ * X86 machine code generation.
+ */
+
+static void emit1(Context *ctx, u8 b)  { o1(ctx->text, b); }
+static void emit2(Context *ctx, u16 w) { o2(ctx->text, w); }
+static void emit3(Context *ctx, u32 d) { o3(ctx->text, d); }
+static void emit4(Context *ctx, u32 d) { o4(ctx->text, d); }
+static void emit8(Context *ctx, u64 q) { o8(ctx->text, q); }
+
 /*
+ * Mod R/M and SIB
+ *
+ * Many x86 instructions takes Mod R/M and optional SIB and displacement bytes.
+ * As described in Chapter 2 in the Intel 64 and IA-32 Architecture Software
+ * Developer's Manual, Volume 2A, there are four different use cases of these
+ * bytes.
+ *
+ *   - Memory addressing without a SIB byte
+ *   - Register-register addressing
+ *   - Memory addressing with a SIB byte
+ *   - Register operand coded in opcode byte
+ *
+ * For the details of x86 machine code format, refer to the Intel Developer's
+ * Manuals.
+ */
+
+static void emit_rex_prefix(Context *ctx, int size, int reg0, int reg1) {
+    if (size != 8 && !EXT_REG(reg0) && !EXT_REG(reg1))
+        return;
+    int rex = 0x40;
+    if (size == 8) rex |= 8;
+    if (EXT_REG(reg0)) rex |= 4;
+    if (EXT_REG(reg1)) rex |= 1;
+    o1(ctx->text, rex);
+}
+
+static void emit_op(Context *ctx, int op) {
+    if (op < 0x100)
+        emit1(ctx, op);
+    else if (op < 0x10000)
+        emit2(ctx, op);
+    else
+        emit3(ctx, op);
+}
+
+static void emit_memop(Context *ctx, int op, int size, int reg0, int reg1, int off) {
+    emit_rex_prefix(ctx, size, reg0, reg1);
+    emit_op(ctx, op);
+    int modrm = ((off < 256) ? 1 : 2) << 6;
+    modrm |= (reg0 % 8) << 3;
+    modrm |= (reg1 % 8) << 3;
+    if (off < 256)
+        emit1(ctx, off);
+    else
+        emit4(ctx, off);
+}
+
+static void emit_regop(Context *ctx, int op, int size, int src, int dst) {
+    emit_rex_prefix(ctx, size, src, dst);
+    emit_op(ctx, op);
+    int modrm = 0x3 << 6;
+    modrm |= (src % 8) << 3;
+    modrm |= (dst % 8);
+    o1(ctx->text, modrm);
+}
+
+/*======================================================================
  * Instructions for intermediate code
  */
 
@@ -140,12 +207,6 @@ bool is_flonum(Ctype *ctype) {
 /*
  * Code generator
  */
-
-static void emit1(Context *ctx, u8 b)  { o1(ctx->text, b); }
-static void emit2(Context *ctx, u16 w) { o2(ctx->text, w); }
-static void emit3(Context *ctx, u32 d) { o3(ctx->text, d); }
-static void emit4(Context *ctx, u32 d) { o4(ctx->text, d); }
-static void emit8(Context *ctx, u64 q) { o8(ctx->text, q); }
 
 static int var_abs_pos(Context *ctx, Var *var) {
     assert(var->stype == VAR_IMM);
