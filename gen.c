@@ -132,14 +132,16 @@ static void emit_op(Context *ctx, int op) {
         emit3(ctx, op);
 }
 
+static void emit_modrm(Context *ctx, int mod, int reg, int rm) {
+    int byte = (mod << 6) | ((reg & 7) << 3) | (rm & 7);
+    o1(ctx->text, byte);
+}
+
 static void emit_memop(Context *ctx, int size, int op, int reg0, int reg1, int off) {
     emit_prefix(ctx, size, reg0, reg1);
     emit_op(ctx, op);
     int oneword = -128 <= off && off <= 127;
-    int modrm = (oneword ? 1 : 2) << 6;
-    modrm |= (reg0 % 8) << 3;
-    modrm |= (reg1 % 8);
-    emit1(ctx, modrm);
+    emit_modrm(ctx, oneword ? 1 : 2, reg0, reg1);
     if (oneword)
         emit1(ctx, off);
     else
@@ -149,10 +151,7 @@ static void emit_memop(Context *ctx, int size, int op, int reg0, int reg1, int o
 static void emit_regop(Context *ctx, int size, int op, int src, int dst) {
     emit_prefix(ctx, size, src, dst);
     emit_op(ctx, op);
-    int modrm = 0x3 << 6;
-    modrm |= (src % 8) << 3;
-    modrm |= (dst % 8);
-    o1(ctx->text, modrm);
+    emit_modrm(ctx, 3, src, dst);
 }
 
 /*======================================================================
