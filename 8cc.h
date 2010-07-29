@@ -532,6 +532,24 @@ extern NORETURN void error_token(Token *tok, char *msg, ...);
 
 #define EXT_REG(x) ((x) >= R8)
 
+// XMM registers
+#define XMM0 0
+#define XMM1 1
+#define XMM2 2
+#define XMM3 3
+#define XMM4 4
+#define XMM5 5
+#define XMM6 6
+#define XMM7 7
+#define XMM8  8
+#define XMM9  9
+#define XMM10 10
+#define XMM11 11
+#define XMM12 12
+#define XMM13 13
+#define XMM14 14
+#define XMM15 15
+
 #define VAR_IMM    0
 #define VAR_EXTERN 1
 #define VAR_LOCAL  2

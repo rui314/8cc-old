@@ -240,11 +240,8 @@ static void add_reloc(Section *text, long off, char *sym, Section *section, int 
 }
 
 
-// MOV rdi/rsi/rdx/rcx/r8/r9, rax
-static u32 push_arg[] = { 0xc78948, 0xc68948, 0xc28948, 0xc18948, 0xc08949, 0xc18949 };
-
-// MOV rax, rdi/rsi/rdx/rcx/r8/r9
-static u32 pop_arg[] = { 0xf88948, 0xf08948, 0xd08948, 0xc88948, 0xc0894c, 0xc8894c };
+// Registers for function argument passing.
+static const int grp_arg[] = { RDI, RSI, RDX, RCX, R8, R9 };
 
 // MOVSD xmm[0-7], xmm7
 static u32 push_xmm_arg[] = {
@@ -413,10 +410,8 @@ static void handle_func_call(Context *ctx, Inst *inst) {
         if (is_flonum(var->ctype)) {
             load_xmm7(ctx, var);
             emit4(ctx, push_xmm_arg[xmm++]);
-        } else {
-            load(ctx, RAX, var);
-            emit3(ctx, push_arg[gpr++]);
-        }
+        } else
+            load(ctx, grp_arg[gpr++], var);
     }
     if (!dict_get(ctx->elf->syms, fn->name)) {
         Symbol *sym = make_symbol(fn->name, text, 0, STB_GLOBAL, STT_NOTYPE, 0);
@@ -846,8 +841,7 @@ static void handle_block(Context *ctx, Block *block) {
 static void save_params(Context *ctx, Function *func) {
     for (int i = 0; i < LIST_LEN(func->params); i++) {
         Var *param = LIST_REF(func->params, i);
-        emit3(ctx, pop_arg[i]);
-        save(ctx, param, RAX);
+        save(ctx, param, grp_arg[i]);
     }
 }
 
