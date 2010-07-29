@@ -242,12 +242,7 @@ static void add_reloc(Section *text, long off, char *sym, Section *section, int 
 
 // Registers for function argument passing.
 static const int grp_arg[] = { RDI, RSI, RDX, RCX, R8, R9 };
-
-// MOVSD xmm[0-7], xmm7
-static u32 push_xmm_arg[] = {
-    0xc7100ff2, 0xcf100ff2, 0xd7100ff2, 0xdf100ff2,
-    0xe7100ff2, 0xef100ff2, 0xf7100ff2, 0xff100ff2,
-};
+static const int xmm_arg[] = { XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7 };
 
 static void load_imm(Context *ctx, int reg, Var *var) {
     if (var->ctype->type == CTYPE_INT) {
@@ -305,7 +300,7 @@ static u64 flonum_to_u64(double d) {
     return *p;
 }
 
-static void load_xmm_imm(Context *ctx, Var *var, u16 movss) {
+static void load_xmm_imm(Context *ctx, int xmmreg, Var *var) {
     assert(is_flonum(var->ctype));
     // SUB rsp, 8
     emit3(ctx, 0xec8148);
@@ -315,65 +310,53 @@ static void load_xmm_imm(Context *ctx, Var *var, u16 movss) {
     emit8(ctx, flonum_to_u64(var->val.f));
     // MOV [rsp], rax
     emit4(ctx, 0x24048948);
-    // MOVSD xmm0, [rsp]
+    // MOVSD reg, [rsp]
+    emit_prefix(ctx, 4, 0, xmmreg);
     emit3(ctx, 0x100ff2);
-    emit2(ctx, movss);
+    emit_modrm(ctx, 0, xmmreg, RSP);
+    emit1(ctx, 0x24);
     // ADD rsp, 8
     emit3(ctx, 0xc48148);
     emit4(ctx, 8);
 }
 
-static void load_xmm0(Context *ctx, Var *var) {
+static void load_xmm(Context *ctx, int reg, Var *var) {
     if (var->stype == VAR_IMM) {
-        load_xmm_imm(ctx, var, 0x2404);
+        load_xmm_imm(ctx, reg, var);
         return;
     }
     int off = var_stack_pos(ctx, var);
     if (var->ctype->type == CTYPE_FLOAT) {
-        // MOVSS xmm0, [rbp+off]
-        emit4(ctx, 0x85100ff2);
-        emit4(ctx, off);
-        // CVTPS2PD xmm0, xmm0
-        emit3(ctx, 0xc05a0f);
+        // MOVSS reg, [rbp+off]
+        emit_prefix(ctx, 4, reg, reg);
+        emit_memop(ctx, 4, 0x100ff3, reg, RBP, off);
+        // CVTPS2PD reg, reg
+        emit_prefix(ctx, 4, reg, reg);
+        emit2(ctx, 0x5a0f);
+        emit_modrm(ctx, 3, reg, reg);
     } else {
-        // MOVSD off, xmm0
-        emit4(ctx, 0x85100ff2);
-        emit4(ctx, off);
+        // MOVSD reg, [rbp+off]
+        emit_prefix(ctx, 4, reg, reg);
+        emit_memop(ctx, 4, 0x100ff2, reg, RBP, off);
     }
 }
 
-static void load_xmm7(Context *ctx, Var *var) {
-    if (var->stype == VAR_IMM) {
-        load_xmm_imm(ctx, var, 0x243c);
-        return;
-    }
-    int off = var_stack_pos(ctx, var);
-    if (var->ctype->type == CTYPE_FLOAT) {
-        // MOVSS xmm7, [rbp+off]
-        emit4(ctx, 0xbd100ff3);
-        emit4(ctx, off);
-        // CVTPS2PD xmm7, xmm7
-        emit3(ctx, 0xff5a0f);
-    } else {
-        // MOVSD off, xmm7
-        emit4(ctx, 0xbd100ff2);
-        emit4(ctx, off);
-    }
-}
-
-static void save_xmm0(Context *ctx, Var *var) {
+static void save_xmm(Context *ctx, Var *var, int reg) {
     assert(is_flonum(var->ctype));
-    if (var->ctype->type == CTYPE_FLOAT) {
-        // CVTPD2PS xmm0, xmm0
-        emit4(ctx, 0xc05a0f66);
-        // MOVSS off, xmm0
-        emit4(ctx, 0x85110ff3);
-    } else {
-        // MOVSD off, xmm0
-        emit4(ctx, 0x85110ff2);
-    }
     int off = var_stack_pos(ctx, var);
-    emit4(ctx, off);
+    if (var->ctype->type == CTYPE_FLOAT) {
+        // CVTPD2PS reg, reg
+        emit_prefix(ctx, 4, reg, reg);
+        emit3(ctx, 0x5a0f66);
+        emit_modrm(ctx, 3, reg, reg);
+        // MOVSS off, reg
+        emit_prefix(ctx, 4, reg, reg);
+        emit_memop(ctx, 4, 0x110ff3, reg, RBP, off);
+    } else {
+        // MOVSD off, reg
+        emit_prefix(ctx, 4, reg, reg);
+        emit_memop(ctx, 4, 0x110ff2, reg, RBP, off);
+    }
 }
 
 static void handle_int_to_float(Context *ctx, Inst *inst) {
@@ -385,7 +368,7 @@ static void handle_int_to_float(Context *ctx, Inst *inst) {
     // cvtsi2sd xmm0, rax
     emit4(ctx, 0x2a0f48f2);
     emit1(ctx, 0xc0);
-    save_xmm0(ctx, dst);
+    save_xmm(ctx, dst, XMM0);
 }
 
 static void handle_float_to_int(Context *ctx, Inst *inst) {
@@ -393,7 +376,7 @@ static void handle_float_to_int(Context *ctx, Inst *inst) {
     Var *src = LIST_REF(inst->args, 1);
     assert(dst->ctype->type == CTYPE_INT);
     assert(is_flonum(src->ctype));
-    load_xmm0(ctx, src);
+    load_xmm(ctx, XMM0, src);
     // CVTTSD2SI eax, xmm0
     emit4(ctx, 0xc02c0ff2);
     save(ctx, dst, RAX);
@@ -407,10 +390,9 @@ static void handle_func_call(Context *ctx, Inst *inst) {
 
     for (int i = 2; i < LIST_LEN(inst->args); i++) {
         Var *var = LIST_REF(inst->args, i);
-        if (is_flonum(var->ctype)) {
-            load_xmm7(ctx, var);
-            emit4(ctx, push_xmm_arg[xmm++]);
-        } else
+        if (is_flonum(var->ctype))
+            load_xmm(ctx, xmm_arg[xmm++], var);
+        else
             load(ctx, grp_arg[gpr++], var);
     }
     if (!dict_get(ctx->elf->syms, fn->name)) {
@@ -449,11 +431,11 @@ static void handle_add_or_sub(Context *ctx, Inst *inst, bool add) {
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
     if (is_flonum(src0->ctype)) {
-        load_xmm0(ctx, src0);
-        load_xmm7(ctx, src1);
+        load_xmm(ctx, XMM0, src0);
+        load_xmm(ctx, XMM7, src1);
         // ADDSD/SUBSD xmm0, xmm7
         emit4(ctx, add ? 0xc7580ff2 : 0xc75c0ff2);
-        save_xmm0(ctx, dst);
+        save_xmm(ctx, dst, XMM0);
         return;
     }
     load(ctx, RAX, src0);
@@ -468,11 +450,11 @@ static void handle_imul(Context *ctx, Inst *inst) {
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
     if (is_flonum(src0->ctype)) {
-        load_xmm0(ctx, src0);
-        load_xmm7(ctx, src1);
+        load_xmm(ctx, XMM0, src0);
+        load_xmm(ctx, XMM7, src1);
         // MULSD xmm0 xmm7
         emit4(ctx, 0xc7590ff2);
-        save_xmm0(ctx, dst);
+        save_xmm(ctx, dst, XMM0);
         return;
     }
     load(ctx, RAX, src0);
@@ -487,11 +469,11 @@ static void handle_idiv(Context *ctx, Inst *inst) {
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
     if (is_flonum(src0->ctype)) {
-        load_xmm0(ctx, src0);
-        load_xmm7(ctx, src1);
+        load_xmm(ctx, XMM0, src0);
+        load_xmm(ctx, XMM7, src1);
         // DIVSD xmm0, xmm7
         emit4(ctx, 0xc75e0ff2);
-        save_xmm0(ctx, dst);
+        save_xmm(ctx, dst, XMM0);
         return;
     }
     load(ctx, RAX, src0);
@@ -536,8 +518,8 @@ static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
     Var *src1 = LIST_REF(inst->args, 2);
     emit1(ctx, 0x90);
     emit1(ctx, 0x90);
-    load_xmm0(ctx, src1);
-    load_xmm7(ctx, src0);
+    load_xmm(ctx, XMM0, src1);
+    load_xmm(ctx, XMM7, src0);
     // UCOMISD xmm0, xmm7
     emit4(ctx, 0xc72e0f66);
     emit3(ctx, op);
@@ -630,8 +612,8 @@ static void handle_assign(Context *ctx, Inst *inst) {
     assert(var->ctype->type != CTYPE_ARRAY);
     assert(val);
     if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
-        load_xmm0(ctx, val);
-        save_xmm0(ctx, var);
+        load_xmm(ctx, XMM0, val);
+        save_xmm(ctx, var, XMM0);
     } else {
         load(ctx, RAX, val);
         save(ctx, var, RAX);
