@@ -111,7 +111,9 @@ static void emit8(Context *ctx, u64 q) { o8(ctx->text, q); }
  * Manuals.
  */
 
-static void emit_rex_prefix(Context *ctx, int size, int reg0, int reg1) {
+static void emit_prefix(Context *ctx, int size, int reg0, int reg1) {
+    if (size == 2)
+        emit1(ctx, 0x66);
     if (size != 8 && !EXT_REG(reg0) && !EXT_REG(reg1))
         return;
     int rex = 0x40;
@@ -130,20 +132,22 @@ static void emit_op(Context *ctx, int op) {
         emit3(ctx, op);
 }
 
-static void emit_memop(Context *ctx, int op, int size, int reg0, int reg1, int off) {
-    emit_rex_prefix(ctx, size, reg0, reg1);
+static void emit_memop(Context *ctx, int size, int op, int reg0, int reg1, int off) {
+    emit_prefix(ctx, size, reg0, reg1);
     emit_op(ctx, op);
-    int modrm = ((off < 256) ? 1 : 2) << 6;
+    int oneword = -128 <= off && off <= 127;
+    int modrm = (oneword ? 1 : 2) << 6;
     modrm |= (reg0 % 8) << 3;
-    modrm |= (reg1 % 8) << 3;
-    if (off < 256)
+    modrm |= (reg1 % 8);
+    emit1(ctx, modrm);
+    if (oneword)
         emit1(ctx, off);
     else
         emit4(ctx, off);
 }
 
-static void emit_regop(Context *ctx, int op, int size, int src, int dst) {
-    emit_rex_prefix(ctx, size, src, dst);
+static void emit_regop(Context *ctx, int size, int op, int src, int dst) {
+    emit_prefix(ctx, size, src, dst);
     emit_op(ctx, op);
     int modrm = 0x3 << 6;
     modrm |= (src % 8) << 3;
@@ -269,71 +273,47 @@ static void load_imm(Context *ctx, Var *var, u16 op) {
     panic("unsupported IMM ctype: %d", var->ctype->type);
 }
 
-static void load_rax(Context *ctx, Var *var) {
+static void load(Context *ctx, Var *var, int reg) {
     if (var->stype == VAR_IMM) {
         load_imm(ctx, var, 0xb848);
         return;
     }
     int off = var_stack_pos(ctx, var);
-    int bits = ctype_sizeof(var->ctype) * 8;
-    // MOV rax/eax, [rbp+off]
-    if (bits == 64)
-        emit1(ctx, 0x48);
-    emit2(ctx, 0x858b);
-    emit4(ctx, off);
+    int size = ctype_sizeof(var->ctype);
+    int signedp = var->ctype->signedp;
+    // MOVSX/MOVZX reg, [rbp+off]
+    if (size == 1)
+        emit_memop(ctx, size, signedp ? 0xbe0f : 0xb60f, reg, RBP, off);
+    else if (size == 2)
+        emit_memop(ctx, size, signedp ? 0xbf0f : 0xb70f, reg, RBP, off);
+    else if (size == 4)
+        emit_memop(ctx, signedp ? 8 : 4, signedp ? 0x63 : 0x8b, reg, RBP, off);
+    else
+        emit_memop(ctx, size, 0x8b, reg, RBP, off);
+}
 
-    if (bits == 8) {
-        // MOVSX/MOVZX eax, al
-        emit4(ctx, var->ctype->signedp ? 0xc0be0f48 : 0xc0b60f48);
-    } else if (bits == 16) {
-        // MOVSX/MOVZX eax, ax
-        emit4(ctx, var->ctype->signedp ? 0xc0bf0f48 : 0xc0b70f48);
-    } else if (bits == 32) {
-        // MOVSX rax, eax
-        if (var->ctype->signedp)
-            emit3(ctx, 0xc06348);
-    }
+static void load_rax(Context *ctx, Var *var) {
+    if (var->stype == VAR_IMM)
+        load_imm(ctx, var, 0xb848);
+    else
+        load(ctx, var, RAX);
 }
 
 static void load_r11(Context *ctx, Var *var) {
-    if (var->stype == VAR_IMM) {
+    if (var->stype == VAR_IMM)
         load_imm(ctx, var, 0xbb49);
-        return;
-    }
-    int off = var_stack_pos(ctx, var);
-    int bits = ctype_sizeof(var->ctype) * 8;
-    // MOV r11d, [rbp+off]
-    emit1(ctx, (bits == 64) ? 0x4c : 0x44);
-    emit2(ctx, 0x9d8b);
-    emit4(ctx, off);
-
-    if (bits == 8) {
-        // MOVSX/MOVZX r11, r11b
-        emit4(ctx, var->ctype->signedp ? 0xdbbe0f4d : 0xdbb60f4d);
-    } else if (bits == 16) {
-        // MOVSX/MOVZX r11, r11w
-        emit4(ctx, var->ctype->signedp ? 0xdbbf0f4d : 0xdbb70f4d);
-    } else if (bits == 32) {
-        // MOVSX r11, r11d
-        if (var->ctype->signedp)
-            emit3(ctx, 0xdb634d);
-    }
+    else
+        load(ctx, var, R11);
 }
 
 static void save_rax(Context *ctx, Var *dst) {
     int off = var_stack_pos(ctx, dst);
-    int bits = ctype_sizeof(dst->ctype) * 8;
+    int size = ctype_sizeof(dst->ctype);
     // MOV [rbp+off], rax/eax/ax/al
-    if (bits >= 64)
-        emit3(ctx, 0x858948);
-    else if (bits == 32)
-        emit2(ctx, 0x8589);
-    else if (bits == 16)
-        emit3(ctx, 0x858966);
-    else if (bits == 8)
-        emit2(ctx, 0x8588);
-    else panic("unknown variable size: %d", bits);
-    emit4(ctx, off);
+    if (size == 1)
+        emit_memop(ctx, 1, 0x88, RAX, RBP, off);
+    else
+        emit_memop(ctx, size, 0x89, RAX, RBP, off);
 }
 
 static u64 flonum_to_u64(double d) {
