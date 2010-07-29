@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "main() {
+$1 }" | ./8cc - run.o && gcc -o run run.o && ./run

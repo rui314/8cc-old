@@ -7,5 +7,4 @@ tmp*
 nqueen
 *.orig
 *.rej
-run
 test/alltests
