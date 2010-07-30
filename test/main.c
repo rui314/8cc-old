@@ -18,6 +18,11 @@ void eq_str(int line, char *expected, char *got) {
         error("line %d: \"%s\" expected, but got \"%s\"", line, expected, got);
 }
 
+void eq_str1(int line, char *expected, char *got, char *msg) {
+    if (strcmp(expected, got))
+        error("line %d: \"%s\" expected, but got \"%s\"\n  %s", line, expected, got, msg);
+}
+
 void eq_char(int line, int expected, int got) {
     if (expected != got)
         error("line %d: '%c' expected, but got '%c'", line, expected, got);
@@ -149,7 +154,7 @@ static void run_fast_test(char *expected, char *input) {
         String *b = read_fd(pipefd[0]);
         if (wait_child(pid))
             error("'%s' failed", input);
-        EQ_STR(expected, STRING_BODY(b));
+        EQ_STR1(expected, STRING_BODY(b), input);
     } else {
         close(pipefd[0]);
         dup2(pipefd[1], 1);
@@ -190,7 +195,7 @@ static void test(char *expected, char *input) {
     unlink(object);
     String *s = run_command_string(exec);
     unlink(exec);
-    EQ_STR(expected, STRING_BODY(s));
+    EQ_STR1(expected, STRING_BODY(s), input);
 }
 
 /*==============================================================================

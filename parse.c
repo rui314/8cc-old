@@ -98,6 +98,7 @@ static Var *make_var(Ctype *ctype) {
     r->name = NULL;
     r->loc = NULL;
     r->need_save = true;
+    r->is_temp = true;
     return r;
 }
 
@@ -1210,6 +1211,7 @@ static Var *read_initializer(ReadContext *ctx) {
  */
 static void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *var = read_declarator(ctx, ctype);
+    var->is_temp = false;
     add_local_var(ctx, var->name, var);
     if (next_token_is(ctx, '=')) {
         Var *val = unary_conv(ctx, read_initializer(ctx));
@@ -1253,6 +1255,7 @@ static void read_declaration(ReadContext *ctx) {
             break;
     }
     expect(ctx, ';');
+    emit(ctx, make_inst0(OP_FLUSH));
 }
 
 /*
@@ -1554,6 +1557,7 @@ static void read_stmt(ReadContext *ctx) {
         if (!is_keyword(tok2, ';'))
             error_token(tok2, "';' expected, but got '%s'", token_to_string(tok2));
     }
+    emit(ctx, make_inst0(OP_FLUSH));
 }
 
 /*
@@ -1606,6 +1610,7 @@ static List *read_param_type_list(ReadContext *ctx) {
     for (;;) {
         Ctype *type = read_declaration_spec(ctx);
         Var *param = read_declarator(ctx, type);
+        param->is_temp = false;
         if (param->ctype->type == CTYPE_ARRAY)
             param->ctype = make_ctype_ptr(param->ctype->ptr);
         add_local_var(ctx, param->name, param);

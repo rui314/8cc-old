@@ -563,9 +563,11 @@ typedef struct Var {
     struct Var *loc; // Non-NULL if lvalue
     // For register allocation
     bool need_save;
+    bool is_temp;
 } Var;
 
 enum {
+    OP_FLUSH,
     OP_LE,
     OP_ADDRESS,
     OP_DEREF,
@@ -593,6 +595,7 @@ typedef struct Inst {
 extern void assemble(Elf *elf, List *fns);
 extern Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined);
 
+extern Inst *make_inst0(int op);
 extern Inst *make_inst1(int op, void *v0);
 extern Inst *make_inst2(int op, void *v0, void *v1);
 extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);

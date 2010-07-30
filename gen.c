@@ -33,6 +33,8 @@ static CompiledVar *make_compiled_var(int off) {
 }
 
 #define RESERVED ((void *)-1)
+#define USABLE(ctx, reg) ((ctx)->var[reg] != RESERVED && !(ctx)->var[reg])
+#define INUSE(ctx, reg) ((ctx)->var[reg] != RESERVED && (ctx)->var[reg])
 
 typedef struct Context {
     Elf *elf;
@@ -47,6 +49,15 @@ typedef struct Context {
     int serial;
 } Context;
 
+static void reset_context(Context *ctx) {
+    static void *init[] = { RESERVED, 0, 0, 0, RESERVED, RESERVED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    for (int i = 0; i < 16; i++) {
+        ctx->var[i] = init[i];
+        ctx->lastuse[i] = 0;
+    }
+    ctx->serial = 1;
+}
+
 static Context *make_context(Elf *elf) {
     Context *r = malloc(sizeof(Context));
     r->elf = elf;
@@ -55,13 +66,7 @@ static Context *make_context(Elf *elf) {
     r->global = make_address_dict();
     r->func_tbf = NULL;
     r->sp = 0;
-
-    static void *init[] = { RESERVED, 0, 0, 0, RESERVED, RESERVED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    for (int i = 0; i < 16; i++) {
-        r->var[i] = init[i];
-        r->lastuse[i] = 0;
-    }
-    r->serial = 1;
+    reset_context(r);
     return r;
 }
 
@@ -106,6 +111,8 @@ static void emit2(Context *ctx, u16 w) { o2(ctx->text, w); }
 static void emit3(Context *ctx, u32 d) { o3(ctx->text, d); }
 static void emit4(Context *ctx, u32 d) { o4(ctx->text, d); }
 static void emit8(Context *ctx, u64 q) { o8(ctx->text, q); }
+
+static void spill(Context *ctx, int reg);
 
 /*
  * Mod R/M and SIB
@@ -177,6 +184,11 @@ static Inst *make_inst(int op, int narg) {
     Inst *r = malloc(sizeof(Inst));
     r->op = op;
     r->args = (0 < narg) ? make_list() : NULL;
+    return r;
+}
+
+Inst *make_inst0(int op) {
+    Inst *r = make_inst(op, 0);
     return r;
 }
 
@@ -279,11 +291,22 @@ static void load_imm(Context *ctx, int reg, Var *var) {
     panic("unsupported IMM ctype: %d", var->ctype->type);
 }
 
+static void assign(Context *ctx, Var *var, int reg);
+
 static void load(Context *ctx, int reg, Var *var) {
+    spill(ctx, reg);
     if (var->stype == VAR_IMM) {
         load_imm(ctx, reg, var);
         return;
     }
+    for (int i = 0; i < 16; i++)
+        if (INUSE(ctx, i) && reg != i && ctx->var[i] == var) {
+            emit_regop(ctx, 8, 0x8b, reg, i);
+            ctx->var[i] = NULL;
+            assign(ctx, var, i);
+            return;
+        }
+
     int off = var_stack_pos(ctx, var);
     int size = ctype_sizeof(var->ctype);
     int signedp = var->ctype->signedp;
@@ -334,6 +357,7 @@ static void load_xmm_imm(Context *ctx, int xmmreg, Var *var) {
 }
 
 static void load_xmm(Context *ctx, int reg, Var *var) {
+    spill(ctx, RAX);
     if (var->stype == VAR_IMM) {
         load_xmm_imm(ctx, reg, var);
         return;
@@ -376,12 +400,13 @@ static void save_xmm(Context *ctx, Var *var, int reg) {
  * Register allocation
  */
 
-#define USABLE(ctx, reg) ((ctx)->var[reg] != RESERVED && !(ctx)->var[reg])
-#define INUSE(ctx, reg) ((ctx)->var[reg] != RESERVED && (ctx)->var[reg])
-
 static void assign(Context *ctx, Var *var, int reg) {
+    for (int i = 0; i < 16; i++)
+        if (ctx->var[i] == var)
+            ctx->var[i] = NULL;
     ctx->var[reg] = var;
     ctx->lastuse[reg] = ctx->serial++;
+    ctx->var[reg]->need_save = true;
 }
 
 static void spill(Context *ctx, int reg) {
@@ -396,7 +421,14 @@ static void spill(Context *ctx, int reg) {
 static void save_all(Context *ctx) {
     for (int i = 0; i < 16; i++)
         spill(ctx, i);
+}
 
+static void save_var(Context *ctx, Var *var) {
+    for (int i = 0; i < 16; i++)
+        if (ctx->var[i] == var) {
+            spill(ctx, i);
+            return;
+        }
 }
 
 static int load_reg_replace(Context *ctx, int reg, Var *var) {
@@ -445,7 +477,6 @@ static void handle_int_to_float(Context *ctx, Inst *inst) {
     Var *src = LIST_REF(inst->args, 1);
     assert(is_flonum(dst->ctype));
     assert(src->ctype->type == CTYPE_INT);
-    spill(ctx, RAX);
     load(ctx, RAX, src);
     // cvtsi2sd xmm0, rax
     emit4(ctx, 0x2a0f48f2);
@@ -542,12 +573,11 @@ static void handle_imul(Context *ctx, Inst *inst) {
         save_xmm(ctx, dst, XMM0);
         return;
     }
-    save_all(ctx);
-    load(ctx, RAX, src0);
-    load(ctx, R11, src1);
-    // IMUL rax, r11
-    emit4(ctx, 0xc3af0f49);
-    assign(ctx, dst, RAX);
+    int reg0 = load_reg(ctx, src0);
+    int reg1 = load_reg(ctx, src1);
+    // IMUL reg0, reg1
+    emit_regop(ctx, 8, 0xaf0f, reg0, reg1);
+    assign(ctx, dst, reg0);
     save_all(ctx);
 }
 
@@ -563,21 +593,24 @@ static void handle_idiv(Context *ctx, Inst *inst) {
         save_xmm(ctx, dst, XMM0);
         return;
     }
-    save_all(ctx);
-    load(ctx, RAX, src0);
-    load(ctx, R11, src1);
+    spill(ctx, RAX);
+    spill(ctx, RDX);
     // XOR edx, edx
-    emit2(ctx, 0xd231);
-    // IDIV r11
-    emit3(ctx, 0xfbf749);
+    emit_regop(ctx, 4, 0x31, RDX, RDX);
+
+    ctx->var[RAX] = ctx->var[RDX] = RESERVED;
+    load(ctx, RAX, src0);
+    int reg = load_reg(ctx, src1);
+    ctx->var[RAX] = ctx->var[RDX] = NULL;
+
+    // IDIV reg
+    emit_regop(ctx, 8, 0xf7, 7, reg);
     assign(ctx, dst, RAX);
-    save_all(ctx);
 }
 
 static void handle_not(Context *ctx, Inst *inst) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src = LIST_REF(inst->args, 1);
-    save_all(ctx);
     load(ctx, RAX, src);
     // TEST eax, eax
     emit2(ctx, 0xc085);
@@ -586,23 +619,21 @@ static void handle_not(Context *ctx, Inst *inst) {
     // MOVZBL eax, al
     emit3(ctx, 0xc0b60f);
     assign(ctx, dst, RAX);
-    save_all(ctx);
 }
 
-static void emit_cmp(Context *ctx, Inst *inst, u32 op) {
+static void emit_cmp(Context *ctx, Inst *inst, int op) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
     save_all(ctx);
     load(ctx, RAX, src0);
-    load(ctx, R11, src1);
-    // CMP rax, r11
-    emit3(ctx, 0xd8394c);
-    emit3(ctx, op);
+    int reg1 = load_reg(ctx, src1);
+    // CMP rax, reg1
+    emit_regop(ctx, 8, 0x39, reg1, RAX);
+    emit_regop(ctx, 4, op, 0, RAX);
     // MOVZX eax, al
-    emit3(ctx, 0xc0b60f);
+    emit_regop(ctx, 4, 0xb60f, 0, RAX);
     assign(ctx, dst, RAX);
-    save_all(ctx);
 }
 
 static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
@@ -610,8 +641,6 @@ static void emit_fcmp(Context *ctx, Inst *inst, u32 op) {
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
     spill(ctx, RAX);
-    emit1(ctx, 0x90);
-    emit1(ctx, 0x90);
     load_xmm(ctx, XMM0, src1);
     load_xmm(ctx, XMM7, src0);
     // UCOMISD xmm0, xmm7
@@ -630,7 +659,7 @@ static void handle_less(Context *ctx, Inst *inst) {
         emit_fcmp(ctx, inst, 0xc0970f);
     } else {
         // SETL al
-        emit_cmp(ctx, inst, 0xc09c0f);
+        emit_cmp(ctx, inst, 0x9c0f);
     }
 }
 
@@ -640,67 +669,57 @@ static void handle_less_equal(Context *ctx, Inst *inst) {
         emit_fcmp(ctx, inst, 0xc0930f);
     } else {
         // SETLE al
-        emit_cmp(ctx, inst, 0xc09e0f);
+        emit_cmp(ctx, inst, 0x9e0f);
     }
 }
 
 static void handle_neg(Context *ctx, Inst *inst) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src = LIST_REF(inst->args, 1);
-    save_all(ctx);
     int reg = load_reg(ctx, src);
-    // NOT eax
+    // NOT reg
     emit_regop(ctx, 4, 0xf7, 2, reg);
     assign(ctx, dst, reg);
 }
 
-static void handle_inst3(Context *ctx, Inst *inst, u64 op) {
+static void handle_inst3(Context *ctx, Inst *inst, int op) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src0 = LIST_REF(inst->args, 1);
     Var *src1 = LIST_REF(inst->args, 2);
-    save_all(ctx);
-    load(ctx, RAX, src0);
-    load(ctx, R11, src1);
-    emit3(ctx, op);
-    assign(ctx, dst, RAX);
-    save_all(ctx);
+    int reg0 = load_reg(ctx, src0);
+    int reg1 = load_reg(ctx, src1);
+    emit_regop(ctx, 4, op, reg1, reg0);
+    assign(ctx, dst, reg0);
 }
 
 static void handle_and(Context *ctx, Inst *inst) {
-    // AND rax, r11
-    handle_inst3(ctx, inst, 0xd8214c);
-}
-
-static void handle_shift(Context *ctx, Inst *inst, u64 op) {
-    Var *dst = LIST_REF(inst->args, 0);
-    Var *src0 = LIST_REF(inst->args, 1);
-    Var *src1 = LIST_REF(inst->args, 2);
-    save_all(ctx);
-    load(ctx, RAX, src0);
-    load(ctx, RCX, src1);
-    emit3(ctx, op);
-    assign(ctx, dst, RAX);
-    save_all(ctx);
-}
-
-static void handle_shl(Context *ctx, Inst *inst) {
-    // SHL rax, cl
-    handle_shift(ctx, inst, 0xe0d348);
-}
-
-static void handle_shr(Context *ctx, Inst *inst) {
-    // SHR rax, cl
-    handle_shift(ctx, inst, 0xe8d348);
+    handle_inst3(ctx, inst, 0x21);
 }
 
 static void handle_or(Context *ctx, Inst *inst) {
-    // OR rax, r11
-    handle_inst3(ctx, inst, 0xd8094c);
+    handle_inst3(ctx, inst, 0x09);
 }
 
 static void handle_xor(Context *ctx, Inst *inst) {
-    // XOR rax, r11
-    handle_inst3(ctx, inst, 0xd8314c);
+    handle_inst3(ctx, inst, 0x31);
+}
+
+static void handle_shift(Context *ctx, Inst *inst, int op1) {
+    Var *dst = LIST_REF(inst->args, 0);
+    Var *src0 = LIST_REF(inst->args, 1);
+    Var *src1 = LIST_REF(inst->args, 2);
+    load_reg_replace(ctx, RCX, src1);
+    int reg = load_reg(ctx, src0);
+    emit_regop(ctx, 8, 0xd3, op1, reg);
+    assign(ctx, dst, reg);
+}
+
+static void handle_shl(Context *ctx, Inst *inst) {
+    handle_shift(ctx, inst, 4);
+}
+
+static void handle_shr(Context *ctx, Inst *inst) {
+    handle_shift(ctx, inst, 5);
 }
 
 static void handle_assign(Context *ctx, Inst *inst) {
@@ -713,7 +732,7 @@ static void handle_assign(Context *ctx, Inst *inst) {
         save_xmm(ctx, var, XMM0);
     } else {
         int reg = load_reg(ctx, val);
-        save(ctx, var, reg);
+        assign(ctx, var, reg);
     }
 }
 
@@ -722,44 +741,42 @@ static void handle_equal(Context *ctx, Inst *inst, bool eq) {
     if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
         emit_fcmp(ctx, inst, eq ? 0xc0940f : 0xc0950f);
     } else {
-        emit_cmp(ctx, inst, eq ? 0xc0940f : 0xc0950f);
+        emit_cmp(ctx, inst, eq ? 0x940f : 0x950f);
     }
 }
 
 static void handle_address(Context *ctx, Inst *inst) {
     Var *p = LIST_REF(inst->args, 0);
     Var *v = LIST_REF(inst->args, 1);
+    spill(ctx, RAX);
     if (v->stype == VAR_IMM && v->ctype->type == CTYPE_ARRAY) {
         load(ctx, RAX, v);
     } else {
+        save_var(ctx, v);
         int off = var_stack_pos(ctx, v);
         // LEA rax, [ebp+off]
-        emit3(ctx, 0x858d48);
-        emit4(ctx, off);
+        emit_memop(ctx, 8, 0x8d, RAX, RBP, off);
     }
     assign(ctx, p, RAX);
-    save_all(ctx);
 }
 
 static void handle_deref(Context *ctx, Inst *inst) {
     Var *v = LIST_REF(inst->args, 0);
     Var *p = LIST_REF(inst->args, 1);
-    save_all(ctx);
-    load(ctx, RAX, p);
+    int reg = load_reg(ctx, p);
     // MOV rax, [rax]
-    emit3(ctx, 0x008b48);
-    assign(ctx, v, RAX);
-    save_all(ctx);
+    emit_memop(ctx, 8, 0x8b, reg, reg, 0);
+    assign(ctx, v, reg);
 }
 
 static void handle_assign_deref(Context *ctx, Inst *inst) {
     Var *loc = LIST_REF(inst->args, 0);
     Var *v = LIST_REF(inst->args, 1);
     save_all(ctx);
-    load(ctx, RAX, v);
+    int reg = load_reg(ctx, v);
     load(ctx, R11, loc);
-    // MOV [r11], rax
-    emit3(ctx, 0x038949);
+    // MOV [R11], reg
+    emit_memop(ctx, 8, 0x89, reg, R11, 0);
 }
 
 static void handle_if(Context *ctx, Inst *inst) {
@@ -767,16 +784,18 @@ static void handle_if(Context *ctx, Inst *inst) {
     Block *then = LIST_REF(inst->args, 1);
     Block *els = LIST_REF(inst->args, 2);
     Block *cont = LIST_REF(inst->args, 3);
-    int reg = load_reg(ctx, cond);
 
-    // TEST rax, rax
+    // TEST reg, reg
+    int reg = load_reg(ctx, cond);
     emit_regop(ctx, 4, 0x85, reg, reg);
+    save_all(ctx);
 
     // JE offset
     emit2(ctx, 0x840f);
     emit4(ctx, 0); // filled later
     int pos0 = STRING_LEN(ctx->text);
     handle_block(ctx, then);
+    save_all(ctx);
 
     int pos1;
     if (els) {
@@ -785,6 +804,7 @@ static void handle_if(Context *ctx, Inst *inst) {
         emit4(ctx, 0); // filled later
         pos1 = STRING_LEN(ctx->text);
         handle_block(ctx, els);
+        save_all(ctx);
     }
 
     // Backfill
@@ -815,6 +835,7 @@ static void jump_to(Context *ctx, int pos) {
 
 static void handle_jmp(Context *ctx, Inst *inst) {
     Block *dst = LIST_REF(inst->args, 0);
+    save_all(ctx);
     if (dst->pos < 0) {
         handle_block(ctx, dst);
     } else {
@@ -829,7 +850,15 @@ static void handle_return(Context *ctx, Inst *inst) {
     emit1(ctx, 0xc3); // RET
 }
 
+static void handle_flush(Context *ctx) {
+    for (int i = 0; i < 16; i++)
+        if (INUSE(ctx, i) && ctx->var[i]->is_temp)
+            ctx->var[i] = NULL;
+}
+
 static void handle_block(Context *ctx, Block *block) {
+    save_all(ctx);
+    reset_context(ctx);
     if (block->pos >= 0) {
         jump_to(ctx, block->pos);
         return;
@@ -838,6 +867,9 @@ static void handle_block(Context *ctx, Block *block) {
     for (int i = 0; i < LIST_LEN(block->code); i++) {
         Inst *inst = LIST_REF(block->code, i);
         switch (inst->op) {
+        case OP_FLUSH:
+            handle_flush(ctx);
+            break;
         case '+': case '-':
             handle_add_or_sub(ctx, inst, inst->op == '+');
             break;
