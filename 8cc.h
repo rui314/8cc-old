@@ -13,6 +13,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <limits.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -560,6 +561,8 @@ typedef struct Var {
     String *name;
     Cvalue val;  // Immediate value.  Only valid when stype == VAR_IMM
     struct Var *loc; // Non-NULL if lvalue
+    // For register allocation
+    bool need_save;
 } Var;
 
 enum {

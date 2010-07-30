@@ -97,6 +97,7 @@ static Var *make_var(Ctype *ctype) {
     r->val.l = 0;
     r->name = NULL;
     r->loc = NULL;
+    r->need_save = true;
     return r;
 }
 

@@ -86,8 +86,10 @@ static void run_command(char *command, ...) {
     int status;
     if ( (pid = fork()) )
         do {
-            if (waitpid(pid, &status, 0) < 0)
+            if (waitpid(pid, &status, 0) < 0) {
                 perror("waitpid failed:");
+                exit(-1);
+            }
         } while (!WIFEXITED(status));
     else
         execvp(command, args);
@@ -111,8 +113,10 @@ static String *read_fd(int fd) {
 static int wait_child(pid_t pid) {
     int status;
     do {
-        if (waitpid(pid, &status, 0) < 0)
+        if (waitpid(pid, &status, 0) < 0) {
             perror("waitpid failed:");
+            exit(-1);
+        }
     } while (!WIFEXITED(status));
     return WEXITSTATUS(status);
 }
