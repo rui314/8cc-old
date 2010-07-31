@@ -81,28 +81,35 @@ static Macro *make_special_macro(special_macro_handler *fn) {
  */
 
 static Dict *keyword_dict(void) {
+    /*
+     * If "dict" is already initialized, returns it.  Otherwise, we'll add all
+     * keywords to a newly created dictionary.  Temporary variable is needed as
+     * we don't want to export the dictionary being built to the other threads.
+     */
     static Dict *dict;
     if (dict) return dict;
-    dict = make_string_dict();
+    Dict *tmp = make_string_dict();
 #define KEYWORD(id_, str_) \
-    dict_put(dict, to_string(str_), (void *)id_);
+    dict_put(tmp, to_string(str_), (void *)id_);
 #define PUNCT(id_, str_)
 # include "keyword.h"
 #undef PUNCT
 #undef KEYWORD
+    dict = tmp;
     return dict;
 }
 
 static Dict *punct_dict(void) {
     static Dict *dict;
     if (dict) return dict;
-    dict = make_string_dict();
+    Dict *tmp = make_string_dict();
 #define KEYWORD(k, s)
 #define PUNCT(k, s) \
-    dict_put(dict, to_string(s), (void *)k);
+    dict_put(tmp, to_string(s), (void *)k);
 # include "keyword.h"
 #undef PUNCT
 #undef KEYWORD
+    dict = tmp;
     return dict;
 }
 
