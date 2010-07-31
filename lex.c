@@ -98,12 +98,7 @@ static bool next_two_chars(CppContext *ctx, char c0, char c1) {
 
 Token *copy_token(Token *tok) {
     Token *r = malloc(sizeof(Token));
-    r->toktype = tok->toktype;
-    r->val = tok->val;
-    r->line = tok->line;
-    r->column = tok->column;
-    r->hideset = tok->hideset;
-    r->space = tok->space;
+    *r = *tok;
     return r;
 }
 
