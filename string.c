@@ -109,6 +109,7 @@ void string_printf(String *b, char *format, ...) {
     va_list ap;
     va_start(ap, format);
     string_vprintf(b, format, ap);
+    va_end(ap);
 }
 
 String *make_string_printf(char *format, ...) {
@@ -116,5 +117,6 @@ String *make_string_printf(char *format, ...) {
     va_start(ap, format);
     String *b = make_string();
     string_vprintf(b, format, ap);
+    va_end(ap);
     return b;
 }

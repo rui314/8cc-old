@@ -64,6 +64,7 @@ NORETURN void error_cpp_ctx(CppContext *ctx, char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     print_parse_error(ctx->file->line, ctx->file->column, msg, ap);
+    va_end(ap);
 }
 
 void unget_cpp_token(CppContext *ctx, Token *tok) {

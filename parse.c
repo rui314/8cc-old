@@ -53,12 +53,14 @@ NORETURN void error_token(Token *tok, char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     print_parse_error(tok->line, tok->column, msg, ap);
+    va_end(ap);
 }
 
 static NORETURN void error_ctx(ReadContext *ctx, char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     print_parse_error(ctx->file->line, ctx->file->column, msg, ap);
+    va_end(ap);
 }
 
 /*============================================================

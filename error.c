@@ -41,12 +41,14 @@ NORETURN void error(char *format, ...) {
     va_list ap;
     va_start(ap, format);
     verror(format, ap);
+    va_end(ap);
 }
 
 void warn(char *format, ...) {
     va_list ap;
     va_start(ap, format);
     vwarn(format, ap);
+    va_end(ap);
 }
 
 NORETURN void print_parse_error(int line, int column, char *msg, va_list ap) {
