@@ -84,12 +84,11 @@ static bool next_two_chars(CppContext *ctx, char c0, char c1) {
         return false;
     }
     int v1 = readc(ctx->file);
-    if (c1 != v1) {
-        unreadc(v1, ctx->file);
-        unreadc(v0, ctx->file);
-        return false;
-    }
-    return true;
+    if (c1 == v1)
+        return true;
+    unreadc(v1, ctx->file);
+    unreadc(v0, ctx->file);
+    return false;
 }
 
 /*==============================================================================
@@ -426,13 +425,12 @@ static Token *read_cpp_token_int(CppContext *ctx) {
             if (next_char_is(ctx->file, '#'))
                 return make_punct(ctx, KEYWORD_TWOSHARPS);
             return make_punct(ctx, '#');
-        case '.': {
+        case '.':
             if (next_two_chars(ctx, '.', '.'))
                 return make_punct(ctx, KEYWORD_THREEDOTS);
             if (isdigit(peekc(ctx->file)))
                 return read_cppnum(ctx, c);
             return make_punct(ctx, '.');
-        }
         case '0': case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8': case '9':
             return read_cppnum(ctx, c);
@@ -650,10 +648,9 @@ Token *read_cpp_token(CppContext *ctx) {
         tok->space = true;
     }
     if (!tok && !LIST_IS_EMPTY(ctx->file_stack)) {
-        Token *r = make_cpp_token(ctx, TOKTYPE_NEWLINE);
         close_file(ctx->file);
         ctx->file = list_pop(ctx->file_stack);
-        return r;
+        return make_cpp_token(ctx, TOKTYPE_NEWLINE);
     }
     return tok;
 }

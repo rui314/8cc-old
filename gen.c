@@ -77,7 +77,6 @@ Section *find_section(Elf *elf, char *name) {
             return sect;
     }
     panic("cannot find section '%s'", name);
-    return NULL;
 }
 
 Symbol *make_symbol(String *name, Section *sect, long value, int bind, int type, int defined) {
