@@ -22,6 +22,8 @@
  *   http://www.intel.com/Assets/PDF/manual/253667.pdf
  */
 
+bool flag_debug = false;
+
 typedef struct CompiledVar {
     int off;
 } CompiledVar;
@@ -1116,6 +1118,9 @@ void assemble(Elf *elf, List *fns) {
         Context *ctx = make_context(elf);
         ctx->func_tbf = tbf;
         Function *func = LIST_REF(fns, i);
+
+        if (flag_debug)
+            print_function(func);
 
         Symbol *fsym = make_symbol(func->name, text, STRING_LEN(ctx->text), STB_GLOBAL, STT_NOTYPE, 1);
         dict_put(ctx->elf->syms, func->name, fsym);

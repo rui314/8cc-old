@@ -7,29 +7,50 @@
 
 #include "8cc.h"
 
+static void usage(void) {
+    fprintf(stderr,
+            "Usage: 8cc [ -d ] [ -run ] <infile>\n"
+            "       8cc [ -d ] <infile> <outfile>\n");
+    exit(-1);
+}
+
 int main(int argc, char **argv) {
-    bool cscript = false;
-    File *infile;
-    if (argc >= 2 && !strcmp(argv[1], "-run")) {
-        cscript = true;
-        infile = open_file(argv[2]);
-    } else if (argc != 3) {
-        fprintf(stderr,
-                "Usage: 8cc <infile>\n"
-                "       8cc <infile> <outfile>\n");
-        exit(-1);
-    } else {
-        infile = open_file(argv[1]);
+    bool flag_cscript = false;
+    char *infile = NULL;
+    char *outfile = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-run"))
+            flag_cscript = true;
+        else if (!strcmp(argv[i], "-d"))
+            flag_debug = true;
+        else if (argv[i][0] == '-' && argv[i][1] != '\0')
+            usage();
+        else if (!infile) {
+            infile = argv[i];
+        }
+        else if (!outfile)
+            outfile = argv[i];
+        else
+            usage();
     }
 
+    if (!infile)
+        usage();
+    if (flag_cscript && outfile)
+        usage();
+    if (!flag_cscript && !outfile)
+        usage();
+
+    File *in = open_file(infile);
     Elf *elf = new_elf();
-    List *fns = parse(infile, elf);
+    List *fns = parse(in, elf);
     assemble(elf, fns);
 
-    if (cscript) {
+    if (flag_cscript) {
         run_main(elf, argc - 1, argv + 1);
     } else {
-        FILE *outfile = fopen(argv[2], "w");
-        write_elf(outfile, elf);
+        FILE *out = fopen(outfile, "w");
+        write_elf(out, elf);
     }
 }

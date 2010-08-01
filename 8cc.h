@@ -522,6 +522,8 @@ extern NORETURN void error_token(Token *tok, char *msg, ...);
  * Code generator
  */
 
+extern bool flag_debug;
+
 // x86 general-purpose registers
 #define RAX 0
 #define RCX 1
@@ -600,7 +602,6 @@ extern Inst *make_instn(int op, List *args);
 extern bool is_flonum(Ctype *ctype);
 extern void print_function(Function *func);
 
-#endif /* ECC_H */
 
 /*============================================================
  * C script
@@ -608,3 +609,6 @@ extern void print_function(Function *func);
 
 extern int run_main(Elf *elf, int argc, char **argv);
 extern int run_string(char *code);
+
+
+#endif /* ECC_H */
