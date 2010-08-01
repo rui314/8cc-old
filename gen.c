@@ -958,9 +958,26 @@ static void handle_block(Context *ctx, Block *block) {
  * Debug print
  */
 
+typedef struct DebugPrintContext {
+    Dict *visited_block;
+    Dict *visited_var;
+    int serial;
+} DebugPrintContext;
+
+static char *serial_to_str(int serial) {
+    String *b = make_string();
+    o1(b, '$');
+    while (serial) {
+        o1(b, 'A' + (serial % 26) - 1);
+        serial /= 26;
+    }
+    o1(b, '\0');
+    return STRING_BODY(b);
+}
+
 static void print_ctype(Ctype *ctype) {
-    if (ctype->signedp)
-        debug("unsigned ");
+    if (!ctype->signedp)
+        debug("u");
     switch (ctype->type) {
     case CTYPE_PTR:
         debug("*");
@@ -982,7 +999,7 @@ static void print_ctype(Ctype *ctype) {
     }
 }
 
-static void print_var(Var *v) {
+static void print_var(Var *v, DebugPrintContext *ctx) {
     print_ctype(v->ctype);
     debug(" ");
     if (v->stype == VAR_IMM) {
@@ -1010,23 +1027,28 @@ static void print_var(Var *v) {
     } else {
         if (v->name)
             debug("%s ", STRING_BODY(v->name));
-        else
-            debug("(no name) ");
+        else if (dict_has(ctx->visited_var, v))
+            debug("%s ", (char *)dict_get(ctx->visited_var, v));
+        else {
+            char *s = serial_to_str(ctx->serial++);
+            dict_put(ctx->visited_var, v, s);
+            debug("%s ", s);
+        }
     }
     debug("%p", v->loc);
 }
 
-static void print_var_list(List *vars) {
+static void print_var_list(List *vars, DebugPrintContext *ctx) {
     for (int i = 0; i < LIST_LEN(vars); i++) {
         Var *p = LIST_REF(vars, i);
         if (i > 0) debug(", ");
-        print_var(p);
+        print_var(p, ctx);
     }
 }
 
-static void print_block(Block *block, Dict *visited);
+static void print_block(Block *block, DebugPrintContext *ctx);
 
-static bool print_inst(Inst *inst, Dict *visited) {
+static bool print_inst(Inst *inst, DebugPrintContext *ctx) {
     if (inst->op < 255)
         debug("  %c ", inst->op);
     else {
@@ -1038,45 +1060,49 @@ static bool print_inst(Inst *inst, Dict *visited) {
     }
     switch (inst->op) {
     case OP_IF:
-        print_var((Var *)LIST_REF(inst->args, 0));
+        print_var((Var *)LIST_REF(inst->args, 0), ctx);
         debug("\n\n");
-        print_block((Block *)LIST_REF(inst->args, 1), visited);
+        print_block((Block *)LIST_REF(inst->args, 1), ctx);
         debug("\n");
         if (LIST_REF(inst->args, 2))
-            print_block((Block *)LIST_REF(inst->args, 2), visited);
+            print_block((Block *)LIST_REF(inst->args, 2), ctx);
         else
             debug("  (no else)");
         debug("\n");
-        print_block((Block *)LIST_REF(inst->args, 3), visited);
+        print_block((Block *)LIST_REF(inst->args, 3), ctx);
         return true;
     case OP_JMP:
         debug("\n");
-        print_block((Block *)LIST_REF(inst->args, 0), visited);
+        print_block((Block *)LIST_REF(inst->args, 0), ctx);
         return true;
     default:
-        print_var_list(inst->args);
+        print_var_list(inst->args, ctx);
         debug("\n");
         return false;
     }
 }
 
-static void print_block(Block *block, Dict *visited) {
-    if (dict_has(visited, block)) {
+static void print_block(Block *block, DebugPrintContext *ctx) {
+    if (dict_has(ctx->visited_block, block)) {
         debug("  (block %p)\n", block);
         return;
     }
-    dict_put(visited, block, (void *)1);
+    dict_put(ctx->visited_block, block, (void *)1);
     for (int i = 0; i < LIST_LEN(block->code); i++)
-        if (print_inst((Inst *)LIST_REF(block->code, i), visited))
+        if (print_inst((Inst *)LIST_REF(block->code, i), ctx))
             break;
 }
 
 void print_function(Function *func) {
+    DebugPrintContext ctx;
+    ctx.visited_block = make_address_dict();
+    ctx.visited_var = make_address_dict();
+    ctx.serial = 1;
+
     debug("%s: ", STRING_BODY(func->name));
-    print_var_list(func->params);
+    print_var_list(func->params, &ctx);
     debug("\n");
-    Dict *visited = make_address_dict();
-    print_block(func->entry, visited);
+    print_block(func->entry, &ctx);
 }
 
 /*==============================================================================
