@@ -533,7 +533,7 @@ static void skip_line(CppContext *ctx) {
 }
 
 CondInclType skip_cond_incl(CppContext *ctx) {
-    assert(LIST_IS_EMPTY(ctx->ungotten));
+    ASSERT(LIST_IS_EMPTY(ctx->ungotten));
     int nest = 0;
     for (;;) {
         skip_whitespace(ctx);

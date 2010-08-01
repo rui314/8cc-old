@@ -6,6 +6,7 @@
  */
 
 #include "8cc.h"
+#include <execinfo.h>
 
 Exception *current_handler;
 
@@ -55,4 +56,15 @@ NORETURN void print_parse_error(int line, int column, char *msg, va_list ap) {
     String *b = make_string_printf("Line %d:%d: ", line, column);
     string_append(b, msg);
     verror(STRING_BODY(b), ap);
+}
+
+void print_stack_trace(void) {
+    void *buf[20];
+    int size = backtrace(buf, sizeof(buf));
+    fprintf(stderr, "Stack trace:\n");
+    fflush(stderr);
+    char **strs = backtrace_symbols(buf, size);
+    for (int i = 0; i < size; i++)
+        fprintf(stderr, "  %s\n", strs[i]);
+    free(strs);
 }

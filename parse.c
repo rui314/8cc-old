@@ -105,7 +105,7 @@ static Var *make_var(Ctype *ctype) {
 }
 
 static Var *make_deref_var(Var *var) {
-    assert(var->ctype->ptr);
+    ASSERT(var->ctype->ptr);
     // No expressions except string literals can be lvalues if their
     // type is "array of...".  C:ARM p.204.
     if (var->ctype->ptr->type == CTYPE_ARRAY) {

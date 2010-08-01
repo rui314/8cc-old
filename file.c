@@ -34,7 +34,7 @@ File *make_file(FILE *stream, char *filename) {
 }
 
 File *make_string_file(String *s) {
-    assert(STRING_BODY(s)[STRING_LEN(s)-1] == '\0');
+    ASSERT(STRING_BODY(s)[STRING_LEN(s)-1] == '\0');
 
     File *r = malloc(sizeof(File));
     r->type = FILE_STRING;

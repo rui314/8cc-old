@@ -11,7 +11,6 @@
 #define _POSIX_SOURCE
 #define _BSD_SOURCE
 
-#include <assert.h>
 #include <ctype.h>
 #include <limits.h>
 #include <setjmp.h>
@@ -159,8 +158,17 @@ extern Exception *make_exception(void);
 extern NORETURN void error(char *format, ...);
 extern void warn(char *format, ...);
 extern NORETURN void print_parse_error(int line, int column, char *msg, va_list ap);
+extern void print_stack_trace(void);
 
 #define panic(fmt, ...) error("[INTERNAL ERROR] %s:%d: " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
+
+#define ASSERT(expr)                              \
+    do {                                          \
+        if (!(expr)) {                            \
+            print_stack_trace();                  \
+            panic("Assertion failed: %s", #expr); \
+        }                                         \
+    } while (0)
 
 /*============================================================
  * List

@@ -236,8 +236,8 @@ bool is_flonum(Ctype *ctype) {
  */
 
 static int var_abs_pos(Context *ctx, Var *var) {
-    assert(var->stype == VAR_IMM);
-    assert(var->ctype->type == CTYPE_ARRAY);
+    ASSERT(var->stype == VAR_IMM);
+    ASSERT(var->ctype->type == CTYPE_ARRAY);
     CompiledVar *cvar = dict_get(ctx->global, var);
     if (!cvar) {
         Section *data = find_section(ctx->elf, ".data");
@@ -336,7 +336,7 @@ static u64 flonum_to_u64(double d) {
 }
 
 static void load_xmm_imm(Context *ctx, int xmmreg, Var *var) {
-    assert(is_flonum(var->ctype));
+    ASSERT(is_flonum(var->ctype));
     // SUB rsp, 8
     emit3(ctx, 0xec8148);
     emit4(ctx, 8);
@@ -378,7 +378,7 @@ static void load_xmm(Context *ctx, int reg, Var *var) {
 }
 
 static void save_xmm(Context *ctx, Var *var, int reg) {
-    assert(is_flonum(var->ctype));
+    ASSERT(is_flonum(var->ctype));
     int off = var_stack_pos(ctx, var);
     if (var->ctype->type == CTYPE_FLOAT) {
         // CVTPD2PS reg, reg
@@ -474,8 +474,8 @@ static int load_reg(Context *ctx, Var *var) {
 static void handle_int_to_float(Context *ctx, Inst *inst) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src = LIST_REF(inst->args, 1);
-    assert(is_flonum(dst->ctype));
-    assert(src->ctype->type == CTYPE_INT);
+    ASSERT(is_flonum(dst->ctype));
+    ASSERT(src->ctype->type == CTYPE_INT);
     load(ctx, RAX, src);
     // cvtsi2sd xmm0, rax
     emit4(ctx, 0x2a0f48f2);
@@ -486,8 +486,8 @@ static void handle_int_to_float(Context *ctx, Inst *inst) {
 static void handle_float_to_int(Context *ctx, Inst *inst) {
     Var *dst = LIST_REF(inst->args, 0);
     Var *src = LIST_REF(inst->args, 1);
-    assert(dst->ctype->type == CTYPE_INT);
-    assert(is_flonum(src->ctype));
+    ASSERT(dst->ctype->type == CTYPE_INT);
+    ASSERT(is_flonum(src->ctype));
     spill(ctx, RAX);
     load_xmm(ctx, XMM0, src);
     // CVTTSD2SI eax, xmm0
@@ -724,8 +724,8 @@ static void handle_shr(Context *ctx, Inst *inst) {
 static void handle_assign(Context *ctx, Inst *inst) {
     Var *var = LIST_REF(inst->args, 0);
     Var *val = LIST_REF(inst->args, 1);
-    assert(var->ctype->type != CTYPE_ARRAY);
-    assert(val);
+    ASSERT(var->ctype->type != CTYPE_ARRAY);
+    ASSERT(val);
     if (is_flonum(((Var *)LIST_REF(inst->args, 1))->ctype)) {
         load_xmm(ctx, XMM0, val);
         save_xmm(ctx, var, XMM0);

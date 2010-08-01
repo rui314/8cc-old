@@ -93,18 +93,18 @@ static void relocate(Elf *elf, Section *sect, JumpTable *tab) {
     for (int i = 0; i < LIST_LEN(sect->rels); i++) {
         Reloc *rel = LIST_REF(sect->rels, i);
         if (rel->sym) {
-            assert(rel->type == R_X86_64_PC32);
+            ASSERT(rel->type == R_X86_64_PC32);
             intptr loc = (intptr)dlsym(RTLD_DEFAULT, rel->sym);
             if (!loc)
                 error("cannot resolve symbol '%s'", rel->sym);
             intptr loc1 = add_jump(tab, loc);
-            assert(loc1 < 0xffffffffUL);
+            ASSERT(loc1 < 0xffffffffUL);
             Symbol *sym = find_symbol(elf, rel->sym);
             u32 *ptr = (void *)((intptr)(sym->section->memory_pos) + rel->off);
             *ptr = loc1 - (intptr)ptr - 4;
             continue;
         }
-        assert(rel->type == R_X86_64_64);
+        ASSERT(rel->type == R_X86_64_64);
         intptr loc = (intptr)(rel->section->memory_pos) + rel->addend;
         u64 *ptr = (void *)((intptr)(sect->memory_pos) + rel->off);
         *ptr = loc;

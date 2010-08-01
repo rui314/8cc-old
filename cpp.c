@@ -114,7 +114,7 @@ static Dict *punct_dict(void) {
 }
 
 static Token *to_keyword_maybe(Token *tok) {
-    assert(tok->toktype == TOKTYPE_IDENT);
+    ASSERT(tok->toktype == TOKTYPE_IDENT);
     int id = (intptr)dict_get(keyword_dict(), tok->val.str);
     if (id) {
         Token *r = copy_token(tok);
@@ -197,7 +197,7 @@ static Token *cpp_token_to_token(Token *tok) {
         r->toktype = TOKTYPE_KEYWORD;
         return r;
     }
-    assert(tok->toktype == TOKTYPE_CHAR || tok->toktype == TOKTYPE_STRING);
+    ASSERT(tok->toktype == TOKTYPE_CHAR || tok->toktype == TOKTYPE_STRING);
     return tok;
 }
 
@@ -518,7 +518,7 @@ static Token *glue_tokens(Token *t0, Token *t1) {
  * Joins a given token with the last token of a list.
  */
 static void glue_push(List *ls, Token *tok) {
-    assert(!LIST_IS_EMPTY(ls));
+    ASSERT(!LIST_IS_EMPTY(ls));
     Token *last = list_pop(ls);
     list_push(ls, glue_tokens(last, tok));
 }
@@ -712,7 +712,7 @@ static int eval_const_expr(CppContext *cppctx, List *tokens) {
     if (tok)
         error_token(tok, "newline expected, but got '%s'", token_to_string(tok));
 
-    assert(var->stype == VAR_IMM);
+    ASSERT(var->stype == VAR_IMM);
     if (!ctype_equal(var->ctype, CTYPE_INT))
         error_cpp_ctx(cppctx, "integer expected");
     return var->val.i;
