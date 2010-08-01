@@ -179,50 +179,50 @@ static void emit_regop(Context *ctx, int size, int op, int reg0, int reg1) {
 
 static void handle_block(Context *ctx, Block *block);
 
-static Inst *make_inst(int op, int narg) {
+static Inst *make_inst(int op) {
     Inst *r = malloc(sizeof(Inst));
     r->op = op;
-    r->args = (0 < narg) ? make_list() : NULL;
+    r->args = make_list();
     return r;
 }
 
 Inst *make_inst0(int op) {
-    Inst *r = make_inst(op, 0);
+    Inst *r = make_inst(op);
     return r;
 }
 
 Inst *make_inst1(int op, void *v0) {
-    Inst *r = make_inst(op, 1);
-    LIST_REF(r->args, 0) = v0;
+    Inst *r = make_inst(op);
+    list_push(r->args, v0);
     return r;
 }
 
 Inst *make_inst2(int op, void *v0, void *v1) {
-    Inst *r = make_inst(op, 2);
-    LIST_REF(r->args, 0) = v0;
-    LIST_REF(r->args, 1) = v1;
+    Inst *r = make_inst(op);
+    list_push(r->args, v0);
+    list_push(r->args, v1);
     return r;
 }
 
 Inst *make_inst3(int op, void *v0, void *v1, void *v2) {
-    Inst *r = make_inst(op, 3);
-    LIST_REF(r->args, 0) = v0;
-    LIST_REF(r->args, 1) = v1;
-    LIST_REF(r->args, 2) = v2;
+    Inst *r = make_inst(op);
+    list_push(r->args, v0);
+    list_push(r->args, v1);
+    list_push(r->args, v2);
     return r;
 }
 
 Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v3) {
-    Inst *r = make_inst(op, 4);
-    LIST_REF(r->args, 0) = v0;
-    LIST_REF(r->args, 1) = v1;
-    LIST_REF(r->args, 2) = v2;
-    LIST_REF(r->args, 3) = v3;
+    Inst *r = make_inst(op);
+    list_push(r->args, v0);
+    list_push(r->args, v1);
+    list_push(r->args, v2);
+    list_push(r->args, v3);
     return r;
 }
 
 Inst *make_instn(int op, List *args) {
-    Inst *r = make_inst(op, LIST_LEN(args));
+    Inst *r = make_inst(op);
     r->args = args;
     return r;
 }
@@ -951,6 +951,135 @@ static void handle_block(Context *ctx, Block *block) {
         emit1(ctx, 0x90);
     }
 }
+
+/*==============================================================================
+ * Debug print
+ */
+
+static void print_ctype(Ctype *ctype) {
+    if (ctype->signedp)
+        debug("unsigned ");
+    switch (ctype->type) {
+    case CTYPE_PTR:
+        debug("*");
+        print_ctype(ctype->ptr);
+        break;
+    case CTYPE_ARRAY:
+        print_ctype(ctype->ptr);
+        debug("[%d]", ctype->size);
+        break;
+    case CTYPE_LLONG:  debug("long long"); break;
+    case CTYPE_LONG:   debug("long"); break;
+    case CTYPE_INT:    debug("int"); break;
+    case CTYPE_SHORT:  debug("short"); break;
+    case CTYPE_CHAR:   debug("char"); break;
+    case CTYPE_FLOAT:  debug("float"); break;
+    case CTYPE_DOUBLE: debug("double"); break;
+    default:
+        panic("unknown type: %d", ctype->type);
+    }
+}
+
+static void print_var(Var *v) {
+    print_ctype(v->ctype);
+    debug(" ");
+    if (v->stype == VAR_IMM) {
+        switch (v->ctype->type) {
+        case CTYPE_CHAR:
+            debug("'%c' ", v->val.i);
+            break;
+        case CTYPE_LLONG:
+        case CTYPE_LONG:
+        case CTYPE_SHORT:
+        case CTYPE_INT:
+            debug("%ld ", v->val.i);
+            break;
+        case CTYPE_FLOAT:
+        case CTYPE_DOUBLE:
+            debug("%f ", v->val.f);
+            break;
+        case CTYPE_PTR:
+        case CTYPE_ARRAY:
+            debug("(array or ptr) ");
+            break;
+        default:
+            panic("unknown type: %d", v->ctype->type);
+        }
+    } else {
+        if (v->name)
+            debug("%s ", STRING_BODY(v->name));
+        else
+            debug("(no name) ");
+    }
+    debug("%p", v->loc);
+}
+
+static void print_var_list(List *vars) {
+    for (int i = 0; i < LIST_LEN(vars); i++) {
+        Var *p = LIST_REF(vars, i);
+        if (i > 0) debug(", ");
+        print_var(p);
+    }
+}
+
+static void print_block(Block *block, Dict *visited);
+
+static bool print_inst(Inst *inst, Dict *visited) {
+    if (inst->op < 255)
+        debug("  %c ", inst->op);
+    else {
+        switch (inst->op) {
+#define INST(x) case x: debug("  %s ", #x); break;
+#include "inst.h"
+#undef INST
+        }
+    }
+    switch (inst->op) {
+    case OP_IF:
+        print_var((Var *)LIST_REF(inst->args, 0));
+        debug("\n\n");
+        print_block((Block *)LIST_REF(inst->args, 1), visited);
+        debug("\n");
+        if (LIST_REF(inst->args, 2))
+            print_block((Block *)LIST_REF(inst->args, 2), visited);
+        else
+            debug("  (no else)");
+        debug("\n");
+        print_block((Block *)LIST_REF(inst->args, 3), visited);
+        return true;
+    case OP_JMP:
+        debug("\n");
+        print_block((Block *)LIST_REF(inst->args, 0), visited);
+        return true;
+    default:
+        print_var_list(inst->args);
+        debug("\n");
+        return false;
+    }
+}
+
+static void print_block(Block *block, Dict *visited) {
+    if (dict_has(visited, block)) {
+        debug("  (block %p)\n", block);
+        return;
+    }
+    dict_put(visited, block, (void *)1);
+    for (int i = 0; i < LIST_LEN(block->code); i++)
+        if (print_inst((Inst *)LIST_REF(block->code, i), visited))
+            break;
+}
+
+void print_function(Function *func) {
+    debug("%s: ", STRING_BODY(func->name));
+    print_var_list(func->params);
+    debug("\n");
+    Dict *visited = make_address_dict();
+    print_block(func->entry, visited);
+}
+
+/*==============================================================================
+ * Entry function
+ */
 
 static void save_params(Context *ctx, Function *func) {
     for (int i = 0; i < LIST_LEN(func->params); i++) {

@@ -22,6 +22,13 @@ static void print(char *pre, char *format, va_list ap) {
     fprintf(stderr, "\n");
 }
 
+void debug(char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    vfprintf(stderr, format, ap);
+    va_end(ap);
+}
+
 static NORETURN void verror(char *format, va_list ap) {
     if (current_handler) {
         Exception *e = current_handler;

@@ -156,6 +156,7 @@ extern Exception *current_handler;
 
 extern Exception *make_exception(void);
 extern NORETURN void error(char *format, ...);
+extern void debug(char *format, ...);
 extern void warn(char *format, ...);
 extern NORETURN void print_parse_error(int line, int column, char *msg, va_list ap);
 extern void print_stack_trace(void);
@@ -575,23 +576,10 @@ typedef struct Var {
 } Var;
 
 enum {
-    OP_FLUSH,
-    OP_LE,
-    OP_ADDRESS,
-    OP_DEREF,
-    OP_ASSIGN,
-    OP_ASSIGN_DEREF,
-    OP_ALLOC,
-    OP_FUNC_CALL = 256,
-    OP_IF,
-    OP_JMP,
-    OP_EQ,
-    OP_NE,
-    OP_RETURN,
-    OP_SHL,
-    OP_SHR,
-    OP_I2F,
-    OP_F2I,
+    OP_DUMMY = 255,
+#define INST(x) x,
+#include "inst.h"
+#undef INST
 };
 
 typedef struct Inst {
@@ -610,6 +598,7 @@ extern Inst *make_inst3(int op, void *v0, void *v1, void *v2);
 extern Inst *make_inst4(int op, void *v0, void *v1, void *v2, void *v4);
 extern Inst *make_instn(int op, List *args);
 extern bool is_flonum(Ctype *ctype);
+extern void print_function(Function *func);
 
 #endif /* ECC_H */
 
