@@ -509,7 +509,6 @@ typedef struct Ctype {
     int size; // valid iff type == CTYPE_ARRAY
 } Ctype;
 
-extern void parser_init(); // for testing
 extern List *parse(File *file, Elf *elf);
 extern int ctype_sizeof(Ctype *ctype);
 extern bool ctype_equal(Ctype *ctype, int type);
