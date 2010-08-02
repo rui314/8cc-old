@@ -574,7 +574,6 @@ typedef struct Var {
     struct Var *loc; // Non-NULL if lvalue
     // For register allocation
     bool need_save;
-    bool is_temp;
 } Var;
 
 enum {

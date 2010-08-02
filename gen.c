@@ -853,7 +853,7 @@ static void handle_return(Context *ctx, Inst *inst) {
 
 static void handle_flush(Context *ctx) {
     for (int i = 0; i < 16; i++)
-        if (INUSE(ctx, i) && ctx->var[i]->is_temp)
+        if (INUSE(ctx, i) && !ctx->var[i]->name)
             ctx->var[i] = NULL;
 }
 

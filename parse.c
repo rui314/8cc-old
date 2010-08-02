@@ -100,7 +100,6 @@ static Var *make_var(Ctype *ctype) {
     r->name = NULL;
     r->loc = NULL;
     r->need_save = true;
-    r->is_temp = true;
     return r;
 }
 
@@ -1213,7 +1212,6 @@ static Var *read_initializer(ReadContext *ctx) {
  */
 static void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *var = read_declarator(ctx, ctype);
-    var->is_temp = false;
     add_local_var(ctx, var->name, var);
     if (next_token_is(ctx, '=')) {
         Var *val = unary_conv(ctx, read_initializer(ctx));
@@ -1612,7 +1610,6 @@ static List *read_param_type_list(ReadContext *ctx) {
     for (;;) {
         Ctype *type = read_declaration_spec(ctx);
         Var *param = read_declarator(ctx, type);
-        param->is_temp = false;
         if (param->ctype->type == CTYPE_ARRAY)
             param->ctype = make_ctype_ptr(param->ctype->ptr);
         add_local_var(ctx, param->name, param);
