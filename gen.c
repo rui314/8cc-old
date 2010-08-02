@@ -662,6 +662,7 @@ static void handle_less(Context *ctx, Inst *inst) {
         // SETL al
         emit_cmp(ctx, inst, 0x9c0f);
     }
+    save_all(ctx);
 }
 
 static void handle_less_equal(Context *ctx, Inst *inst) {
@@ -672,6 +673,7 @@ static void handle_less_equal(Context *ctx, Inst *inst) {
         // SETLE al
         emit_cmp(ctx, inst, 0x9e0f);
     }
+    save_all(ctx);
 }
 
 static void handle_neg(Context *ctx, Inst *inst) {
@@ -744,6 +746,7 @@ static void handle_equal(Context *ctx, Inst *inst, bool eq) {
     } else {
         emit_cmp(ctx, inst, eq ? 0x940f : 0x950f);
     }
+    save_all(ctx);
 }
 
 static void handle_address(Context *ctx, Inst *inst) {
@@ -851,12 +854,6 @@ static void handle_return(Context *ctx, Inst *inst) {
     emit1(ctx, 0xc3); // RET
 }
 
-static void handle_flush(Context *ctx) {
-    for (int i = 0; i < 16; i++)
-        if (INUSE(ctx, i) && !ctx->var[i]->name)
-            ctx->var[i] = NULL;
-}
-
 static void handle_block(Context *ctx, Block *block) {
     save_all(ctx);
     reset_context(ctx);
@@ -868,9 +865,6 @@ static void handle_block(Context *ctx, Block *block) {
     for (int i = 0; i < LIST_LEN(block->code); i++) {
         Inst *inst = LIST_REF(block->code, i);
         switch (inst->op) {
-        case OP_FLUSH:
-            handle_flush(ctx);
-            break;
         case '+': case '-':
             handle_add_or_sub(ctx, inst, inst->op == '+');
             break;

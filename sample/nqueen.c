@@ -7,6 +7,7 @@ print_board(int *board[N]) {
             printf(board[i][j] ? "Q " : ". ");
         printf("\n");
     }
+    printf("\n\n");
 }
 
 conflict(int *board[N], int row, int col) {
@@ -25,15 +26,14 @@ conflict(int *board[N], int row, int col) {
 solve(int *board[N], int row) {
     if (row == N) {
         print_board(board);
-        printf("\n\n");
         return;
     }
     for (int i = 0; i < N; i++) {
         if (!conflict(board, row, i)) {
             board[row][i] = 1;
             solve(board, row + 1);
+            board[row][i] = 0;
         }
-        board[row][i] = 0;
     }
 }
 

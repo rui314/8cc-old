@@ -1263,7 +1263,6 @@ static void read_declaration(ReadContext *ctx) {
             break;
     }
     expect(ctx, ';');
-    emit(ctx, make_inst0(OP_FLUSH));
 }
 
 /*
@@ -1565,7 +1564,6 @@ static void read_stmt(ReadContext *ctx) {
         if (!is_keyword(tok2, ';'))
             error_token(tok2, "';' expected, but got '%s'", token_to_string(tok2));
     }
-    emit(ctx, make_inst0(OP_FLUSH));
 }
 
 /*
