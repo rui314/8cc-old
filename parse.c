@@ -44,6 +44,7 @@ static Token *read_ident(ReadContext *ctx);
 static void read_compound_stmt(ReadContext *ctx);
 static void read_decl_or_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
+static Var *read_subscript_expr(ReadContext *ctx, Var *a);
 
 /*============================================================
  * Error handlers
@@ -492,6 +493,8 @@ static char *keyword_to_string(int v) {
 }
 
 char *token_to_string(Token *tok) {
+    if (!tok)
+        return "(nil)";
     String *r = make_string();
     switch (tok->toktype) {
     case TOKTYPE_KEYWORD:
@@ -619,7 +622,22 @@ static Var *read_primary_expr(ReadContext *ctx) {
  *     compound-literal
  */
 static Var *read_postfix_expr(ReadContext *ctx) {
-    return read_primary_expr(ctx);
+    Var *r = read_primary_expr(ctx);
+    for (;;) {
+        Token *tok = read_token(ctx);
+        if (!tok)
+            return r;
+        else if (is_keyword(tok, KEYWORD_INC))
+            r = emit_post_inc(ctx, r);
+        else if (is_keyword(tok, KEYWORD_DEC))
+            r = emit_post_dec(ctx, r);
+        else if (is_keyword(tok, '['))
+            r = read_subscript_expr(ctx, r);
+        else {
+            unget_token(ctx, tok);
+            return r;
+        }
+    }
 }
 
 /*
@@ -901,18 +919,6 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         if (prec1 < 0 || prec0 < prec1) {
             unget_token(ctx, tok);
             return v0;
-        }
-        if (is_keyword(tok, '[')) {
-            v0 = read_subscript_expr(ctx, v0);
-            continue;
-        }
-        if (is_keyword(tok, KEYWORD_INC)) {
-            v0 = emit_post_inc(ctx, v0);
-            continue;
-        }
-        if (is_keyword(tok, KEYWORD_DEC)) {
-            v0 = emit_post_dec(ctx, v0);
-            continue;
         }
         if (is_keyword(tok, '?')) {
             v0 = read_cond_expr(ctx, v0);

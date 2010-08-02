@@ -443,6 +443,7 @@ TEST(inc_and_dec) {
     test("22", "main(){int i=1; printf(\"%d\", ++i);printf(\"%d\", i);}");
     test("54", "main(){int i=5; printf(\"%d\", i--);printf(\"%d\", i);}");
     test("44", "main(){int i=5; printf(\"%d\", --i);printf(\"%d\", i);}");
+    test("3 5", "main(){int a[2]; a[0]=3; a[1]=5; int *p=a; *p++; printf(\"%d %d\", a[0], *p);}");
 }
 
 /*

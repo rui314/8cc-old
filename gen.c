@@ -997,7 +997,7 @@ String *ctype_to_string(Ctype *ctype) {
     case CTYPE_FLOAT:  string_append(b, "float"); break;
     case CTYPE_DOUBLE: string_append(b, "double"); break;
     default:
-        panic("unknown type: %d", ctype->type);
+        string_printf(b, "[[unknown type:%d]]", ctype->type);
     }
     return b;
 }
