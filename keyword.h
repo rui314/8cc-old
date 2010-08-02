@@ -4,7 +4,7 @@
  */
 
 /*
- * List of keywords (WG14/N1256 6.4.1)
+ * List of keywords (C99 6.4.1)
  */
 KEYWORD(KEYWORD_AUTO, "auto")
 KEYWORD(KEYWORD_BREAK, "break")

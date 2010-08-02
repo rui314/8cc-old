@@ -13,7 +13,7 @@
  * the sequence of tokens.
  *
  * The functions in this file does parses C source file into sequence of
- * preprocessor token.  Preprocessor token is defined as the below (WG14/N1256
+ * preprocessor token.  Preprocessor token is defined as the below (C99
  * 6.4):
  *
  * preprocessing-token:
@@ -143,7 +143,7 @@ static Token *make_cpp_token(CppContext *ctx, TokType type) {
 
 /*==============================================================================
  * Functions to handle comments.  Comment will be treated as if it were one
- * whitespace character.  (See WG14/N1256 5.1.1.2 Translation phases, phase 4)
+ * whitespace character.  (See C99 5.1.1.2 Translation phases, phase 4)
  */
 static void skip_comment(CppContext *ctx) {
     int prev = '\0';
@@ -173,7 +173,7 @@ static void skip_line_comment(CppContext *ctx) {
  */
 
 /*
- * WG14/N1256 6.4.8 Preprocessing numbers
+ * C99 6.4.8 Preprocessing numbers
  *
  * pp-number
  *     digit
@@ -183,7 +183,7 @@ static void skip_line_comment(CppContext *ctx) {
  *     pp-number [eEpP] sign
  *     pp-number .
  *
- * (WG14/N1256 6.4.2 Identifiers)
+ * (C99 6.4.2 Identifiers)
  * identifier-nondigit:
  *     nondigit
  *     universal-character-name
@@ -469,7 +469,7 @@ static Token *read_cpp_token_int(CppContext *ctx) {
              *   <: :> <% %> %: %:%:
              * are equivalent to the following six tokens.
              *   [   ]  {  }  #  ##
-             * (WG14/N1256 6.4.6 Punctuators, paragraph 3)
+             * (C99 6.4.6 Punctuators, paragraph 3)
              */
         case '<':
             if (next_char_is(ctx->file, ':'))
@@ -570,7 +570,7 @@ CondInclType skip_cond_incl(CppContext *ctx) {
 }
 
 /*==============================================================================
- * WG14/N1256 6.4.7 Header names
+ * C99 6.4.7 Header names
  *
  * #include directive needs special tokenize to read a token in <> or "".
  *

@@ -7,6 +7,12 @@
 
 #include "8cc.h"
 
+/*
+ * References:
+ * C99 spec: http://www.open-std.org/jtc1/sc22/WG14/www/docs/n1256.pdf
+ */
+
+
 /*==============================================================================
  * Utility functions for token handling.
  */
@@ -202,7 +208,7 @@ static Token *cpp_token_to_token(Token *tok) {
 }
 
 /*==============================================================================
- * WG14/N1256 6.10.8 Predefined macro names.
+ * C99 6.10.8 Predefined macro names.
  */
 
 static void handle_pragma(CppContext *ctx);
@@ -375,7 +381,7 @@ static void pushback(CppContext *ctx, List *ts) {
  * Reads comma-separated arguments of function-like macro invocation.  Comma
  * characters in matching parentheses are not considered as separator.
  *
- * (WG14/N1256 6.10.3 Macro replacement, sentence 10)
+ * (C99 6.10.3 Macro replacement, sentence 10)
  */
 static List *read_args_int(CppContext *ctx, Macro *macro) {
     List *r = make_list();
@@ -679,7 +685,7 @@ static bool is_defined(CppContext *ctx, Token *tok) {
  * "defined(<identifier>)".  The token "defined" is already read when the
  * function is called.
  *
- * (WG14/N1256 6.10.1 Conditional inclusion, paragraph 1)
+ * (C99 6.10.1 Conditional inclusion, paragraph 1)
  */
 static Token *read_defined(CppContext *ctx) {
     Token *tok = read_cpp_token(ctx);
@@ -722,7 +728,7 @@ static int eval_const_expr(CppContext *cppctx, List *tokens) {
  * Reads an constant expression for #if directive.  In preprocessor constant
  * expression, all undefined identifiers are replaced with 0.
  *
- * (WG14/N1256 6.10.1 * Conditional inclusion, paragraph 4)
+ * (C99 6.10.1 Conditional inclusion, paragraph 4)
  */
 static int read_constant_expr(CppContext *ctx) {
     List *tokens = make_list();
@@ -739,7 +745,7 @@ static int read_constant_expr(CppContext *ctx) {
 
 /*
  * #ifdef
- * (WG14/N1256 6.10.1 Conditional inclusion, paragraph 5)
+ * (C99 6.10.1 Conditional inclusion, paragraph 5)
  */
 static int read_ifdef(CppContext *ctx) {
     int r = is_defined(ctx, read_cpp_token(ctx));
@@ -752,7 +758,7 @@ static int read_ifdef(CppContext *ctx) {
  * function calls skip_cond_include(), defined in lex.c, to skip all tokens
  * until the next #elif, #else of #endif.
  *
- * (WG14/N1256 6.10.1 Conditional inclusion)
+ * (C99 6.10.1 Conditional inclusion)
  */
 static void handle_cond_incl(CppContext *ctx, CondInclType type) {
     bool cond;
@@ -861,9 +867,8 @@ static List *read_funclike_define_body(CppContext *ctx, Dict *param) {
 /*
  * Stores a given macro to a CppContex.
  *
- * TODO: Print warning message if a macro is redefined.  Redefinition
- * is valid only when the a one is the same as the old one. (C99
- * 6.10.3p2)
+ * TODO: Print warning message if a macro is redefined.  Redefinition is valid
+ * only when the a one is the same as the old one. (C99 6.10.3p2)
  */
 
 static void store_macro(CppContext *ctx, String *name, Macro *macro) {
@@ -882,7 +887,7 @@ static void read_funclike_define(CppContext *ctx, String *name) {
 
 /*
  * #define
- * (WG14/N1256 6.10.3 Macro replacement)
+ * (C99 6.10.3 Macro replacement)
  */
 static void read_define(CppContext *ctx) {
     Token *name = read_cpp_token(ctx);
@@ -907,7 +912,7 @@ static void read_define(CppContext *ctx) {
 
 /*
  * #undef
- * (WG14/N1256 6.10.5 Scope of macro definisions, paragraph 2)
+ * (C99 6.10.5 Scope of macro definisions, paragraph 2)
  */
 static void read_undef(CppContext *ctx) {
     Token *name = read_cpp_token(ctx);
@@ -923,7 +928,7 @@ static void read_undef(CppContext *ctx) {
  * "std" will set to true.  If quoted with doublequote, set to false.  We use
  * expand_one() rather than read_cpp_token(), because macros are allowed to be
  * used in #include.
- * (WG14/N1256 6.10.2 Source file inclusion)
+ * (C99 6.10.2 Source file inclusion)
  */
 static void read_cpp_header_name(CppContext *ctx, String **name, bool *std) {
     if (LIST_IS_EMPTY(ctx->ungotten)) {
@@ -987,7 +992,7 @@ static File *open_header(CppContext *ctx, String *name, List *paths) {
 
 /*
  * #include
- * (WG14/N1256 6.10.2 Source file inclusion)
+ * (C99 6.10.2 Source file inclusion)
  */
 static void handle_include(CppContext *ctx) {
     String *name;
@@ -1004,7 +1009,7 @@ static void handle_include(CppContext *ctx) {
 
 /*
  * #line
- * (WG14/N1256 6.10.4 Line control)
+ * (C99 6.10.4 Line control)
  *
  * Line directive must be one of the following form in macro-expanded form:
  *
@@ -1033,7 +1038,7 @@ static void handle_line_directive(CppContext *ctx) {
 
 /*
  * #pragma
- * (WG14/N1256 6.10.5 6.10.6 Pragma directive)
+ * (C99 6.10.5 6.10.6 Pragma directive)
  *
  * No pragmas including standard C's are not supported for now.
  */
@@ -1043,7 +1048,7 @@ static void handle_pragma(CppContext *ctx) {
 
 /*
  * #error
- * (WG14/N1256 6.10.5 Error directive)
+ * (C99 6.10.5 Error directive)
  */
 static void read_error_directive(CppContext *ctx, Token *define) {
     String *buf = make_string();
