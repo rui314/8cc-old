@@ -81,6 +81,7 @@ static Ctype *make_ctype_ptr(Ctype *type) {
     r->type = CTYPE_PTR;
     r->ptr = type;
     r->size = 1;
+    r->signedp = true;
     return r;
 }
 
@@ -89,6 +90,7 @@ static Ctype *make_ctype_array(Ctype *type, int size) {
     r->type = CTYPE_ARRAY;
     r->ptr = type;
     r->size = size;
+    r->signedp = true;
     return r;
 }
 

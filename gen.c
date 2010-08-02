@@ -958,6 +958,7 @@ static void handle_block(Context *ctx, Block *block) {
  * Debug print
  */
 
+
 typedef struct DebugPrintContext {
     Dict *visited_block;
     Dict *visited_var;
@@ -975,67 +976,68 @@ static char *serial_to_str(int serial) {
     return STRING_BODY(b);
 }
 
-static void print_ctype(Ctype *ctype) {
+String *ctype_to_string(Ctype *ctype) {
+    String *b = make_string();
     if (!ctype->signedp)
-        debug("u");
+        o1(b, 'u');
     switch (ctype->type) {
     case CTYPE_PTR:
-        debug("*");
-        print_ctype(ctype->ptr);
+        o1(b, '*');
+        string_append(b, STRING_BODY(ctype_to_string(ctype->ptr)));
         break;
     case CTYPE_ARRAY:
-        print_ctype(ctype->ptr);
-        debug("[%d]", ctype->size);
+        string_append(b, STRING_BODY(ctype_to_string(ctype->ptr)));
+        string_printf(b, "[%d]", ctype->size);
         break;
-    case CTYPE_LLONG:  debug("long long"); break;
-    case CTYPE_LONG:   debug("long"); break;
-    case CTYPE_INT:    debug("int"); break;
-    case CTYPE_SHORT:  debug("short"); break;
-    case CTYPE_CHAR:   debug("char"); break;
-    case CTYPE_FLOAT:  debug("float"); break;
-    case CTYPE_DOUBLE: debug("double"); break;
+    case CTYPE_LLONG:  string_append(b, "long long"); break;
+    case CTYPE_LONG:   string_append(b, "long"); break;
+    case CTYPE_INT:    string_append(b, "int"); break;
+    case CTYPE_SHORT:  string_append(b, "short"); break;
+    case CTYPE_CHAR:   string_append(b, "char"); break;
+    case CTYPE_FLOAT:  string_append(b, "float"); break;
+    case CTYPE_DOUBLE: string_append(b, "double"); break;
     default:
         panic("unknown type: %d", ctype->type);
     }
+    return b;
 }
 
 static void print_var(Var *v, DebugPrintContext *ctx) {
-    print_ctype(v->ctype);
-    debug(" ");
+    debug("%s ", STRING_BODY(ctype_to_string(v->ctype)));
     if (v->stype == VAR_IMM) {
         switch (v->ctype->type) {
         case CTYPE_CHAR:
-            debug("'%c' ", v->val.i);
-            break;
+            debug("'%c'", v->val.i);
+            return;
         case CTYPE_LLONG:
         case CTYPE_LONG:
         case CTYPE_SHORT:
         case CTYPE_INT:
-            debug("%ld ", v->val.i);
-            break;
+            debug("%ld", v->val.i);
+            return;
         case CTYPE_FLOAT:
         case CTYPE_DOUBLE:
-            debug("%f ", v->val.f);
-            break;
+            debug("%f", v->val.f);
+            return;
         case CTYPE_PTR:
+            debug("(ptr)");
+            return;
         case CTYPE_ARRAY:
-            debug("(array or ptr) ");
-            break;
+            debug("(array) ");
+            return;
         default:
             panic("unknown type: %d", v->ctype->type);
         }
-    } else {
-        if (v->name)
-            debug("%s ", STRING_BODY(v->name));
-        else if (dict_has(ctx->visited_var, v))
-            debug("%s ", (char *)dict_get(ctx->visited_var, v));
-        else {
-            char *s = serial_to_str(ctx->serial++);
-            dict_put(ctx->visited_var, v, s);
-            debug("%s ", s);
-        }
     }
-    debug("%p", v->loc);
+    if (v->name)
+        debug("%s", STRING_BODY(v->name));
+    else if (dict_has(ctx->visited_var, v))
+        debug("%s", (char *)dict_get(ctx->visited_var, v));
+    else {
+        char *s = serial_to_str(ctx->serial++);
+        dict_put(ctx->visited_var, v, s);
+        debug("%s", s);
+    }
 }
 
 static void print_var_list(List *vars, DebugPrintContext *ctx) {
