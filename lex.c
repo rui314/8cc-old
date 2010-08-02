@@ -646,7 +646,7 @@ Token *read_cpp_token(CppContext *ctx) {
     Token *tok = read_cpp_token_int(ctx);
     while (tok && tok->toktype == TOKTYPE_SPACE) {
         tok = read_cpp_token_int(ctx);
-        tok->space = true;
+        if (tok) tok->space = true;
     }
     if (!tok && !LIST_IS_EMPTY(ctx->file_stack)) {
         close_file(ctx->file);
