@@ -437,6 +437,7 @@ extern void define_predefined_macros(CppContext *ctx);
  */
 
 struct Var;
+struct Ctype;
 
 /*
  * Represents basic block of program.  Code must contain one of OP_RETURN OP_JMP
@@ -450,6 +451,7 @@ typedef struct Block {
 
 typedef struct Function {
     String *name;
+    struct Ctype *rettype;
     List *params;
     Block *entry;
 } Function;
@@ -468,6 +470,8 @@ typedef struct ReadContext {
     List *blockstack;
     // Pushback buffer for tokens.
     List *ungotten;
+    // Function being read.
+    Function *func;
     // "break" and "continue" targets.  NULL means we're outside of loop or
     // switch.
     Block *onbreak;

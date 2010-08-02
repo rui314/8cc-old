@@ -138,11 +138,12 @@ static Var *make_extern(String *name) {
     return r;
 }
 
-static Function *make_function(String *name, List *params, Block *entry) {
+static Function *make_function(String *name, Ctype *rettype, List *params) {
     Function *r = malloc(sizeof(Function));
     r->name = name;
+    r->rettype = rettype;
     r->params = params;
-    r->entry = entry;
+    r->entry = NULL;
     return r;
 }
 
@@ -1110,7 +1111,8 @@ static Ctype *read_declaration_spec(ReadContext *ctx) {
         }
     }
  end:
-    r->signedp = (sign != UNSIGNED);
+    if (r)
+        r->signedp = (sign != UNSIGNED);
     unget_token(ctx, tok);
     return r ? r : make_ctype(CTYPE_INT);
  sign_error:
@@ -1648,10 +1650,15 @@ static List *read_param_type_list(ReadContext *ctx) {
  *     direct-abstract-declarator? "(" parameter-type-list? ")"
  */
 static Function *read_func_declaration(ReadContext *ctx) {
+    Ctype *rettype = read_declaration_spec(ctx);
     Token *fname = read_ident(ctx);
     expect(ctx, '(');
     push_scope(ctx);
     List *params = read_param_type_list(ctx);
+
+    Function *fn = make_function(fname->val.str, rettype, params);
+    ctx->func = fn;
+
     expect(ctx, '{');
     read_compound_stmt(ctx);
     pop_scope(ctx);
@@ -1662,7 +1669,8 @@ static Function *read_func_declaration(ReadContext *ctx) {
     emit(ctx, make_inst1(OP_RETURN, make_imm(CTYPE_INT, (Cvalue)0)));
     pop_block(ctx);
 
-    return make_function(fname->val.str, params, ctx->entry);
+    fn->entry = ctx->entry;
+    return fn;
 }
 
 /*============================================================

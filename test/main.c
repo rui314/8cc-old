@@ -480,6 +480,7 @@ TEST(function_call) {
     // functions taking parameters
     test("1 2", "main() { bar(1, 2); } bar(int i, int j) { printf(\"%d %d\", i, j); }");
     test("17 42", "main() { int p[3]; p[0]=17; p[1]=42; bar(p); } bar(int *p) { printf(\"%d %d\", p[0], p[1]); }");
+    test("3", "int main() { printf(\"%d\", foo(3)); } int foo(int arg) { return arg; }");
 }
 
 /*
