@@ -160,6 +160,7 @@ extern void debug(char *format, ...);
 extern void warn(char *format, ...);
 extern NORETURN void print_parse_error(int line, int column, char *msg, va_list ap);
 extern void print_stack_trace(void);
+extern void print_stack_trace_safe(void);
 
 #define panic(fmt, ...)                                                 \
     do {                                                                \
@@ -608,6 +609,12 @@ extern Inst *make_instn(int op, List *args);
 extern bool is_flonum(Ctype *ctype);
 extern void print_function(Function *func);
 
+
+/*============================================================
+ * Initializer
+ */
+
+void eightcc_init(void);
 
 /*============================================================
  * C script

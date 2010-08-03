@@ -65,13 +65,29 @@ NORETURN void print_parse_error(int line, int column, char *msg, va_list ap) {
     verror(STRING_BODY(b), ap);
 }
 
-void print_stack_trace(void) {
+static void print_stack_trace_int(bool safe) {
     void *buf[20];
     int size = backtrace(buf, sizeof(buf));
     fprintf(stderr, "Stack trace:\n");
     fflush(stderr);
-    char **strs = backtrace_symbols(buf, size);
-    for (int i = 0; i < size; i++)
-        fprintf(stderr, "  %s\n", strs[i]);
-    free(strs);
+
+    if (safe)
+        backtrace_symbols_fd(buf, size, STDERR_FILENO);
+    else {
+        char **strs = backtrace_symbols(buf, size);
+        for (int i = 0; i < size; i++)
+            fprintf(stderr, "  %s\n", strs[i]);
+        free(strs);
+    }
+}
+
+void print_stack_trace(void) {
+    print_stack_trace_int(false);
+}
+
+/*
+ * print_stack_trace() that don't call malloc().
+ */
+void print_stack_trace_safe(void) {
+    print_stack_trace_int(true);
 }

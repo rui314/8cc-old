@@ -15,6 +15,8 @@ static void usage(void) {
 }
 
 int main(int argc, char **argv) {
+    eightcc_init();
+
     bool flag_cscript = false;
     char *infile = NULL;
     char *outfile = NULL;
