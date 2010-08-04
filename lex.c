@@ -33,10 +33,7 @@
  */
 
 static List *make_include_path(void) {
-    List *r = make_list();
-    list_push(r, to_string("/usr/include"));
-    list_push(r, to_string("/usr/local/include"));
-    return r;
+    return make_list2(to_string("/usr/include"), to_string("/usr/local/include"));
 }
 
 CppContext *make_cpp_context(File *file) {

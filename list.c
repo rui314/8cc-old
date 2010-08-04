@@ -21,9 +21,32 @@ List *make_list(void) {
     return make_list_int(LIST_INITIAL_SIZE);
 }
 
-List *make_list1(void *e) {
+List *make_list1(void *e0) {
     List *r = make_list();
-    list_push(r, e);
+    list_push(r, e0);
+    return r;
+}
+
+List *make_list2(void *e0, void *e1) {
+    List *r = make_list();
+    list_push(r, e0);
+    list_push(r, e1);
+    return r;
+}
+
+List *make_listn(void *e0, ...) {
+    List *r = make_list();
+    list_push(r, e0);
+
+    va_list ap;
+    va_start(ap, e0);
+    for (;;) {
+        void *e = va_arg(ap, void *);
+        if (!e) break;
+        list_push(r, e);
+    }
+    va_end(ap);
+
     return r;
 }
 

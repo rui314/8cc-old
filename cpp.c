@@ -214,8 +214,7 @@ static Token *cpp_token_to_token(Token *tok) {
 static void handle_pragma(CppContext *ctx);
 
 static void def_obj_macro(CppContext *ctx, char *name, Token *tok) {
-    List *list = make_list();
-    list_push(list, tok);
+    List *list = make_list1(tok);
     dict_put(ctx->defs, to_string(name), make_obj_macro(list));
 }
 

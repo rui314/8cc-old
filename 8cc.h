@@ -195,7 +195,9 @@ typedef struct List {
 #define LIST_IS_EMPTY(lis) ((lis)->len == 0)
 
 extern List *make_list(void);
-extern List *make_list1(void *e);
+extern List *make_list1(void *e0);
+extern List *make_list2(void *e0, void *e1);
+extern List *make_listn(void *e0, ...);
 extern void list_push(List *list, void *e);
 extern void list_push(List *list, void *e);
 extern void *list_pop(List *list);
