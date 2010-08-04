@@ -9,6 +9,14 @@
 #include <signal.h>
 
 static void sigsegv_handler(int signo) {
+    struct sigaction act;
+    act.sa_handler = SIG_DFL;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+    if (sigaction(SIGSEGV, &act, NULL)) {
+        perror("sigaction failed: ");
+        exit(-1);
+    }
     fprintf(stderr, "\n");
     print_stack_trace_safe();
 }
