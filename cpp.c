@@ -1086,6 +1086,80 @@ static void read_directive(CppContext *ctx) {
 }
 
 /*==============================================================================
+ * -E option.
+ *
+ * write_cpp() writes preprocessed tokens to a given file.  This is useful for
+ * debugging.
+ */
+
+static Token *read_token_int(CppContext *ctx) {
+    for (;;) {
+        Token *tok = read_cpp_token(ctx);
+        if (!tok)
+            return NULL;
+        if (tok->toktype == TOKTYPE_NEWLINE) {
+            ctx->at_bol = true;
+            return tok;
+        }
+        if (ctx->at_bol && is_punct(tok, '#')) {
+            read_directive(ctx);
+            ctx->at_bol = true;
+            continue;
+        }
+        ctx->at_bol = false;
+        unget_cpp_token(ctx, tok);
+        return expand_one(ctx);
+    }
+}
+
+static void write_cpp_token(FILE *out, Token *tok, bool is_bol) {
+    if (!is_bol && tok->space)
+        fprintf(out, " ");
+    switch (tok->toktype) {
+    case TOKTYPE_IDENT:
+    case TOKTYPE_CPPNUM:
+        fprintf(out, "%s", STRING_BODY(tok->val.str));
+        break;
+    case TOKTYPE_PUNCT:
+        fprintf(out, "%s", token_to_string(tok));
+        break;
+    case TOKTYPE_CHAR: {
+        String *b = make_string();
+        stringize_char(b, tok->val.i, '\'');
+        fprintf(out, "'%s'", STRING_BODY(b));
+        break;
+    }
+    case TOKTYPE_STRING: {
+        fprintf(out, "\"");
+        for (char *p = STRING_BODY(tok->val.str); *p; p++) {
+            String *b = make_string();
+            stringize_char(b, *p, '\"');
+            fprintf(out, "'%s'", STRING_BODY(b));
+        }
+        fprintf(out, "\"");
+        break;
+    }
+    default:
+        panic("invalid token type: %d", tok->toktype);
+    }
+}
+
+void cpp_write(CppContext *ctx, FILE *out) {
+    bool is_bol = true;
+    for (;;) {
+        Token *tok = read_token_int(ctx);
+        if (!tok) return;
+        if (tok->toktype == TOKTYPE_NEWLINE) {
+            fprintf(out, "\n");
+            is_bol = true;
+            continue;
+        }
+        write_cpp_token(out, tok, is_bol);
+        is_bol = false;
+    }
+}
+
+/*==============================================================================
  * Entry function of the preprocessor.
  *
  * read_token() reads preprocessing tokens by calling read_cpp_token(), which is
@@ -1113,22 +1187,11 @@ Token *read_token(ReadContext *readctx) {
     if (!LIST_IS_EMPTY(readctx->ungotten))
         return list_pop(readctx->ungotten);
 
-    CppContext *ctx = readctx->cppctx;
     for (;;) {
-        Token *tok = read_cpp_token(ctx);
-        if (!tok)
-            return NULL;
-        if (tok->toktype == TOKTYPE_NEWLINE) {
-            ctx->at_bol = true;
+        Token *tok = read_token_int(readctx->cppctx);
+        if (!tok) return NULL;
+        if (tok->toktype == TOKTYPE_NEWLINE)
             continue;
-        }
-        if (ctx->at_bol && is_punct(tok, '#')) {
-            read_directive(ctx);
-            ctx->at_bol = true;
-            continue;
-        }
-        ctx->at_bol = false;
-        unget_cpp_token(ctx, tok);
-        return cpp_token_to_token(expand_one(ctx));
+        return cpp_token_to_token(tok);
     }
 }

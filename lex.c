@@ -32,6 +32,13 @@
  * Functions to make CPP processing context.
  */
 
+static List *make_include_path(void) {
+    List *r = make_list();
+    list_push(r, to_string("/usr/include"));
+    list_push(r, to_string("/usr/local/include"));
+    return r;
+}
+
 CppContext *make_cpp_context(File *file) {
     CppContext *r = malloc(sizeof(CppContext));
     r->file = file;
@@ -41,7 +48,7 @@ CppContext *make_cpp_context(File *file) {
     r->ungotten = make_list();
     r->in_macro = false;
     r->incl = make_list();
-    r->include_path = make_list();
+    r->include_path = make_include_path();
     r->tm = NULL;
     define_predefined_macros(r);
     return r;

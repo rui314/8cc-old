@@ -432,6 +432,7 @@ extern NORETURN void error_cpp_ctx(CppContext *ctx, char *msg, ...);
 struct ReadContext;
 extern Token *read_token(struct ReadContext *ctx);
 extern void define_predefined_macros(CppContext *ctx);
+extern void cpp_write(CppContext *ctx, FILE *out);
 
 /*============================================================
  * Parser
