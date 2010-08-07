@@ -189,26 +189,33 @@ Node *make_call_instr(LvalExp *retval, LvalExp *fn, List *param) {
  * Statement
  */
 
+static void *stmt_alloc(size_t size, NodeType type) {
+    Stmt *r = malloc(size);
+    r->type = type;
+    r->label = NULL;
+    return r;
+}
+
 Node *make_instr_stmt(List *instr) {
-    InstrStmt *r = node_alloc(sizeof(InstrStmt), SINSTR);
+    InstrStmt *r = stmt_alloc(sizeof(InstrStmt), SINSTR);
     r->instr = instr;
     return (Node *)r;
 }
 
-Node *make_goto_stmt(Node *stmt) {
-    GotoStmt *r = node_alloc(sizeof(GotoStmt), SGOTO);
+Node *make_goto_stmt(Stmt *stmt) {
+    GotoStmt *r = stmt_alloc(sizeof(GotoStmt), SGOTO);
     r->stmt = stmt;
     return (Node *)r;
 }
 
 Node *make_return_stmt(Exp *exp) {
-    ReturnStmt *r = node_alloc(sizeof(ReturnStmt), SRETURN);
+    ReturnStmt *r = stmt_alloc(sizeof(ReturnStmt), SRETURN);
     r->exp = exp;
     return (Node *)r;
 }
 
 Node *make_if_stmt(Exp *exp, List *then, List *els) {
-    IfStmt *r = node_alloc(sizeof(IfStmt), SIF);
+    IfStmt *r = stmt_alloc(sizeof(IfStmt), SIF);
     r->exp = exp;
     r->then = then;
     r->els = els;
@@ -216,7 +223,7 @@ Node *make_if_stmt(Exp *exp, List *then, List *els) {
 }
 
 Node *make_loop_stmt(List *stmt) {
-    LoopStmt *r = node_alloc(sizeof(LoopStmt), SLOOP);
+    LoopStmt *r = stmt_alloc(sizeof(LoopStmt), SLOOP);
     r->stmt = stmt;
     return (Node *)r;
 }
@@ -549,7 +556,7 @@ static String *pp_call_instr(CallInstr *instr) {
     return b;
 }
 
-static String *pp_stmt(Node *node) {
+static String *pp_instr(Node *node) {
     switch (node->type) {
     case ISET:
         return pp_set_instr(SET_INSTR(node));
@@ -557,6 +564,95 @@ static String *pp_stmt(Node *node) {
         return pp_call_instr(CALL_INSTR(node));
     default:
         panic("Unknown node type: %d", node->type);
+    }
+}
+
+/*
+ * Statements
+ */
+
+static String *pp_stmt(Node *node);
+
+static String *make_label(void) {
+    static int i = 0;
+    return make_string_printf("L%d", i++);
+}
+
+static void pp_stmt_list_pass1(List *list) {
+    for (int i = 0; i < LIST_LEN(list); i++) {
+        Node *stmt = LIST_REF(list, i);
+        if (stmt->type != SGOTO)
+            continue;
+        if (!GOTO_STMT(stmt)->stmt->label)
+            GOTO_STMT(stmt)->stmt->label = make_label();
+    }
+}
+
+static String *pp_stmt_list(List *list) {
+    pp_stmt_list_pass1(list);
+    String *b = make_string();
+    for (int i = 0; i < LIST_LEN(list); i++) {
+        Node *stmt = LIST_REF(list, i);
+        string_append(b, STRING_BODY(pp_stmt(stmt)));
+    }
+    return b;
+}
+
+static String *pp_goto_stmt(GotoStmt *stmt) {
+    return make_string_printf("goto %s;", STRING_BODY(stmt->stmt->label));
+}
+
+static String *pp_if_stmt(IfStmt *stmt) {
+    char *exp = STRING_BODY(pp_exp(stmt->exp));
+    char *then = STRING_BODY(pp_stmt_list(stmt->then));
+    if (!stmt->els)
+        return make_string_printf("if(%s){%s}", exp, then);
+    char *els = STRING_BODY(pp_stmt_list(stmt->els));
+    return make_string_printf("if(%s){%s}else{%s}", exp, then, els);
+}
+
+static String *pp_instr_stmt(InstrStmt *stmt) {
+    String *b = make_string();
+    for (int i = 0; i < LIST_LEN(stmt->instr); i++) {
+        Node *instr = LIST_REF(stmt->instr, i);
+        string_append(b, STRING_BODY(pp_instr(instr)));
+    }
+    return b;
+}
+
+static String *pp_loop_stmt(LoopStmt *stmt) {
+    char *body = STRING_BODY(pp_stmt_list(stmt->stmt));
+    return make_string_printf("while(1){%s}", body);
+}
+
+static String *pp_return_stmt(ReturnStmt *stmt) {
+    if (stmt->exp)
+        return make_string_printf("return %s;", STRING_BODY(pp_exp(stmt->exp)));
+    return to_string("return;");
+}
+
+static String *pp_stmt(Node *node) {
+    String *b = STMT(node)->label
+        ? make_string_printf("%s:", STRING_BODY(STMT(node)->label))
+        : make_string();
+    switch (node->type) {
+    case SGOTO:
+        string_append(b, STRING_BODY(pp_goto_stmt(GOTO_STMT(node))));
+        return b;
+    case SIF:
+        string_append(b, STRING_BODY(pp_if_stmt(IF_STMT(node))));
+        return b;
+    case SINSTR:
+        string_append(b, STRING_BODY(pp_instr_stmt(INSTR_STMT(node))));
+        return b;
+    case SLOOP:
+        string_append(b, STRING_BODY(pp_loop_stmt(LOOP_STMT(node))));
+        return b;
+    case SRETURN:
+        string_append(b, STRING_BODY(pp_return_stmt(RETURN_STMT(node))));
+        return b;
+    default:
+        panic("Unknown statement type: %d", node->type);
     }
 }
 
@@ -573,10 +669,7 @@ String *pp_nfunction(NFunction *fn) {
         string_append(b, STRING_BODY(pp_var(var)));
         string_append(b, ";");
     }
-    for (int i = 0; i < LIST_LEN(fn->stmt); i++) {
-        Node *stmt = LIST_REF(fn->stmt, i);
-        string_append(b, STRING_BODY(pp_stmt(stmt)));
-    }
+    string_append(b, STRING_BODY(pp_stmt_list(fn->stmt)));
     string_append(b, "}");
     return b;
 }

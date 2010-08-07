@@ -110,6 +110,42 @@ TEST(pp_instr) {
 }
 
 /*
+ * Statements
+ */
+
+static List *make_stmt_list(Exp *val) {
+    LvalExp *x = LVAL_EXP(LVALVAR(INT, VARX));
+    Node *instr0 = make_set_instr(x, val);
+    return make_list1(make_instr_stmt(make_list1(instr0)));
+}
+
+TEST(pp_goto_stmt) {
+    LvalExp *x = LVAL_EXP(LVALVAR(INT, VARX));
+    Node *stmt0 = make_instr_stmt(make_list1(make_set_instr(x, THREE)));
+
+    List *stmts = make_list2(stmt0, make_goto_stmt(STMT(stmt0)));
+    EQ_STRING("L0:x=3;goto L0;", pp_stmt_list(stmts));
+}
+
+TEST(pp_if_stmt) {
+    List *then = make_stmt_list(ONE);
+    List *els = make_stmt_list(TWO);
+    EQ_STRING("if(1){x=1;}", pp_stmt(make_if_stmt(EXP(ONE), then, NULL)));
+    EQ_STRING("if(1){x=1;}else{x=2;}", pp_stmt(make_if_stmt(EXP(ONE), then, els)));
+}
+
+TEST(pp_loop_stmt) {
+    List *body = make_stmt_list(ONE);
+    EQ_STRING("while(1){}", pp_stmt(make_loop_stmt(make_list())));
+    EQ_STRING("while(1){x=1;}", pp_stmt(make_loop_stmt(body)));
+}
+
+TEST_(pp_return_stmt) {
+    EQ_STRING("return;", pp_stmt(make_return_stmt(NULL)));
+    EQ_STRING("return 1;", pp_stmt(make_return_stmt(ONE)));
+}
+
+/*
  * Function
  */
 
@@ -123,7 +159,7 @@ TEST(pp_nfunction) {
     EQ_STRING("int f(x,y){}", pp_nfunction(fn));
 
     list_push(var, VARX);
-    list_push(stmt, make_set_instr(x, THREE));
+    list_push(stmt, make_instr_stmt(make_list1(make_set_instr(x, THREE))));
     fn = make_nfunction(to_string("f"), INT, param, var, stmt);
     EQ_STRING("int f(x,y){int x;x=3;}", pp_nfunction(fn));
 }

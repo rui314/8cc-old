@@ -73,12 +73,12 @@ typedef struct VoidType {
     TYPE_HEADER;
 } VoidType;
 
-#define ARRAY_TYPE(obj) ((ArrayType *)obj)
-#define PTR_TYPE(obj)   ((PtrType *)obj)
-#define FUNC_TYPE(obj)  ((FuncType *)obj)
-#define INT_TYPE(obj)   ((IntType *)obj)
-#define FLOAT_TYPE(obj) ((FloatType *)obj)
-#define VOID_TYPE(obj)  ((VoidType *)obj)
+#define ARRAY_TYPE(obj) ((ArrayType *)(obj))
+#define PTR_TYPE(obj)   ((PtrType *)(obj))
+#define FUNC_TYPE(obj)  ((FuncType *)(obj))
+#define INT_TYPE(obj)   ((IntType *)(obj))
+#define FLOAT_TYPE(obj) ((FloatType *)(obj))
+#define VOID_TYPE(obj)  ((VoidType *)(obj))
 
 extern Type *make_array_type(Type *ptr, struct Exp *size);
 extern Type *make_ptr_type(Type *ptr);
@@ -111,7 +111,7 @@ typedef enum {
 
 #define NODE_HEADER NodeType type
 #define NODE_TYPE(obj) ((obj)->type)
-#define NODE(obj) ((Node *)obj)
+#define NODE(obj) ((Node *)(obj))
 
 typedef struct Node {
     NODE_HEADER;
@@ -256,8 +256,8 @@ typedef struct CallInstr {
     List *param; // List of Exps
 } CallInstr;
 
-#define SET_INSTR(obj)  ((SetInstr *)obj)
-#define CALL_INSTR(obj) ((CallInstr *)obj)
+#define SET_INSTR(obj)  ((SetInstr *)(obj))
+#define CALL_INSTR(obj) ((CallInstr *)(obj))
 
 extern Node *make_set_instr(LvalExp *lval, Exp *exp);
 extern Node *make_call_instr(LvalExp *retval, LvalExp *fn, List *param);
@@ -267,35 +267,48 @@ extern Node *make_call_instr(LvalExp *retval, LvalExp *fn, List *param);
  * Statement
  */
 
+#define STMT_HEADER NODE_HEADER; String *label
+
+typedef struct Stmt {
+    STMT_HEADER;
+} Stmt;
+
 typedef struct InstrStmt {
-    NODE_HEADER;
-    List *instr;
+    STMT_HEADER;
+    List *instr; // List of Instrs
 } InstrStmt;
 
 typedef struct GotoStmt {
-    NODE_HEADER;
-    Node *stmt;
+    STMT_HEADER;
+    Stmt *stmt;
 } GotoStmt;
 
 typedef struct ReturnStmt {
-    NODE_HEADER;
+    STMT_HEADER;
     Exp *exp;
 } ReturnStmt;
 
 typedef struct IfStmt {
-    NODE_HEADER;
+    STMT_HEADER;
     Exp *exp;
     List *then;
     List *els;
 } IfStmt;
 
 typedef struct LoopStmt {
-    NODE_HEADER;
+    STMT_HEADER;
     List *stmt;
 } LoopStmt;
 
+#define STMT(obj)        ((Stmt *)(obj))
+#define INSTR_STMT(obj)  ((InstrStmt *)(obj))
+#define GOTO_STMT(obj)   ((GotoStmt *)(obj))
+#define RETURN_STMT(obj) ((ReturnStmt *)(obj))
+#define IF_STMT(obj)     ((IfStmt *)(obj))
+#define LOOP_STMT(obj)   ((LoopStmt *)(obj))
+
 extern Node *make_instr_stmt(List *instr);
-extern Node *make_goto_stmt(Node *stmt);
+extern Node *make_goto_stmt(Stmt *stmt);
 extern Node *make_return_stmt(Exp *exp);
 extern Node *make_if_stmt(Exp *exp, List *then, List *els);
 extern Node *make_loop_stmt(List *stmt);
