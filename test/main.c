@@ -23,6 +23,10 @@ void eq_str1(int line, char *expected, char *got, char *msg) {
         error("line %d: \"%s\" expected, but got \"%s\"\n  %s", line, expected, got, msg);
 }
 
+void eq_string(int line, char *expected, String *got) {
+    eq_str(line, expected, STRING_BODY(got));
+}
+
 void eq_char(int line, int expected, int got) {
     if (expected != got)
         error("line %d: '%c' expected, but got '%c'", line, expected, got);

@@ -7,6 +7,8 @@
 
 #include "8cc.h"
 
+struct Exp;
+
 /*==============================================================================
  * C data type
  */
@@ -43,9 +45,13 @@ typedef struct Type {
 typedef struct ArrayType {
     TYPE_HEADER;
     Type *ptr;
+    struct Exp *size;
 } ArrayType;
 
-typedef struct ArrayType PtrType;
+typedef struct PtrType {
+    TYPE_HEADER;
+    Type *ptr;
+} PtrType;
 
 typedef struct FuncType {
     TYPE_HEADER;
@@ -67,7 +73,14 @@ typedef struct VoidType {
     TYPE_HEADER;
 } VoidType;
 
-extern Type *make_array_type(Type *ptr);
+#define ARRAY_TYPE(obj) ((ArrayType *)obj)
+#define PTR_TYPE(obj)   ((PtrType *)obj)
+#define FUNC_TYPE(obj)  ((FuncType *)obj)
+#define INT_TYPE(obj)   ((IntType *)obj)
+#define FLOAT_TYPE(obj) ((FloatType *)obj)
+#define VOID_TYPE(obj)  ((VoidType *)obj)
+
+extern Type *make_array_type(Type *ptr, struct Exp *size);
 extern Type *make_ptr_type(Type *ptr);
 extern Type *make_func_type(Type *ret, List *param);
 extern Type *get_int_type(IntKind kind);
@@ -85,6 +98,7 @@ typedef enum {
     ECONST,
     ELVAL,
     ESTARTOF,
+    ESIZEOFTYPE,
     EUNOP,
     ICALL,
     ISET,
@@ -213,7 +227,7 @@ extern Node *make_startof_exp(Type *ctype, LvalExp *lval);
 extern Node *make_sizeoftype_exp(Type *ctype, Exp *exp);
 extern Node *make_cast_exp(Type *ctype, Exp *exp);
 
-/*
+/*==============================================================================
  * Instructions
  */
 
@@ -285,11 +299,13 @@ typedef struct NFunction {
     List *stmt;
 } NFunction;
 
-extern NFunction *make_nfunction(List *var, List *stmt);
+extern NFunction *make_nfunction(String *name, Type *ctype, List *param, List *var, List *stmt);
 
 /*==============================================================================
  * Pretty printer
  */
 
-extern String *nfunction_to_string(NFunction *fn);
-extern String *node_to_string(Node *node);
+extern String *pp_type(Type *ctype);
+extern String *pp_var(NVar *var);
+extern String *pp_node(Node *node);
+extern String *pp_nfunction(NFunction *fn);
