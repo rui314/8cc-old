@@ -8,30 +8,25 @@
 #include "8cc.h"
 #include <signal.h>
 
-static void sigsegv_handler(int signo) {
+typedef void (*sighandler)(int);
+
+static void set_signal_handler(sighandler handler) {
     struct sigaction act;
-    act.sa_handler = SIG_DFL;
+    act.sa_handler = handler;
     sigemptyset(&act.sa_mask);
     act.sa_flags = 0;
     if (sigaction(SIGSEGV, &act, NULL)) {
         perror("sigaction failed: ");
         exit(-1);
     }
+}
+
+static void sigsegv_handler(int signo) {
+    set_signal_handler(SIG_DFL);
     fprintf(stderr, "\n");
     print_stack_trace_safe();
 }
 
-static void set_signal_handler(void) {
-    struct sigaction act;
-    act.sa_handler = sigsegv_handler;
-    sigemptyset(&act.sa_mask);
-    act.sa_flags = 0;
-    if (sigaction(SIGSEGV, &act, NULL)) {
-        perror("sigaction failed: ");
-        exit(-1);
-    }
-}
-
 void eightcc_init(void) {
-    set_signal_handler();
+    set_signal_handler(sigsegv_handler);
 }
