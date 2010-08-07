@@ -38,7 +38,7 @@ TEST(pp_type) {
  */
 
 #define TEST_VAR(expect, type)                                          \
-    EQ_STRING((expect), pp_var(make_nvar(LOCAL, (type), to_string("x"))))
+    EQ_STRING((expect), pp_var(make_local_var((type), to_string("x"))))
 
 TEST(pp_var) {
     TEST_VAR("int x", INT);
@@ -65,8 +65,8 @@ TEST(pp_var) {
 #define ONE    make_const_int(INT, 1)
 #define TWO    make_const_int(INT, 2)
 #define THREE  make_const_int(INT, 3)
-#define VARX   make_nvar(LOCAL, INT, to_string("x"))
-#define VARY   make_nvar(LOCAL, INT, to_string("y"))
+#define VARX   make_local_var(INT, to_string("x"))
+#define VARY   make_local_var(INT, to_string("y"))
 
 #define BIN(op, e0, e1)                         \
     make_binop_exp(INT, (op), (e0), (e1))
@@ -140,7 +140,7 @@ TEST(pp_loop_stmt) {
     EQ_STRING("while(1){x=1;}", pp_stmt(make_loop_stmt(body)));
 }
 
-TEST_(pp_return_stmt) {
+TEST(pp_return_stmt) {
     EQ_STRING("return;", pp_stmt(make_return_stmt(NULL)));
     EQ_STRING("return 1;", pp_stmt(make_return_stmt(ONE)));
 }

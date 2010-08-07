@@ -73,14 +73,23 @@ Type *get_void_type(void) {
  * Variables
  */
 
-NVar *make_nvar(int type, Type *ctype, String *name) {
-    NVar *r = malloc(sizeof(NVar));
+void *var_alloc(size_t size, VarType type, Type *ctype, String *name) {
+    NVar *r = malloc(size);
     r->type = type;
     r->ctype = ctype;
     r->name = name;
     return r;
 }
 
+NVar *make_local_var(Type *ctype, String *name) {
+    return var_alloc(sizeof(LocalVar), LOCAL, ctype, name);
+}
+
+NVar *make_global_var(Type *ctype, String *name, Exp *init) {
+    GlobalVar *r = var_alloc(sizeof(LocalVar), LOCAL, ctype, name);
+    r->init = init;
+    return (NVar *)r;
+}
 
 /*==============================================================================
  * Expressions
@@ -579,12 +588,25 @@ static String *make_label(void) {
 }
 
 static void pp_stmt_list_pass1(List *list) {
+    if (!list)
+        return;
     for (int i = 0; i < LIST_LEN(list); i++) {
         Node *stmt = LIST_REF(list, i);
-        if (stmt->type != SGOTO)
-            continue;
-        if (!GOTO_STMT(stmt)->stmt->label)
-            GOTO_STMT(stmt)->stmt->label = make_label();
+        switch (stmt->type) {
+        case SIF:
+            pp_stmt_list_pass1(IF_STMT(stmt)->then);
+            pp_stmt_list_pass1(IF_STMT(stmt)->els);
+            break;
+        case SLOOP:
+            pp_stmt_list_pass1(LOOP_STMT(stmt)->stmt);
+            break;
+        case SGOTO:
+            if (!GOTO_STMT(stmt)->stmt->label)
+                GOTO_STMT(stmt)->stmt->label = make_label();
+            break;
+        default:
+            /* DO NOTHING */;
+        }
     }
 }
 

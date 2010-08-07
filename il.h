@@ -122,14 +122,32 @@ typedef struct Node {
  * Variables
  */
 
+typedef enum {
+    GLOBAL,
+    LOCAL,
+} VarType;
+
+#define VAR_HEADER VarType type; Type *ctype; String *name
+
 typedef struct NVar {
-    // True if global variable.  False if local.
-    enum { GLOBAL, LOCAL } type;
-    Type *ctype;
-    String *name;
+    VAR_HEADER;
 } NVar;
 
-extern NVar *make_nvar(int type, Type *ctype, String *name);
+typedef struct LocalVar {
+    VAR_HEADER;
+} LocalVar;
+
+typedef struct GlobalVar {
+    VAR_HEADER;
+    struct Exp *init;
+} GlobalVar;
+
+#define VAR(obj)        ((Var *)(obj))
+#define LOCAL_VAR(obj)  ((LocalVar *)(obj))
+#define GLOBAL_VAR(obj) ((GlobalVar *)(obj))
+
+extern NVar *make_local_var(Type *ctype, String *name);
+extern NVar *make_global_var(Type *ctype, String *name, struct Exp *init);
 
 
 /*==============================================================================
