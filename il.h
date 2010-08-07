@@ -47,6 +47,12 @@ typedef struct ArrayType {
 
 typedef struct ArrayType PtrType;
 
+typedef struct FuncType {
+    TYPE_HEADER;
+    Type *ret;
+    List *param;
+} FuncType;
+
 typedef struct IntType {
     TYPE_HEADER;
     IntKind kind;
@@ -57,16 +63,16 @@ typedef struct FloatType {
     FloatKind kind;
 } FloatType;
 
-typedef struct FuncType {
+typedef struct VoidType {
     TYPE_HEADER;
-    Type *ret;
-    List *param;
-} FuncType;
+} VoidType;
 
 extern Type *make_array_type(Type *ptr);
-extern Type *make_int_type(IntKind kind);
-extern Type *make_float_type(FloatKind kind);
+extern Type *make_ptr_type(Type *ptr);
 extern Type *make_func_type(Type *ret, List *param);
+extern Type *get_int_type(IntKind kind);
+extern Type *get_float_type(FloatKind kind);
+extern Type *get_void_type(void);
 
 /*==============================================================================
  * Data type for Node
@@ -135,7 +141,7 @@ typedef struct LvalBase {
 typedef struct LvalOff {
     enum { FIELD, INDEX } type;
     Exp *exp;
-    struct LvalOff *lvalOff;
+    struct LvalOff *off;
 } LvalOff;
 
 typedef struct LvalExp {
@@ -152,8 +158,8 @@ typedef struct LvalExp {
 #define LVAL_OFF_INDEX(e) ((e)->off.exp);
 #define LVAL_OFF_OFF(e) ((e)->off.off);
 
-extern Node *make_lval(int type, void *base);
-extern LvalExp *make_lval_off(int type, Exp *exp);
+extern LvalOff *make_lval_off(int type, Exp *exp);
+extern Node *make_lval_exp(Type *ctype, LvalBase base);
 
 /*
  * Other expressions

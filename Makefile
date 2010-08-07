@@ -2,7 +2,7 @@ SHELL=/bin/bash
 CC=gcc
 CFLAGS=-std=c99 -Wall -g
 LDFLAGS=-ldl -rdynamic
-OBJS=main.o string.o list.o gen.o lex.o cpp.o parse.o file.o dict.o error.o elf.o run.o init.o
+OBJS=main.o string.o list.o gen.o lex.o cpp.o parse.o file.o dict.o error.o elf.o run.o init.o il.o
 
 all: 8cc
 
