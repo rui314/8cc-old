@@ -23,11 +23,11 @@ typedef enum {
 } TypeEnum;
 
 typedef enum {
-    CHAR, UCHAR,
-    SHORT, USHORT,
-    INT, UINT,
-    LONG, ULONG,
-    LLONG, ULLONG,
+    SCHAR, UCHAR,
+    SSHORT, USHORT,
+    SINT, UINT,
+    SLONG, ULONG,
+    SLLONG, ULLONG,
 } IntKind;
 
 typedef enum {
@@ -307,5 +307,6 @@ extern NFunction *make_nfunction(String *name, Type *ctype, List *param, List *v
 
 extern String *pp_type(Type *ctype);
 extern String *pp_var(NVar *var);
+extern String *pp_exp(Node *node);
 extern String *pp_node(Node *node);
 extern String *pp_nfunction(NFunction *fn);

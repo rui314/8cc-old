@@ -565,6 +565,7 @@ TEST(numbers) {
  */
 
 int main(int argc, char **argv) {
+    eightcc_init();
     printf("Running unit tests ...\n");
     if (argc == 2 && !strcmp(argv[1], "-n")) {
         run_in_memory = false;

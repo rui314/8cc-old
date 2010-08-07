@@ -8,7 +8,7 @@
 #include "8cc.h"
 
 /*==============================================================================
- * C data type
+ * C types
  */
 
 static void *type_alloc(size_t size, TypeEnum type) {
@@ -40,15 +40,15 @@ Type *make_func_type(Type *ret, List *param) {
 
 Type *get_int_type(IntKind kind) {
     static const IntType int_types[] = {
-        { TINT, CHAR },
+        { TINT, SCHAR },
         { TINT, UCHAR },
-        { TINT, SHORT },
+        { TINT, SSHORT },
         { TINT, USHORT },
-        { TINT, INT },
+        { TINT, SINT },
         { TINT, UINT },
-        { TINT, LONG },
+        { TINT, SLONG },
         { TINT, ULONG },
-        { TINT, LLONG },
+        { TINT, SLLONG },
         { TINT, ULLONG },
     };
     return (Type *)&int_types[kind];
@@ -240,54 +240,117 @@ NFunction *make_nfunction(String *name, Type *ctype, List *param, List *var, Lis
  * Pretty printer
  */
 
-static String *pp_int_type(Type *ctype) {
-    String *b = make_string();
+/*
+ * C types
+ */
+
+static String *pp_type1(Type *ctype, String *b);
+
+static bool isidchar(char c) {
+    return isalpha(c) || c == '_';
+}
+
+static String *type_join(String *b0, String *b1) {
+    if (isidchar(STRING_BODY(b1)[0]))
+        string_append(b0, " ");
+    string_append(b0, STRING_BODY(b1));
+    return b0;
+}
+
+static String *quote_maybe(String *b) {
+    char *p = STRING_BODY(b);
+    if (p[0] == '*' || strchr(p, ')'))
+        return make_string_printf("(%s)", STRING_BODY(b));
+    return b;
+}
+
+static String *pp_int_type(Type *ctype, String *b) {
+    String *r = make_string();
     switch (INT_TYPE(ctype)->kind) {
-    case CHAR:   string_append(b, "char"); break;
-    case SHORT:  string_append(b, "short"); break;
-    case INT:    string_append(b, "int"); break;
-    case LONG:   string_append(b, "long"); break;
-    case LLONG:  string_append(b, "long long"); break;
-    case UCHAR:  string_append(b, "unsigned char"); break;
-    case USHORT: string_append(b, "unsigned short"); break;
-    case UINT:   string_append(b, "unsigned int"); break;
-    case ULONG:  string_append(b, "unsigned long"); break;
-    case ULLONG: string_append(b, "unsigned long long"); break;
+    case SCHAR:   string_append(r, "char"); break;
+    case SSHORT:  string_append(r, "short"); break;
+    case SINT:    string_append(r, "int"); break;
+    case SLONG:   string_append(r, "long"); break;
+    case SLLONG:  string_append(r, "long long"); break;
+    case UCHAR:  string_append(r, "unsigned char"); break;
+    case USHORT: string_append(r, "unsigned short"); break;
+    case UINT:   string_append(r, "unsigned int"); break;
+    case ULONG:  string_append(r, "unsigned long"); break;
+    case ULLONG: string_append(r, "unsigned long long"); break;
     }
-    return b;
+    return type_join(r, b);
 }
 
-static String *pp_float_type(Type *ctype) {
-    String *b = make_string();
+static String *pp_float_type(Type *ctype, String *b) {
+    String *r = make_string();
     switch (FLOAT_TYPE(ctype)->kind) {
-    case FLOAT:   string_append(b, "float"); break;
-    case DOUBLE:  string_append(b, "double"); break;
-    case LDOUBLE: string_append(b, "long double"); break;
+    case FLOAT:   string_append(r, "float"); break;
+    case DOUBLE:  string_append(r, "double"); break;
+    case LDOUBLE: string_append(r, "long double"); break;
     }
-    return b;
+    return type_join(r, b);
 }
 
-static String *pp_ptr_type(Type *ctype) {
-    String *b = pp_type(PTR_TYPE(ctype)->ptr);
-    string_append(b, "*");
-    return b;
+static String *pp_array_type(Type *ctype, String *b) {
+    String *r = pp_type1(ARRAY_TYPE(ctype)->ptr, quote_maybe(b));
+    // TODO: pp array dimension
+    string_append(r, "[]");
+    return r;
 }
 
-static String *pp_void_type(Type *ctype) {
-    return to_string("void");
+static String *pp_ptr_type(Type *ctype, String *b) {
+    return pp_type1(PTR_TYPE(ctype)->ptr, string_prepend(b, "*"));
 }
 
-String *pp_type(Type *ctype) {
+static String *pp_void_type(Type *ctype, String *b) {
+    return type_join(to_string("void"), b);
+}
+
+static String *pp_func_type(Type *ctype, String *b) {
+    List *param = FUNC_TYPE(ctype)->param;
+    b = quote_maybe(b);
+    if (!LIST_LEN(param)) {
+        string_append(b, "(void)");
+    } else {
+        string_append(b, "(");
+        for (int i = 0; i < LIST_LEN(param); i++) {
+            Type *ptype = LIST_REF(param, i);
+            if (i > 0)
+                string_append(b, ",");
+            string_append(b, STRING_BODY(pp_type1(ptype, to_string(""))));
+        }
+        string_append(b, ")");
+    }
+    return pp_type1(FUNC_TYPE(ctype)->ret, b);
+}
+
+static String *pp_type1(Type *ctype, String *b) {
     switch (ctype->type) {
     case TINT:
-        return pp_int_type(ctype);
+        return pp_int_type(ctype, b);
     case TFLOAT:
-        return pp_float_type(ctype);
+        return pp_float_type(ctype, b);
+    case TARRAY:
+        return pp_array_type(ctype, b);
+    case TFUNC:
+        return pp_func_type(ctype, b);
     case TPTR:
-        return pp_ptr_type(ctype);
+        return pp_ptr_type(ctype, b);
     case TVOID:
-        return pp_void_type(ctype);
+        return pp_void_type(ctype, b);
     default:
         panic("unsupported type: %d", ctype->type);
     }
+}
+
+String *pp_type(Type *ctype) {
+    return pp_type1(ctype, to_string(""));
+}
+
+/*
+ * Variables
+ */
+
+String *pp_var(NVar *var){
+    return pp_type1(var->ctype, string_copy(var->name));
 }

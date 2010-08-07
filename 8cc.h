@@ -126,8 +126,10 @@ typedef struct String {
 
 extern String *make_string(void);
 extern String *to_string(char *str);
+extern String *string_copy(String *b);
 extern bool string_equal(String *a, String *b);
 extern void string_append(String *b, char *p);
+extern String *string_prepend(String *b, char *p);
 extern void o1(String *b, int byte);
 extern void out(String *b, void *data, size_t size);
 extern void ostr(String *b, char *str);
