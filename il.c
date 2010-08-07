@@ -365,7 +365,7 @@ String *pp_type(Type *ctype) {
  * Variables
  */
 
-String *pp_var(NVar *var){
+String *pp_var(NVar *var) {
     return pp_type1(var->ctype, string_copy(var->name));
 }
 
@@ -517,6 +517,17 @@ static String *pp_exp(Exp *e) {
  * Instructions
  */
 
+static void pp_params(String *b, List *param) {
+    string_append(b, "(");
+    for (int i = 0; i < LIST_LEN(param); i++) {
+        Exp *exp = LIST_REF(param, i);
+        if (i > 0)
+            string_append(b, ",");
+        string_append(b, STRING_BODY(pp_exp(exp)));
+    }
+    string_append(b, ")");
+}
+
 static String *pp_set_instr(SetInstr *instr) {
     String *b = make_string();
     string_append(b, STRING_BODY(pp_lval_exp(instr->lval, precedence('='))));
@@ -533,13 +544,39 @@ static String *pp_call_instr(CallInstr *instr) {
         string_append(b, "=");
     }
     string_append(b, STRING_BODY(pp_lval_exp(instr->fn, 1)));
-    string_append(b, "(");
-    for (int i = 0; i < LIST_LEN(instr->param); i++) {
-        Exp *exp = LIST_REF(instr->param, i);
-        if (i > 0)
-            string_append(b, ",");
-        string_append(b, STRING_BODY(pp_exp(exp)));
+    pp_params(b, instr->param);
+    string_append(b, ";");
+    return b;
+}
+
+static String *pp_stmt(Node *node) {
+    switch (node->type) {
+    case ISET:
+        return pp_set_instr(SET_INSTR(node));
+    case ICALL:
+        return pp_call_instr(CALL_INSTR(node));
+    default:
+        panic("Unknown node type: %d", node->type);
     }
-    string_append(b, ");");
+}
+
+/*
+ * Function
+ */
+
+String *pp_nfunction(NFunction *fn) {
+    String *b = pp_type1(fn->ctype, string_copy(fn->name));
+    pp_params(b, fn->param);
+    string_append(b, "{");
+    for (int i = 0; i < LIST_LEN(fn->var); i++) {
+        NVar *var = LIST_REF(fn->var, i);
+        string_append(b, STRING_BODY(pp_var(var)));
+        string_append(b, ";");
+    }
+    for (int i = 0; i < LIST_LEN(fn->stmt); i++) {
+        Node *stmt = LIST_REF(fn->stmt, i);
+        string_append(b, STRING_BODY(pp_stmt(stmt)));
+    }
+    string_append(b, "}");
     return b;
 }

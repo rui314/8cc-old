@@ -108,3 +108,22 @@ TEST(pp_instr) {
     EQ_STRING("x=3;", pp_set_instr(SET_INSTR(make_set_instr(x, THREE))));
     EQ_STRING("x=y(3);", pp_call_instr(CALL_INSTR(make_call_instr(x, y, make_list1(THREE)))));
 }
+
+/*
+ * Function
+ */
+
+TEST(pp_nfunction) {
+    LvalExp *x = LVAL_EXP(LVALVAR(INT, VARX));
+    LvalExp *y = LVAL_EXP(LVALVAR(INT, VARY));
+    List *param = make_list2(x, y);
+    List *var = make_list();
+    List *stmt = make_list();
+    NFunction *fn = make_nfunction(to_string("f"), INT, param, var, stmt);
+    EQ_STRING("int f(x,y){}", pp_nfunction(fn));
+
+    list_push(var, VARX);
+    list_push(stmt, make_set_instr(x, THREE));
+    fn = make_nfunction(to_string("f"), INT, param, var, stmt);
+    EQ_STRING("int f(x,y){int x;x=3;}", pp_nfunction(fn));
+}
