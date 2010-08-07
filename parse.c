@@ -1043,19 +1043,17 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
  *     function-specifier declaration-specifiers?
  *
  * storage-class-specifier:
- *     one of: auto extern register static typedef
+ *     one of: "auto" "extern" "register" "static" "typedef"
  *
  * type-specifier:
- *     enumeration-type-specifier
- *     floating-point-type-specifier
- *     integer-type-type-specifier
- *     structure-type-type-specifier
+ *     one of: "void" "char" "short" "int" "long" "float"
+ *             "double" "signed" "unsigned" "_Bool" "_Complex"
+ *     struct-or-union-specifier
+ *     enum-specifier
  *     typedef-name
- *     union-type-specifier
- *     void-type-specifier
  *
  * type-qualifier:
- *     one of: const volatile restrict
+ *     one of: "const" "volatile" "restrict"
  *
  * function-specifier:
  *     "inline"
@@ -1122,6 +1120,80 @@ static Ctype *read_declaration_spec(ReadContext *ctx) {
     return r ? r : make_ctype(CTYPE_INT);
  sign_error:
     error_token(tok, "both 'signed' and 'unsigned' in declaration specifiers");
+}
+
+static void sign_error(Token *tok) {
+    error_token(tok, "both 'signed' and 'unsigned' in declaration specifiers");
+}
+
+static Type *nread_declaration_spec(ReadContext *ctx) {
+    Type *r = NULL;
+    Token *tok;
+    enum { NONE, SIGNED, UNSIGNED } sign = NONE;
+    for (;;) {
+        tok = read_token(ctx);
+        if (tok->toktype != TOKTYPE_KEYWORD)
+            goto end;
+        switch (tok->val.i) {
+        case KEYWORD_CONST:
+            // ignore the type specifier for now.
+            break;
+        case KEYWORD_SIGNED:
+            if (sign == SIGNED)
+                error_token(tok, "'signed' specified twice");
+            if (sign == UNSIGNED)
+                sign_error(tok);
+            sign = SIGNED;
+            break;
+        case KEYWORD_UNSIGNED:
+            if (sign == UNSIGNED)
+                error_token(tok, "'unsigned' specified twice");
+            if (sign == SIGNED)
+                sign_error(tok);
+            sign = UNSIGNED;
+            break;
+#define CHECK_DUP()                                                     \
+            if (r) error_token(tok, "two or more data types in declaration specifiers");
+        case KEYWORD_CHAR:
+            CHECK_DUP();
+            r = get_int_type(SCHAR);
+            break;
+        case KEYWORD_SHORT:
+            CHECK_DUP();
+            r = get_int_type(SSHORT);
+            break;
+        case KEYWORD_INT:
+            CHECK_DUP();
+            r = get_int_type(SINT);
+            break;
+        case KEYWORD_LONG:
+            CHECK_DUP();
+            r = get_int_type(SLONG);
+            break;
+        case KEYWORD_FLOAT:
+            CHECK_DUP();
+            if (sign != NONE)
+                error_token(tok, "float cannot be signed nor unsigned");
+            r = get_float_type(FLOAT);
+            break;
+        case KEYWORD_DOUBLE:
+            CHECK_DUP();
+            if (sign != NONE)
+                error_token(tok, "double cannot be signed nor unsigned");
+            r = get_float_type(DOUBLE);
+            break;
+#undef CHECK_DUP
+        default:
+            goto end;
+        }
+    }
+ end:
+    unget_token(ctx, tok);
+    if (!r)
+        r = get_int_type(SINT);
+    if (sign == UNSIGNED)
+        r = get_int_type(INT_TYPE(r)->kind + 1);
+    return r;
 }
 
 static Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {

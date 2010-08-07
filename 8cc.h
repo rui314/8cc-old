@@ -475,6 +475,13 @@ typedef struct Function {
     Block *entry;
 } Function;
 
+typedef struct TopLevelEnv {
+    // List of GlobalVars
+    List *global;
+    // List of NFunctions
+    List *func;
+} TopLevelEnv;
+
 /*
  * Read context for lexer and parser
  */

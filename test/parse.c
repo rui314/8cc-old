@@ -10,17 +10,20 @@
  * Parser
  */
 
+static ReadContext *make_context(char *str) {
+    File *file = mkfile(str);
+    return make_read_context(file, NULL, make_cpp_context(file));
+}
+
 TEST(read_comment) {
-    File *file = mkfile("/* 1 * */ 2 // 3 \n 4");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
+    ReadContext *ctx = make_context("/* 1 * */ 2 // 3 \n 4");
     EQ(2, read_token(ctx)->val.i);
     EQ(4, read_token(ctx)->val.i);
     EQ(NULL, read_token(ctx));
 }
 
 TEST(read_float) {
-    File *file = mkfile("1 2.0");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
+    ReadContext *ctx = make_context("1 2.0");
 
     Token *tok = read_token(ctx);
     EQ(TOKTYPE_INT, tok->toktype);
@@ -32,8 +35,7 @@ TEST(read_float) {
 }
 
 TEST(read_char) {
-    File *file = mkfile("'a' '\\n' '\\0' '\\23' '\\233' '\\x3' '\\x3f'");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
+    ReadContext *ctx = make_context("'a' '\\n' '\\0' '\\23' '\\233' '\\x3' '\\x3f'");
 
     Token *tok = read_token(ctx);
     EQ(TOKTYPE_CHAR, tok->toktype);
@@ -54,8 +56,7 @@ TEST(read_char) {
     } while (0)
 
 TEST(read_keywords) {
-    File *file = mkfile("int float ( ) { } ! = ^ == ++ -- ||");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
+    ReadContext *ctx = make_context("int float ( ) { } ! = ^ == ++ -- ||");
 
     TEST_READ_KEYWORDS(ctx, KEYWORD_INT);
     TEST_READ_KEYWORDS(ctx, KEYWORD_FLOAT);
@@ -73,8 +74,7 @@ TEST(read_keywords) {
 }
 
 TEST(read_unget_token) {
-    File *file = mkfile("int float (");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
+    ReadContext *ctx = make_context("int float (");
 
     Token *t0 = read_token(ctx);
     Token *t1 = read_token(ctx);
@@ -101,4 +101,23 @@ TEST(ctype_sizeof) {
     EQ(8, ctype_sizeof(make_ctype_ptr(make_ctype_ptr((make_ctype(CTYPE_INT))))));
     EQ(20, ctype_sizeof(make_ctype_array(make_ctype(CTYPE_CHAR), 20)));
     EQ(36, ctype_sizeof(make_ctype_array(make_ctype_array(make_ctype(CTYPE_INT), 3), 3)));
+}
+
+/*==============================================================================
+ * Tests for the new intermediate language
+ */
+
+TEST(nread_declaration_spec) {
+    EQ(get_int_type(SINT), nread_declaration_spec(make_context("int x")));
+    EQ(get_int_type(SINT), nread_declaration_spec(make_context("signed x")));
+    EQ(get_int_type(SINT), nread_declaration_spec(make_context("signed int x")));
+
+    EQ(get_int_type(UINT), nread_declaration_spec(make_context("unsigned x")));
+    EQ(get_int_type(UINT), nread_declaration_spec(make_context("unsigned int x")));
+
+    EQ(get_int_type(SLONG), nread_declaration_spec(make_context("long x")));
+    EQ(get_int_type(ULONG), nread_declaration_spec(make_context("unsigned long x")));
+
+    EQ(get_float_type(FLOAT), nread_declaration_spec(make_context("float x")));
+    EQ(get_float_type(DOUBLE), nread_declaration_spec(make_context("double x")));
 }
