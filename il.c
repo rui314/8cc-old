@@ -392,7 +392,7 @@ static String *quote_exp_maybe(String *b, int thisprec, int parentprec) {
 }
 
 static String *pp_lval_exp(LvalExp *e, int prec) {
-    String *b = make_string();
+    String *b = NULL;
     switch (e->base.type) {
     case LVAL_VAR:
         b = string_copy(((NVar *)((NVar *)e->base.p))->name);
@@ -511,4 +511,35 @@ static String *pp_exp1(Exp *e, int prec) {
 
 static String *pp_exp(Exp *e) {
     return pp_exp1(e, 17);
+}
+
+/*
+ * Instructions
+ */
+
+static String *pp_set_instr(SetInstr *instr) {
+    String *b = make_string();
+    string_append(b, STRING_BODY(pp_lval_exp(instr->lval, precedence('='))));
+    string_append(b, "=");
+    string_append(b, STRING_BODY(pp_exp(instr->exp)));
+    string_append(b, ";");
+    return b;
+}
+
+static String *pp_call_instr(CallInstr *instr) {
+    String *b = make_string();
+    if (instr->retval) {
+        string_append(b, STRING_BODY(pp_lval_exp(instr->retval, precedence('='))));
+        string_append(b, "=");
+    }
+    string_append(b, STRING_BODY(pp_lval_exp(instr->fn, 1)));
+    string_append(b, "(");
+    for (int i = 0; i < LIST_LEN(instr->param); i++) {
+        Exp *exp = LIST_REF(instr->param, i);
+        if (i > 0)
+            string_append(b, ",");
+        string_append(b, STRING_BODY(pp_exp(exp)));
+    }
+    string_append(b, ");");
+    return b;
 }

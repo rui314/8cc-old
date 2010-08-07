@@ -110,7 +110,8 @@ typedef enum {
 } NodeType;
 
 #define NODE_HEADER NodeType type
-#define NODE_TYPE(e) ((e)->type)
+#define NODE_TYPE(obj) ((obj)->type)
+#define NODE(obj) ((Node *)obj)
 
 typedef struct Node {
     NODE_HEADER;
@@ -219,6 +220,7 @@ typedef struct CastExp {
     Exp *exp;
 } CastExp;
 
+#define EXP(obj)              ((Exp *)(obj))
 #define LVAL_EXP(obj)         ((LvalExp *)(obj))
 #define CONST_EXP(obj)        ((ConstExp *)(obj))
 #define UNOP_EXP(obj)         ((UnopExp *)(obj))
@@ -251,8 +253,11 @@ typedef struct CallInstr {
     NODE_HEADER;
     LvalExp *retval;
     LvalExp *fn;
-    List *param;
+    List *param; // List of Exps
 } CallInstr;
+
+#define SET_INSTR(obj)  ((SetInstr *)obj)
+#define CALL_INSTR(obj) ((CallInstr *)obj)
 
 extern Node *make_set_instr(LvalExp *lval, Exp *exp);
 extern Node *make_call_instr(LvalExp *retval, LvalExp *fn, List *param);

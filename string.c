@@ -32,6 +32,8 @@ String *to_string(char *str) {
 String *string_copy(String *b) {
     String *r = malloc(sizeof(String));
     *r = *b;
+    r->buf = malloc(r->nalloc);
+    memcpy(r->buf, b->buf, r->len);
     return r;
 }
 
