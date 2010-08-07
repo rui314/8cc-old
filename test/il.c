@@ -12,8 +12,8 @@
 #define F1(type, arg0) make_func_type(type, make_list1(arg0))
 #define F2(type, arg0, arg1) make_func_type(type, make_list2(arg0, arg1))
 
-#define INT (get_int_type(SINT))
-#define VOID (get_void_type())
+#define INT get_int_type(SINT)
+#define VOID get_void_type()
 
 TEST(pp_type) {
     EQ_STRING("int", pp_type(INT));
@@ -37,6 +37,7 @@ TEST(pp_var) {
     TEST_VAR("int*x", P(INT));
     TEST_VAR("int x[]", A(INT));
     TEST_VAR("int(*x)[]", P(A(INT)));
+    TEST_VAR("int(*x[])(void)", A(P(F(INT))));
     TEST_VAR("int x(void)", F(INT));
     TEST_VAR("int(*x)(void)", P(F(INT)));
     TEST_VAR("int*x(void)", F(P(INT)));
@@ -46,4 +47,28 @@ TEST(pp_var) {
     TEST_VAR("void(*x(void))(int)", F(P(F1(VOID, INT))));
     TEST_VAR("void(*x(int,void(*)(int)))(int)",
              F2(P(F1(VOID, INT)), INT, P(F1(VOID, INT))));
+}
+
+#define ONE    make_const_int(INT, 1)
+#define TWO    make_const_int(INT, 2)
+#define THREE  make_const_int(INT, 3)
+#define VARX   make_nvar(LOCAL, INT, to_string("x"))
+
+#define BIN(op, e0, e1)                         \
+    make_binop_exp(INT, (op), (e0), (e1))
+#define ADDR(type, exp)                         \
+    make_addrof_exp((type), (LvalExp *)(exp))
+#define LVALVAR(type, var)                              \
+    make_lval_exp(type, (LvalBase){ LVAL_VAR, var })
+#define LVALMEM(type, var)                              \
+    make_lval_exp(type, (LvalBase){ LVAL_MEM, var })
+
+#define TEST_EXP(expect, exp)                   \
+    EQ_STRING((expect), pp_exp(exp))
+
+TEST(pp_exp) {
+    TEST_EXP("1", ONE);
+    TEST_EXP("1+2", BIN('+', ONE, TWO));
+    TEST_EXP("(1+2)*3", BIN('*', BIN('+', ONE, TWO), THREE));
+    TEST_EXP("&x", ADDR(P(INT), LVALVAR(INT, VARX)));
 }

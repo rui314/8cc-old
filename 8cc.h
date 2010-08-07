@@ -539,6 +539,8 @@ typedef struct Ctype {
 extern List *parse(File *file, Elf *elf);
 extern int ctype_sizeof(Ctype *ctype);
 extern bool ctype_equal(Ctype *ctype, int type);
+extern char *keyword_to_string(int v);
+extern int precedence(int op);
 extern ReadContext *make_read_context(File *file, Elf *elf, CppContext *ctx);
 extern char *token_to_string(Token *tok);
 extern struct Var *read_comma_expr(ReadContext *ctx);

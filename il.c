@@ -106,61 +106,62 @@ LvalOff *make_lval_off(int type, Exp *exp) {
     return r;
 }
 
-Node *make_lval_exp(Type *ctype, LvalBase base) {
+Exp *make_lval_exp(Type *ctype, LvalBase base) {
     LvalExp *r = exp_alloc(sizeof(LvalExp), ELVAL, ctype);
     r->base = base;
     r->off = NULL;
-    return (Node *)r;
+    return (Exp *)r;
 }
 
-Node *make_const_double(Type *ctype, double f) {
-    ConstExp *r = exp_alloc(sizeof(ConstExp), ECONST, ctype);
-    r->v.f = f;
-    return (Node *)r;
-}
-
-Node *make_const_long(Type *ctype, long i) {
+Exp *make_const_int(Type *ctype, long i) {
     ConstExp *r = exp_alloc(sizeof(ConstExp), ECONST, ctype);
     r->v.i = i;
-    return (Node *)r;
+    return (Exp *)r;
 }
 
-Node *make_unop_exp(Type *ctype, int op, Exp *exp) {
+Exp *make_const_float(Type *ctype, double f) {
+    ConstExp *r = exp_alloc(sizeof(ConstExp), ECONST, ctype);
+    r->v.f = f;
+    return (Exp *)r;
+}
+
+Exp *make_unop_exp(Type *ctype, int op, Exp *exp) {
     UnopExp *r = exp_alloc(sizeof(UnopExp), EUNOP, ctype);
     r->op= op;
     r->exp = exp;
-    return (Node *)r;
+    return (Exp *)r;
 }
 
-Node *make_addrof_exp(Type *ctype, LvalExp *lval) {
+Exp *make_addrof_exp(Type *ctype, LvalExp *lval) {
     AddrOfExp *r = exp_alloc(sizeof(AddrOfExp), EADDROF, ctype);
     r->lval = lval;
-    return (Node *)r;
+    return (Exp *)r;
 }
 
-Node *make_binop_exp(Type *ctype, Exp *exp0, Exp *exp1) {
+Exp *make_binop_exp(Type *ctype, int op, Exp *exp0, Exp *exp1) {
     BinopExp *r = exp_alloc(sizeof(BinopExp), EBINOP, ctype);
+    r->op = op;
     r->exp0 = exp0;
     r->exp1 = exp1;
-    return (Node *)r;
+    return (Exp *)r;
 }
 
-Node *make_startof_exp(Type *ctype, LvalExp *lval) {
+Exp *make_startof_exp(Type *ctype, LvalExp *lval) {
     StartOfExp *r = exp_alloc(sizeof(StartOfExp), ESTARTOF, ctype);
     r->lval = lval;
-    return (Node *)r;
+    return (Exp *)r;
 }
 
-Node *make_sizeoftype_exp(Type *ctype, Exp *exp) {
+Exp *make_sizeoftype_exp(Type *ctype, Type *argtype) {
     SizeOfTypeExp *r = exp_alloc(sizeof(SizeOfTypeExp), ESIZEOFTYPE, ctype);
-    r->exp = exp;
-    return (Node *)r;
+    r->argtype = argtype;
+    return (Exp *)r;
 }
 
-Node *make_cast_exp(Type *ctype, Exp *exp) {
+Exp *make_cast_exp(Type *ctype, Exp *exp) {
     CastExp *r = exp_alloc(sizeof(CastExp), ECAST, ctype);
     r->exp = exp;
-    return (Node *)r;
+    return (Exp *)r;
 }
 
 
@@ -242,6 +243,15 @@ NFunction *make_nfunction(String *name, Type *ctype, List *param, List *var, Lis
 
 /*
  * C types
+ *
+ * Printing types in C syntax is tricky as the C delcaration syntax is complex.
+ * The PP functions defined here takes two argument.  One is a C type to be
+ * printed and the another is a string being constructed.
+ *
+ * For simple types, such as int, PP just appends the type name at the beginning
+ * of the string.  For complex types, such as array or function pointer, PP adds
+ * the type names both to the beginning and to the tail. For example, if a
+ * string being constructed is "X", a resulting string would be "int X[20]".
  */
 
 static String *pp_type1(Type *ctype, String *b);
@@ -257,21 +267,25 @@ static String *type_join(String *b0, String *b1) {
     return b0;
 }
 
-static String *quote_maybe(String *b) {
+static String *quote(String *b) {
+    return make_string_printf("(%s)", STRING_BODY(b));
+}
+
+static String *quote_type_maybe(String *b) {
     char *p = STRING_BODY(b);
     if (p[0] == '*' || strchr(p, ')'))
-        return make_string_printf("(%s)", STRING_BODY(b));
+        return quote(b);
     return b;
 }
 
 static String *pp_int_type(Type *ctype, String *b) {
     String *r = make_string();
     switch (INT_TYPE(ctype)->kind) {
-    case SCHAR:   string_append(r, "char"); break;
-    case SSHORT:  string_append(r, "short"); break;
-    case SINT:    string_append(r, "int"); break;
-    case SLONG:   string_append(r, "long"); break;
-    case SLLONG:  string_append(r, "long long"); break;
+    case SCHAR:  string_append(r, "char"); break;
+    case SSHORT: string_append(r, "short"); break;
+    case SINT:   string_append(r, "int"); break;
+    case SLONG:  string_append(r, "long"); break;
+    case SLLONG: string_append(r, "long long"); break;
     case UCHAR:  string_append(r, "unsigned char"); break;
     case USHORT: string_append(r, "unsigned short"); break;
     case UINT:   string_append(r, "unsigned int"); break;
@@ -292,10 +306,10 @@ static String *pp_float_type(Type *ctype, String *b) {
 }
 
 static String *pp_array_type(Type *ctype, String *b) {
-    String *r = pp_type1(ARRAY_TYPE(ctype)->ptr, quote_maybe(b));
+    b = quote_type_maybe(b);
     // TODO: pp array dimension
-    string_append(r, "[]");
-    return r;
+    string_append(b, "[]");
+    return pp_type1(ARRAY_TYPE(ctype)->ptr, b);
 }
 
 static String *pp_ptr_type(Type *ctype, String *b) {
@@ -308,7 +322,7 @@ static String *pp_void_type(Type *ctype, String *b) {
 
 static String *pp_func_type(Type *ctype, String *b) {
     List *param = FUNC_TYPE(ctype)->param;
-    b = quote_maybe(b);
+    b = quote_type_maybe(b);
     if (!LIST_LEN(param)) {
         string_append(b, "(void)");
     } else {
@@ -353,4 +367,148 @@ String *pp_type(Type *ctype) {
 
 String *pp_var(NVar *var){
     return pp_type1(var->ctype, string_copy(var->name));
+}
+
+/*
+ * Expressions
+ */
+
+static String *pp_exp1(Exp *e, int prec);
+
+static String *pp_op(int op) {
+    String *r = make_string();
+    if (op < 256) {
+        o1(r, op);
+        o1(r, 0);
+    } else
+        string_append(r, keyword_to_string(op));
+    return r;
+}
+
+static String *quote_exp_maybe(String *b, int thisprec, int parentprec) {
+    if (thisprec <= parentprec)
+        return b;
+    return quote(b);
+}
+
+static String *pp_lval_exp(LvalExp *e, int prec) {
+    String *b = make_string();
+    switch (e->base.type) {
+    case LVAL_VAR:
+        b = string_copy(((NVar *)((NVar *)e->base.p))->name);
+        break;
+    case LVAL_MEM:
+        b = pp_exp1((Exp *)e->base.p, prec);
+        break;
+    }
+    for (LvalOff *off = e->off; off; off = off->off) {
+        string_append(b, "[");
+        string_append(b, STRING_BODY(pp_exp1(off->exp, 17)));
+        string_append(b, "]");
+    }
+    return b;
+}
+
+static String *pp_const_int_exp(IntKind kind, long val) {
+    switch (kind) {
+    case SCHAR: case UCHAR:
+        return make_string_printf("'%c'", val);
+    case SINT:   return make_string_printf("%d", val);
+    case SLONG:  return make_string_printf("%ldL", val);
+    case SLLONG: return make_string_printf("%lldLL", val);
+    case UINT:   return make_string_printf("%uU", val);
+    case ULONG:  return make_string_printf("%luUL", val);
+    case ULLONG:
+        panic("Printing long long is not supported yet");
+    case SSHORT: case USHORT:
+        panic("Nonexistent literal data type: %d", kind);
+    default:
+        panic("Unknown integer kind: %d", kind);
+    }
+}
+
+static String *pp_const_float_exp(FloatKind kind, double val) {
+    switch (kind) {
+    case FLOAT:   return make_string_printf("%fF", val);
+    case DOUBLE:  return make_string_printf("%f", val);
+    case LDOUBLE:
+        panic("Printing long double is not supported yet");
+    default:
+        panic("Unknown float kind: %d", kind);
+    }
+}
+
+static String *pp_const_exp(ConstExp *e) {
+    Type *ctype = e->ctype;
+    switch (ctype->type) {
+    case TINT:
+        return pp_const_int_exp(INT_TYPE(ctype)->kind, e->v.i);
+    case TFLOAT:
+        return pp_const_float_exp(FLOAT_TYPE(ctype)->kind, e->v.f);
+    default:
+        panic("unsupported const type: %d", ctype->type);
+    }
+}
+
+static String *pp_unop_exp(UnopExp *e, int prec) {
+    int thisprec = precedence(e->op);
+    String *b = pp_op(e->op);
+    string_append(b, STRING_BODY(pp_exp1(e->exp, thisprec)));
+    return quote_exp_maybe(b, thisprec, prec);
+}
+
+static String *pp_addrof_exp(AddrOfExp *e, int prec) {
+    int thisprec = precedence('&');
+    String *b = to_string("&");
+    string_append(b, STRING_BODY(pp_lval_exp(e->lval, thisprec)));
+    return quote_exp_maybe(b, thisprec, prec);
+}
+
+static String *pp_binop_exp(BinopExp *e, int prec) {
+    int thisprec = precedence(e->op);
+    String *b = pp_exp1(e->exp0, thisprec);
+    string_append(b, STRING_BODY(pp_op(e->op)));
+    string_append(b, STRING_BODY(pp_exp1(e->exp1, thisprec)));
+    return quote_exp_maybe(b, thisprec, prec);
+}
+
+static String *pp_startof_exp(StartOfExp *e, int prec) {
+    return pp_lval_exp(e->lval, prec);
+}
+
+static String *pp_sizeoftype_exp(SizeOfTypeExp *e, int prec) {
+    return make_string_printf("sizeof(%s)", STRING_BODY(pp_type(e->argtype)));
+}
+
+static String *pp_cast_exp(CastExp *e, int prec) {
+    String *b =  make_string_printf("(%s)", STRING_BODY(pp_type(e->ctype)));
+    string_append(b, STRING_BODY(pp_exp1(e->exp, 2)));
+    return b;
+}
+
+static String *pp_exp1(Exp *e, int prec) {
+    switch (e->type) {
+    case EADDROF:
+        return pp_addrof_exp(ADDR_OF_EXP(e), prec);
+    case EBINOP:
+        return pp_binop_exp(BINOP_EXP(e), prec);
+    case ECAST:
+        return pp_cast_exp(CAST_EXP(e), prec);
+    case ECONST:
+        return pp_const_exp(CONST_EXP(e));
+    case ELVAL:
+        return pp_lval_exp(LVAL_EXP(e), prec);
+    case ESTARTOF:
+        return pp_startof_exp(START_OF_EXP(e), prec);
+    case ESIZEOFTYPE:
+        return pp_sizeoftype_exp(SIZE_OF_TYPE_EXP(e), prec);
+    case EUNOP:
+        return pp_unop_exp(UNOP_EXP(e), prec);
+    default:
+        panic("unsupported expression type: %d", e->type);
+    }
+}
+
+static String *pp_exp(Exp *e) {
+    return pp_exp1(e, 17);
 }

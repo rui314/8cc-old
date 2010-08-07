@@ -149,7 +149,7 @@ typedef struct Exp {
 
 typedef struct LvalBase {
     enum { LVAL_VAR, LVAL_MEM } type;
-    void *p;
+    void *p; // Var or Exp
 } LvalBase;
 
 typedef struct LvalOff {
@@ -173,7 +173,7 @@ typedef struct LvalExp {
 #define LVAL_OFF_OFF(e) ((e)->off.off);
 
 extern LvalOff *make_lval_off(int type, Exp *exp);
-extern Node *make_lval_exp(Type *ctype, LvalBase base);
+extern Exp *make_lval_exp(Type *ctype, LvalBase base);
 
 /*
  * Other expressions
@@ -199,6 +199,7 @@ typedef struct AddrOfExp {
 
 typedef struct BinopExp {
     EXP_HEADER;
+    int op;
     Exp *exp0;
     Exp *exp1;
 } BinopExp;
@@ -210,7 +211,7 @@ typedef struct StartOfExp {
 
 typedef struct SizeOfTypeExp {
     EXP_HEADER;
-    Exp *exp;
+    Type *argtype;
 } SizeOfTypeExp;
 
 typedef struct CastExp {
@@ -218,14 +219,23 @@ typedef struct CastExp {
     Exp *exp;
 } CastExp;
 
-extern Node *make_const_double(Type *ctype, double f);
-extern Node *make_const_long(Type *ctype, long i);
-extern Node *make_unop_exp(Type *ctype, int op, Exp *exp);
-extern Node *make_addrof_exp(Type *ctype, LvalExp *lval);
-extern Node *make_binop_exp(Type *ctype, Exp *exp0, Exp *exp1);
-extern Node *make_startof_exp(Type *ctype, LvalExp *lval);
-extern Node *make_sizeoftype_exp(Type *ctype, Exp *exp);
-extern Node *make_cast_exp(Type *ctype, Exp *exp);
+#define LVAL_EXP(obj)         ((LvalExp *)(obj))
+#define CONST_EXP(obj)        ((ConstExp *)(obj))
+#define UNOP_EXP(obj)         ((UnopExp *)(obj))
+#define ADDR_OF_EXP(obj)      ((AddrOfExp *)(obj))
+#define BINOP_EXP(obj)        ((BinopExp *)(obj))
+#define START_OF_EXP(obj)     ((StartOfExp *)(obj))
+#define SIZE_OF_TYPE_EXP(obj) ((SizeOfTypeExp *)(obj))
+#define CAST_EXP(obj)         ((CastExp *)(obj))
+
+extern Exp *make_const_int(Type *ctype, long i);
+extern Exp *make_const_float(Type *ctype, double f);
+extern Exp *make_unop_exp(Type *ctype, int op, Exp *exp);
+extern Exp *make_addrof_exp(Type *ctype, LvalExp *lval);
+extern Exp *make_binop_exp(Type *ctype, int op, Exp *exp0, Exp *exp1);
+extern Exp *make_startof_exp(Type *ctype, LvalExp *lval);
+extern Exp *make_sizeoftype_exp(Type *ctype, Type *argtype);
+extern Exp *make_cast_exp(Type *ctype, Exp *exp);
 
 /*==============================================================================
  * Instructions
@@ -307,6 +317,5 @@ extern NFunction *make_nfunction(String *name, Type *ctype, List *param, List *v
 
 extern String *pp_type(Type *ctype);
 extern String *pp_var(NVar *var);
-extern String *pp_exp(Node *node);
 extern String *pp_node(Node *node);
 extern String *pp_nfunction(NFunction *fn);
