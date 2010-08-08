@@ -126,11 +126,11 @@ static bool store(Dict *dict, void *key, u32 hv, void *obj) {
 }
 
 /*
- * Call rehash() if 3/4 buckets are already in use.  Otherwise, do
+ * Call rehash() if half buckets are already in use.  Otherwise, do
  * nothing.
  */
 static void ensure_room(Dict *dict) {
-    if (dict->nelem < (dict->nalloc * 3 / 4))
+    if (dict->nelem * 2 <= dict->nalloc)
         return;
     rehash(dict);
 }
