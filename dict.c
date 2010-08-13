@@ -13,20 +13,14 @@
 static bool store(Dict *dict, void *key, u32 hv, void *obj);
 
 /*
- * This is an implementation of open-addressing hash table.
- *
- * There are two types of dictionaries in 8cc.  One is string dictionary whose
- * key is string, and keys are compared by string_equal().  Another is address
- * dictionary, whose keys are compared just by pointer comparison.  Two strings
- * having the identical content but are different objects shares the same bucket
- * in string dictionary, while they are distinguished in address dictionary.
- *
- * Buckets having NULL in 'key' field are considered as vacant buckets.
+ * This is an implementation of open-addressing hash table.  Buckets
+ * having NULL in 'key' field are considered as vacant buckets.
  */
 
-static Dict *make_dict_int(int type, int size) {
+static Dict *make_dict_int(dict_hash_fn hashfn, dict_equal_fn equalfn, int size) {
     Dict *r = malloc(sizeof(Dict));
-    r->type = type;
+    r->hashfn = hashfn;
+    r->equalfn = equalfn;
     r->buckets = malloc(sizeof(Bucket) * size);
     r->nalloc = size;
     r->nelem = 0;
@@ -35,20 +29,17 @@ static Dict *make_dict_int(int type, int size) {
     return r;
 }
 
-Dict *make_string_dict(void) {
-    return make_dict_int(DICT_TYPE_STRING, DICT_INITIAL_SIZE);
-}
-
-Dict *make_address_dict(void) {
-    return make_dict_int(DICT_TYPE_ADDRESS, DICT_INITIAL_SIZE);
+Dict *make_dict(dict_hash_fn *hashfn, dict_equal_fn *equalfn) {
+    return make_dict_int(hashfn, equalfn, DICT_INITIAL_SIZE);
 }
 
 /*============================================================
  * Hash functions
  */
 
-static inline u32 string_hash(String *str) {
+static u32 string_hash(void *e) {
     u32 hv = 0;
+    String *str = (String *)e;
     char *ptr = STRING_BODY(str);
     for (int i = 0; i < STRING_LEN(str) && ptr[i]; i++) {
         hv = (hv << 5) - hv + (unsigned char)ptr[i];
@@ -56,19 +47,25 @@ static inline u32 string_hash(String *str) {
     return hv;
 }
 
-static inline u32 address_hash(void *ptr) {
+static u32 address_hash(void *ptr) {
     u32 hv = ((u32)(intptr_t)ptr) * 2654435761UL;
     return hv;
 }
 
-static inline u32 calculate_hash(Dict *dict, void *obj) {
-    switch (dict->type) {
-    case DICT_TYPE_STRING:
-        return string_hash(obj);
-    case DICT_TYPE_ADDRESS:
-        return address_hash(obj);
-    }
-    panic("unknown dictionary type: %d", dict->type);
+static bool dict_string_equal(void *a, void *b) {
+    return string_equal(a, b);
+}
+
+static bool dict_address_equal(void *a, void *b) {
+    return a == b;
+}
+
+Dict *make_string_dict(void) {
+    return make_dict_int(string_hash, dict_string_equal, DICT_INITIAL_SIZE);
+}
+
+Dict *make_address_dict(void) {
+    return make_dict_int(address_hash, dict_address_equal, DICT_INITIAL_SIZE);
 }
 
 /*============================================================
@@ -76,7 +73,7 @@ static inline u32 calculate_hash(Dict *dict, void *obj) {
  */
 
 static void rehash(Dict *dict) {
-    Dict *newdict = make_dict_int(dict->type, dict->nalloc * 2);
+    Dict *newdict = make_dict_int(dict->hashfn, dict->equalfn, dict->nalloc * 2);
     for (int i = 0; i < dict->nalloc; i++) {
         Bucket *ent = &dict->buckets[i];
         if (BUCKET_EMPTY(ent))
@@ -103,10 +100,7 @@ static Bucket *find_bucket(Dict *dict, void *key, u32 hv, bool put) {
         if (!ent->key) return ent;
         if (ent->hashval != hv)
             continue;
-        if (dict->type == DICT_TYPE_STRING && string_equal(ent->key, key)){
-            return ent;
-        }
-        if (dict->type == DICT_TYPE_ADDRESS && ent->key == key)
+        if (dict->equalfn(ent->key, key))
             return ent;
     }
     panic("no space found in dictionary");
@@ -137,13 +131,13 @@ static void ensure_room(Dict *dict) {
 
 void dict_put(Dict *dict, void *key, void *obj) {
     ensure_room(dict);
-    u32 hv = calculate_hash(dict, key);
+    u32 hv = dict->hashfn(key);
     bool overwrite = store(dict, key, hv, obj);
     if (!overwrite) dict->nelem++;
 }
 
 bool dict_delete(Dict *dict, void *key) {
-    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key), false);
+    Bucket *ent = find_bucket(dict, key, dict->hashfn(key), false);
     if (BUCKET_EMPTY(ent)) return false;
     ent->hashval = 0;
     ent->key = DELETED;
@@ -153,13 +147,13 @@ bool dict_delete(Dict *dict, void *key) {
 }
 
 void *dict_get(Dict *dict, void *key) {
-    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key), false);
+    Bucket *ent = find_bucket(dict, key, dict->hashfn(key), false);
     if (BUCKET_EMPTY(ent)) return NULL;
     return ent->elem;
 }
 
 bool dict_has(Dict *dict, void *key) {
-    Bucket *ent = find_bucket(dict, key, calculate_hash(dict, key), false);
+    Bucket *ent = find_bucket(dict, key, dict->hashfn(key), false);
     return !BUCKET_EMPTY(ent);
 }
 

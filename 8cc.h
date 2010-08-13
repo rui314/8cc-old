@@ -226,13 +226,19 @@ typedef struct Bucket {
 #define DICT_TYPE_STRING  0
 #define DICT_TYPE_ADDRESS 1
 
+typedef u32 dict_hash_fn(void *e);
+typedef bool dict_equal_fn(void *a, void *b);
+
 typedef struct Dict {
-    int type;
+    dict_hash_fn *hashfn;
+    dict_equal_fn *equalfn;
     Bucket *buckets;
     int nalloc;
     int nelem;
 } Dict;
 
+extern Dict *make_dict(dict_hash_fn hashfn, dict_equal_fn equalfn);
+extern Dict *make_string_dict(void);
 extern Dict *make_string_dict(void);
 extern Dict *make_address_dict(void);
 extern void dict_put(Dict *dict, void *key, void *obj);
