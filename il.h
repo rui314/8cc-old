@@ -36,16 +36,18 @@ typedef enum {
     LDOUBLE,
 } FloatKind;
 
-typedef struct Type {
-    TypeEnum type;
-} Type;
-
 #define TYPE_HEADER TypeEnum type;
+
+typedef struct Type {
+    TYPE_HEADER;
+} Type;
 
 typedef struct ArrayType {
     TYPE_HEADER;
     Type *ptr;
     struct Exp *size;
+    // C99 6.7.5.3p12 Function declarators (including prototypes)
+    bool is_star;
 } ArrayType;
 
 typedef struct PtrType {
@@ -56,7 +58,12 @@ typedef struct PtrType {
 typedef struct FuncType {
     TYPE_HEADER;
     Type *ret;
+    // List of Types
     List *param;
+    // List of NVars.  Used only during reading a declarator.
+    List *vars;
+    // True iff the parameter list of the function ends with "...".
+    bool ellipsis;
 } FuncType;
 
 typedef struct IntType {
@@ -83,9 +90,9 @@ typedef struct VoidType {
 extern Type *make_array_type(Type *ptr, struct Exp *size);
 extern Type *make_ptr_type(Type *ptr);
 extern Type *make_func_type(Type *ret, List *param);
-extern Type *get_int_type(IntKind kind);
-extern Type *get_float_type(FloatKind kind);
-extern Type *get_void_type(void);
+extern Type *make_int_type(IntKind kind);
+extern Type *make_float_type(FloatKind kind);
+extern Type *make_void_type(void);
 
 /*==============================================================================
  * Data type for Node
@@ -107,6 +114,7 @@ typedef enum {
     SINSTR,
     SLOOP,
     SRETURN,
+    FUNCTION,
 } NodeType;
 
 #define NODE_HEADER NodeType type
@@ -336,8 +344,9 @@ extern Node *make_loop_stmt(List *stmt);
  */
 
 typedef struct NFunction {
-    String *name;
+    NODE_HEADER;
     Type *ctype;
+    String *name;
     List *param;
     // List of local variables
     List *var;

@@ -475,12 +475,12 @@ typedef struct Function {
     Block *entry;
 } Function;
 
-typedef struct TopLevelEnv {
+typedef struct Program {
     // List of GlobalVars
     List *global;
     // List of NFunctions
     List *func;
-} TopLevelEnv;
+} Program;
 
 /*
  * Read context for lexer and parser
@@ -488,7 +488,13 @@ typedef struct TopLevelEnv {
 typedef struct ReadContext {
     File *file;
     Elf *elf;
-    List *scope;
+    // List of string dictionaries, representing nested scope for
+    // variables.
+    List *var;
+    // List of string dictionaries, representing union or struct tag
+    // namespace.
+    List *union_tag;
+    List *struct_tag;
     // The entry basic block for the fucntion being read.
     Block *entry;
     // The stack of basic blocks.  Instructions for code being processsed are
@@ -496,7 +502,7 @@ typedef struct ReadContext {
     List *blockstack;
     // Pushback buffer for tokens.
     List *ungotten;
-    // Function being read.
+    // Function being read.  Null if top-level.
     Function *func;
     // "break" and "continue" targets.  NULL means we're outside of loop or
     // switch.
@@ -511,8 +517,6 @@ typedef struct ReadContext {
     Dict *label_tbf;
     // For CPP.
     CppContext *cppctx;
-    // True if constant expression is needed.
-    bool in_const_expr;
 } ReadContext;
 
 typedef union Cvalue {

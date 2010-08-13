@@ -30,15 +30,33 @@ Type *make_ptr_type(Type *ptr) {
     return (Type *)r;
 }
 
-
-Type *make_func_type(Type *ret, List *param) {
+static Type *make_func_type_full(Type *ret, List *param, bool ellipsis) {
     FuncType *r = type_alloc(sizeof(FuncType), TFUNC);
     r->ret = ret;
     r->param = param;
+    r->vars = NULL;
+    r->ellipsis = ellipsis;
     return (Type *)r;
 }
 
-Type *get_int_type(IntKind kind) {
+Type *make_func_type(Type *ret, List *param) {
+    return make_func_type_full(ret, param, false);
+}
+
+Type *make_old_func_type(Type *ret) {
+    return make_func_type_full(ret, NULL, false);
+}
+
+Type *make_ellipsis_func_type(Type *ret, List *param) {
+    return make_func_type_full(ret, param, true);
+}
+
+bool has_param(Type *ctype) {
+    assert(ctype->type == TFUNC);
+    return ctype->param;
+}
+
+Type *make_int_type(IntKind kind) {
     static const IntType int_types[] = {
         { TINT, SCHAR },
         { TINT, UCHAR },
@@ -54,7 +72,7 @@ Type *get_int_type(IntKind kind) {
     return (Type *)&int_types[kind];
 }
 
-Type *get_float_type(FloatKind kind) {
+Type *make_float_type(FloatKind kind) {
     static const IntType float_types[] = {
         { TFLOAT, FLOAT },
         { TFLOAT, DOUBLE },
@@ -63,7 +81,7 @@ Type *get_float_type(FloatKind kind) {
     return (Type *)&float_types[kind];
 }
 
-Type *get_void_type(void) {
+Type *make_void_type(void) {
     static const VoidType void_type = { TVOID };
     return (Type *)&void_type;
 }

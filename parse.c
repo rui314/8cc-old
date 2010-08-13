@@ -45,6 +45,8 @@ static void read_compound_stmt(ReadContext *ctx);
 static void read_decl_or_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 static Var *read_subscript_expr(ReadContext *ctx, Var *a);
+static List *nread_param_type_list(ReadContext *ctx);
+static bool is_type_keyword(Token *tok);
 
 /*============================================================
  * Error handlers
@@ -458,6 +460,13 @@ static Var *emit_log_or(ReadContext *ctx, Var *v0, Var *v1) {
  * Parser
  */
 
+static void read_token_nonnull(ReadContext *ctx) {
+    Token *tok = read_token(ctx);
+    if (!tok)
+        error_ctx(ctx, "premature end of input");
+    return tok;
+}
+
 static bool is_keyword(Token *tok, int type) {
     return tok->toktype == TOKTYPE_KEYWORD && tok->val.i == type;
 }
@@ -471,6 +480,13 @@ static Token *peek_token(ReadContext *ctx) {
     Token *r = read_token(ctx);
     unget_token(ctx, r);
     return r;
+}
+
+static Token *peek_token_nonnull(ReadContext *ctx) {
+    Token *tok = peek_token(ctx);
+    if (!tok)
+        error_ctx(ctx, "premature end of input");
+    return tok;
 }
 
 static bool next_token_is(ReadContext *ctx, int keyword) {
@@ -761,6 +777,32 @@ static Var *read_unary_expr(ReadContext *ctx) {
     }
 }
 
+static Exp *nread_unary_expr(ReadContext *ctx) {
+    // ( type-name ) or ( expression )
+    if (next_token_is(ctx, '(')) {
+        Token *tok = read_token_nonnull(ctx);
+        if (is_type_keyword(tok)) {
+            unget_token(ctx, tok);
+            nread_
+        }
+    }
+
+    Token *tok = read_token(ctx);
+    check_not_eof(tok);
+
+    if (tok->toktype != TOKTYPE_KEYWORD) {
+        unget_token(ctx, tok);
+        return read_postfix_expr(ctx);
+    }
+    switch (tok->val.i) {
+    case '(': {
+        Var *r = read_comma_expr(ctx);
+        expect(ctx, ')');
+        return r;
+    }
+    }
+}
+
 /*
  * Returns operators precedence.  There are 15 precedences in C as
  * shown below.
@@ -1035,6 +1077,123 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     return v0;
 }
 
+static Exp *nread_expr1(ReadContext *ctx, Var *v0, int prec0) {
+    for (;;) {
+        Token *tok = read_token(ctx);
+        int prec1 = prec_token(tok);
+        if (prec1 < 0 || prec0 < prec1) {
+            unget_token(ctx, tok);
+            return v0;
+        }
+        if (is_keyword(tok, '?')) {
+            v0 = read_cond_expr(ctx, v0);
+            v0 = unary_conv(ctx, v0);
+            continue;
+        }
+        if (is_keyword(tok, KEYWORD_LOG_AND) || is_keyword(tok, KEYWORD_LOG_OR)) {
+            push_block(ctx, make_block());
+        }
+        Var *v1 = read_unary_expr(ctx);
+        for (;;) {
+            Token *tok1 = peek_token(ctx);
+            int prec2 = prec_token(tok1);
+            if (prec2 < 0 || prec1 < prec2 || (prec1 == prec2 && !is_rassoc(tok1))) {
+                break;
+            }
+            v1 = read_expr1(ctx, v1, prec2);
+        }
+        if (is_keyword(tok, '=')) {
+            emit_assign(ctx, v0, v1);
+            continue;
+        }
+
+        v0 = unary_conv(ctx, v0);
+        v1 = unary_conv(ctx, v1);
+        int op;
+        switch (tok->val.i) {
+        case ',':
+            v0 = v1;
+            break;
+        case '+': case '-':
+            v0 = emit_arith(ctx, tok->val.i, v0, v1);
+            break;
+        case '*':
+        case '/': {
+            v0 = emit_arith_inst3(ctx, tok->val.i, v0, v1);
+            break;
+        }
+        case '^':
+        case '&':
+        case '|': {
+            Var *tmp = make_var(binary_type_conv(v0, v1));
+            if (is_flonum(tmp->ctype))
+                error_token(tok, "invalid operand to binary '%c'", tok->val.i);
+            emit(ctx, make_inst3(tok->val.i, tmp, v0, v1));
+            v0 = tmp;
+            break;
+        }
+        case KEYWORD_EQ:
+            op = OP_EQ; goto cmp;
+        case KEYWORD_NE:
+            op = OP_NE; goto cmp;
+        case '>':
+            SWAP(Var *, v0, v1);
+            // FALL THROUGH
+        case '<':
+            op = '<'; goto cmp;
+        case KEYWORD_GE:
+            SWAP(Var *, v0, v1);
+            // FALL THROUGH
+        case KEYWORD_LE:
+            op = OP_LE; goto cmp;
+        cmp:
+            v0 = emit_log_inst3(ctx, op, v0, v1);
+            break;
+        case KEYWORD_A_ADD:
+            op = '+'; goto assign_arith_op;
+        case KEYWORD_A_SUB:
+            op = '-'; goto assign_arith_op;
+        assign_arith_op:
+            ensure_lvalue(ctx, v0);
+            emit_assign(ctx, v0, emit_arith(ctx, op, v0, v1));
+            break;
+        case KEYWORD_A_MUL:
+            op = '*'; goto assign_op;
+        case KEYWORD_A_DIV:
+            op = '/'; goto assign_op;
+        case KEYWORD_A_AND:
+            op = '&'; goto assign_op;
+        case KEYWORD_A_OR:
+            op = '|'; goto assign_op;
+        case KEYWORD_A_XOR:
+            op = '^'; goto assign_op;
+        case KEYWORD_A_LSH:
+            op = OP_SHL; goto assign_op;
+        case KEYWORD_A_RSH:
+            op = OP_SHR; goto assign_op;
+        assign_op:
+            ensure_lvalue(ctx, v0);
+            emit(ctx, make_inst3(op, v0, v0, v1));
+            break;
+        case KEYWORD_LOG_AND:
+            v0 = emit_log_and(ctx, v0, v1);
+            break;
+        case KEYWORD_LOG_OR:
+            v0 = emit_log_or(ctx, v0, v1);
+            break;
+        case KEYWORD_LSH:
+            v0 = emit_arith_inst3(ctx, OP_SHL, v0, v1);
+            break;
+        case KEYWORD_RSH:
+            v0 = emit_arith_inst3(ctx, OP_SHR, v0, v1);
+            break;
+        default:
+            error_token(tok, "unsupported operator: %s", token_to_string(tok));
+        }
+    }
+    return v0;
+}
+
 /*
  * declaration-specifiers:
  *     storage-class-specifier declaration-specifiers?
@@ -1174,13 +1333,13 @@ static Type *nread_declaration_spec(ReadContext *ctx) {
             CHECK_DUP();
             if (sign != NONE)
                 error_token(tok, "float cannot be signed nor unsigned");
-            r = get_float_type(FLOAT);
+            r = make_float_type(FLOAT);
             break;
         case KEYWORD_DOUBLE:
             CHECK_DUP();
             if (sign != NONE)
                 error_token(tok, "double cannot be signed nor unsigned");
-            r = get_float_type(DOUBLE);
+            r = make_float_type(DOUBLE);
             break;
 #undef CHECK_DUP
         default:
@@ -1216,23 +1375,53 @@ static Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
     return make_ctype_array(ctype, size);
 }
 
+static void check_array_dimension(ReadContext *ctx, Exp *exp) {
+    if (exp->ctype->type != TINT)
+        error_ctx(ctx, "Array dimension must be of int type, but got type %d", exp->type);
+    if (exp->type != ECONST)
+        error_ctx(ctx, "Only fixed size array is supported");
+}
+
+static Type *nread_array_dimensions(ReadContext *ctx, Type *ctype) {
+    Exp *size = NULL;
+    if (!next_token_is(ctx, ']')) {
+        size = nread_assign_expr(ctx);
+        check_array_dimension(ctx, size);
+        expect(ctx, ']');
+    }
+    if (next_token_is(ctx, '[')) {
+        Type *ctype1 = nread_array_dimensions(ctx, ctype);
+        if (ARRAY_TYPE(ctype1)->size)
+            error_ctx(ctx, "Dimension is not specified for a multimentional array");
+        check_array_dimension(ctx, size);
+        return make_array_type(ctype1, size);
+    }
+    return make_ctype_array(ctype, size);
+}
+
+
+static Type *nread_func_declarator_params(ReadContext *ctx, Type *ctype) {
+    List *params = nread_param_type_list(ctx);
+    List *ctypes = make_list();
+    for (int i = 0; i < LIST_LEN(params); i++) {
+        NVar *var = LIST_REF(params, i);
+        list_push(ctypes, var->ctype);
+    }
+    Type *r = make_func_type(ctype, ctypes);
+    r->params;
+    return r;
+}
+
 /*
  * direct-declarator:
- *     simple-declarator
- *     "(" declarator ")"
- *     function-declarator
- *     array-declarator
- *
- * array-declarator:
- *     direct-declarator "[" constant-expression? "]"
- *     direct-declarator "[" array-qualifier* array-size-expression? "]"
- *     direct-declarator "[" array-qualifier* "*" "]"
- *
- * array-qualifier:
- *     one of: static restrict const volatile
- *
- * simple-declarator:
  *     identifier
+ *     "(" declarator ")"
+ *     direct-declarator "[" type-qualifier* assignment-expression? "]"
+ *     direct-declarator "[" "static" type-qualifier* assignment-expression "]"
+ *     direct-declarator "[" type-qualifier+ "static" assignment-expression "]"
+ *     direct-declarator "[" type-qualifier* * "]"
+ *     direct-declarator "(" parameter-type-list ")"
+ *     direct-declarator "(" identifier-list? ")"
  */
 static Var *read_direct_declarator(ReadContext *ctx, Ctype *ctype) {
     Var *r = make_var(ctype);
@@ -1241,6 +1430,47 @@ static Var *read_direct_declarator(ReadContext *ctx, Ctype *ctype) {
     if (next_token_is(ctx, '['))
         r->ctype = read_array_dimensions(ctx, r->ctype);
     return r;
+}
+
+static NVar *make_nvar(ReadContext *ctx, Type *ctype, Token *tok) {
+    return ctx->func
+        ? make_local_var(ctype, tok->val.str)
+        : make_global_var(ctype, tok->val.str, NULL);
+}
+
+static Ctype *nread_direct_or_abst_declarator(ReadContext *ctx, Token **pname) {
+    if (next_token_is(ctx, '*'))
+        return make_ptr_type(nread_direct_or_abst_declarator(ctx, pname));
+
+    Type *ctype = NULL;
+    Token *tok = read_token_nonnull(ctx);
+    if (tok->toktype == TOKTYPE_IDENT) {
+        *pname = tok->var.str;
+    } else if (is_keyword(tok, '(')) {
+        Token *tok1 = peek_token_nonnull(ctx);
+        if (!pname && is_type_keyword(tok1)) {
+            ctype = nread_func_declarator_params(ctx, NULL);
+            expect(ctx, ')');
+            return ctype;
+        }
+        ctype = nread_direct_or_abst_declarator(ctx, pname);
+        expect(ctx, ')');
+    } else if (is_keyword(tok, '[')) {
+        unget_token(ctx, tok);
+    } else {
+        return NULL;
+    }
+
+    for (;;) {
+        Token *tok = read_token_nonnull(ctx);
+        if (is_keyword(tok, '(')) {
+            ctype = nread_func_declarator_params(ctx, ctype);
+        } else if (is_keyword(tok, '[')) {
+            ctype = make_array_type(ctype, nread_array_dimensions(ctx));
+        } else {
+            return ctype;
+        }
+    }
 }
 
 /*
@@ -1258,6 +1488,14 @@ static Var *read_pointer_declarator(ReadContext *ctx, Ctype *ctype) {
     return r;
 }
 
+static NVar *nread_pointer_declarator(ReadContext *ctx, Type *ctype) {
+    NVar *r = next_token_is(ctx, '*')
+        ? nread_pointer_declarator(ctx, ctype)
+        : nread_direct_declarator(ctx, ctype);
+    r->ctype = make_ptr_type(r->ctype);
+    return r;
+}
+
 /*
  * declarator:
  *     pointer-declarator
@@ -1268,6 +1506,13 @@ static Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
         return read_pointer_declarator(ctx, ctype);
     }
     return read_direct_declarator(ctx, ctype);
+}
+
+static NVar *nread_declarator(ReadContext *ctx, Type *ctype) {
+    if (next_token_is(ctx, '*')) {
+        return nread_pointer_declarator(ctx, ctype);
+    }
+    return nread_direct_declarator(ctx, ctype);
 }
 
 /*
@@ -1705,6 +1950,23 @@ static List *read_param_type_list(ReadContext *ctx) {
     }
 }
 
+// Returns list of NVars
+static List *nread_param_type_list(ReadContext *ctx) {
+    List *params = make_list();
+    if (next_token_is(ctx, ')'))
+        return params;
+    for (;;) {
+        Type *type = nread_declaration_spec(ctx);
+        NVar *param = nread_declarator(ctx, type);
+        if (param->ctype->type == TARRAY)
+            param->ctype = make_ptr_type(param->ctype->ptr);
+        list_push(params, param);
+        if (next_token_is(ctx, ')'))
+            return params;
+        expect(ctx, ',');
+    }
+}
+
 /*
  * function-declaration:
  *     function-def-specifier compound-statement
@@ -1748,6 +2010,20 @@ static Function *read_func_declaration(ReadContext *ctx) {
 
     fn->entry = ctx->entry;
     return fn;
+}
+
+/*
+ * translation-unit:
+ *     external-declaration
+ *     translation-unit external-declaration
+ *
+ * external-declaration:
+ *     function-definition
+ *     declaration
+ */
+
+static Node read_trans_unit(ReadContext *ctx) {
+    
 }
 
 /*============================================================
