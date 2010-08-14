@@ -107,17 +107,17 @@ TEST(ctype_sizeof) {
  * Tests for the new intermediate language
  */
 
-TEST(nread_declaration_spec) {
-    EQ(make_int_type(IINT), nread_declaration_spec(make_context("int x")));
-    EQ(make_int_type(IINT), nread_declaration_spec(make_context("signed x")));
-    EQ(make_int_type(IINT), nread_declaration_spec(make_context("signed int x")));
+TEST(nread_decl_spec) {
+    EQ(make_int_type(IINT), nread_decl_spec(make_context("int x")));
+    EQ(make_int_type(IINT), nread_decl_spec(make_context("signed x")));
+    EQ(make_int_type(IINT), nread_decl_spec(make_context("signed int x")));
 
-    EQ(make_int_type(IUINT), nread_declaration_spec(make_context("unsigned x")));
-    EQ(make_int_type(IUINT), nread_declaration_spec(make_context("unsigned int x")));
+    EQ(make_int_type(IUINT), nread_decl_spec(make_context("unsigned x")));
+    EQ(make_int_type(IUINT), nread_decl_spec(make_context("unsigned int x")));
 
-    EQ(make_int_type(ILONG), nread_declaration_spec(make_context("long x")));
-    EQ(make_int_type(IULONG), nread_declaration_spec(make_context("unsigned long x")));
+    EQ(make_int_type(ILONG), nread_decl_spec(make_context("long x")));
+    EQ(make_int_type(IULONG), nread_decl_spec(make_context("unsigned long x")));
 
-    EQ(make_float_type(FFLOAT), nread_declaration_spec(make_context("float x")));
-    EQ(make_float_type(FDOUBLE), nread_declaration_spec(make_context("double x")));
+    EQ(make_float_type(FFLOAT), nread_decl_spec(make_context("float x")));
+    EQ(make_float_type(FDOUBLE), nread_decl_spec(make_context("double x")));
 }

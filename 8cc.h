@@ -503,10 +503,9 @@ typedef struct ReadContext {
     // List of string dictionaries, representing nested scope for
     // variables.
     List *var_frame;
-    // List of string dictionaries, representing union or struct tag
+    // List of string dictionaries, representing union and struct tag
     // namespace.
-    List *union_tag;
-    List *struct_tag;
+    List *tag;
     // The entry basic block for the fucntion being read.
     Block *entry;
     // The stack of basic blocks.  Instructions for code being processsed are

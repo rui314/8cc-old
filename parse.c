@@ -45,7 +45,6 @@ static void read_compound_stmt(ReadContext *ctx);
 static void read_decl_or_stmt(ReadContext *ctx);
 static void read_stmt(ReadContext *ctx);
 static Var *read_subscript_expr(ReadContext *ctx, Var *a);
-static List *nread_param_type_list(ReadContext *ctx);
 static bool is_type_keyword(Token *tok);
 
 /*============================================================
@@ -198,7 +197,8 @@ ReadContext *make_read_context(File *file, Elf *elf, CppContext *cppctx) {
     ReadContext *r = malloc(sizeof(ReadContext));
     r->file = file;
     r->elf = elf;
-    r->var_frame = make_list();
+    r->var_frame = make_list1(make_string_dict());
+    r->tag = make_list1(make_string_dict());
     r->entry = make_block();
     r->blockstack = make_list();
     list_push(r->blockstack, r->entry);
@@ -1172,76 +1172,6 @@ static void sign_error(Token *tok) {
     error_token(tok, "both 'signed' and 'unsigned' in declaration specifiers");
 }
 
-static Type *nread_declaration_spec(ReadContext *ctx) {
-    Type *r = NULL;
-    Token *tok;
-    enum { NONE, SIGNED, UNSIGNED } sign = NONE;
-    for (;;) {
-        tok = read_token(ctx);
-        if (tok->toktype != TOKTYPE_KEYWORD)
-            goto end;
-        switch (tok->val.i) {
-        case KEYWORD_CONST:
-            // ignore the type specifier for now.
-            break;
-        case KEYWORD_SIGNED:
-            if (sign == SIGNED)
-                error_token(tok, "'signed' specified twice");
-            if (sign == UNSIGNED)
-                sign_error(tok);
-            sign = SIGNED;
-            break;
-        case KEYWORD_UNSIGNED:
-            if (sign == UNSIGNED)
-                error_token(tok, "'unsigned' specified twice");
-            if (sign == SIGNED)
-                sign_error(tok);
-            sign = UNSIGNED;
-            break;
-#define CHECK_DUP()                                                     \
-            if (r) error_token(tok, "two or more data types in declaration specifiers");
-        case KEYWORD_CHAR:
-            CHECK_DUP();
-            r = make_int_type(ICHAR);
-            break;
-        case KEYWORD_SHORT:
-            CHECK_DUP();
-            r = make_int_type(ISHORT);
-            break;
-        case KEYWORD_INT:
-            CHECK_DUP();
-            r = make_int_type(IINT);
-            break;
-        case KEYWORD_LONG:
-            CHECK_DUP();
-            r = make_int_type(ILONG);
-            break;
-        case KEYWORD_FLOAT:
-            CHECK_DUP();
-            if (sign != NONE)
-                error_token(tok, "float cannot be signed nor unsigned");
-            r = make_float_type(FFLOAT);
-            break;
-        case KEYWORD_DOUBLE:
-            CHECK_DUP();
-            if (sign != NONE)
-                error_token(tok, "double cannot be signed nor unsigned");
-            r = make_float_type(FDOUBLE);
-            break;
-#undef CHECK_DUP
-        default:
-            goto end;
-        }
-    }
- end:
-    unget_token(ctx, tok);
-    if (!r)
-        r = make_int_type(IINT);
-    if (sign == UNSIGNED)
-        r = make_int_type(INT_TYPE(r)->kind + 1);
-    return r;
-}
-
 static Ctype *read_array_dimensions(ReadContext *ctx, Ctype *ctype) {
     int size;
     if (next_token_is(ctx, ']')) {
@@ -1274,7 +1204,7 @@ static Exp *nread_array_dimensions(ReadContext *ctx) {
 }
 
 static Type *nread_func_declarator_params(ReadContext *ctx, Type *ctype) {
-    List *params = nread_param_type_list(ctx);
+    List *params = NULL;
     List *ctypes = make_list();
     for (int i = 0; i < LIST_LEN(params); i++) {
         NVar *var = LIST_REF(params, i);
@@ -1820,23 +1750,6 @@ static List *read_param_type_list(ReadContext *ctx) {
     }
 }
 
-// Returns list of NVars
-static List *nread_param_type_list(ReadContext *ctx) {
-    List *params = make_list();
-    if (next_token_is(ctx, ')'))
-        return params;
-    for (;;) {
-        Type *type = nread_declaration_spec(ctx);
-        NVar *param = nread_declarator(ctx, type);
-        if (param->ctype->type == TARRAY)
-            param->ctype = make_ptr_type(PTR_TYPE(param->ctype)->ptr);
-        list_push(params, param);
-        if (next_token_is(ctx, ')'))
-            return params;
-        expect(ctx, ',');
-    }
-}
-
 /*
  * function-declaration:
  *     function-def-specifier compound-statement
@@ -1883,6 +1796,225 @@ static Function *read_func_declaration(ReadContext *ctx) {
 }
 
 /*
+ * struct-declaration-list:
+ *     struct-declaration
+ *     struct-declaration-list struct-declaration
+ *
+ * struct-declaration:
+ *     specifier-qualifier-list struct-declarator-list ";"
+ *
+ * specifier-qualifier-list:
+ *     type-specifier specifier-qualifier-list?
+ *     type-qualifier specifier-qualifier-listopt
+ *
+ * struct-declarator-list:
+ *     struct-declarator
+ *     struct-declarator-list "," struct-declarator
+ *
+ * struct-declarator:
+ *     declarator
+ *     declarator? ":" constant-expression
+ */
+static Type *nread_decl_spec(ReadContext *ctx);
+
+static Field *make_field(Type *ctype, String *name, int bitfield) {
+    Field *r = malloc(sizeof(Field));
+    r->ctype = ctype;
+    r->name = name;
+    r->bitfield = bitfield;
+    return r;
+}
+
+static int read_const_expr(ReadContext *ctx) {
+    return 0;
+}
+
+static Field *read_struct_decl(ReadContext *ctx) {
+    Type *ctype = NULL;
+    String *name = NULL;
+    int bitfield = -1;
+
+    ctype = nread_decl_spec(ctx);
+    Token *tok = peek_token_nonnull(ctx);
+    if (!is_keyword(tok, ':')) {
+        NVar *var = nread_declarator(ctx, ctype);
+        ctype = var->ctype;
+        name = var->name;
+        tok = read_token_nonnull(ctx);
+    }
+    if (is_keyword(tok, ':'))
+        bitfield = read_const_expr(ctx);
+    expect(ctx, ';');
+    return make_field(ctype, name, bitfield);
+}
+
+static List *read_struct_decl_list(ReadContext *ctx) {
+    List *r = make_list();
+    for (;;) {
+        Token *tok = peek_token_nonnull(ctx);
+        if (is_keyword(tok, '}'))
+            return r;
+        Field *field = read_struct_decl(ctx);
+        list_push(r, field);
+    }
+}
+
+static Type *find_struct_or_union(ReadContext *ctx, String *tag) {
+    for (int i = LIST_LEN(ctx->tag) - 1; i >= 0; i--) {
+        Dict *dict = LIST_REF(ctx->tag, i);
+        Type *r = dict_get(dict, tag);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+static void add_struct_or_union(ReadContext *ctx, String *tag, Type *ctype) {
+    Dict *dict = LIST_BOTTOM(ctx->tag);
+    dict_put(dict, tag, ctype);
+}
+
+/*
+ * struct-or-union-specifier:
+ *     struct-or-union identifier? "{" struct-declaration-list "}"
+ *     struct-or-union identifier
+ */
+static Type *nread_struct_or_union_spec(ReadContext *ctx, TypeEnum type) {
+    Token *name = NULL;
+
+    Token *tok = read_token_nonnull(ctx);
+    if (tok->toktype == TOKTYPE_IDENT) {
+        name = tok;
+        tok = read_token_nonnull(ctx);
+    }
+
+    if (is_keyword(tok, '{')) {
+        List *field = read_struct_decl_list(ctx);
+        return make_struct_or_union_type(type, name->val.str, field);
+    } else if (!name)
+        error_token(tok, "'{' or identifier expected, but got %s", token_to_string(tok));
+
+    Type *r = find_struct_or_union(ctx, name->val.str);
+    if (!r) {
+        r = make_struct_or_union_type(type, name->val.str, NULL);
+        add_struct_or_union(ctx, name->val.str, r);
+        return r;
+    }
+    if (r->type == TSTRUCT && type == TUNION
+        || r->type == TUNION && type == TSTRUCT)
+        error_token(name, "tag type '%s' does not match previous declaration", STRING_BODY(name->val.str));
+    return r;
+}
+
+/*
+ * declaration-specifiers:
+ *     storage-class-specifier declaration-specifiers?
+ *     type-specifier declaration-specifiers?
+ *     type-qualifier declaration-specifiers?
+ *     function-specifier declaration-specifiers?
+ *
+ * storage-class-specifier:
+ *     one of: "auto" "extern" "register" "static" "typedef"
+ *
+ * type-specifier:
+ *     one of: "void" "char" "short" "int" "long" "float"
+ *             "double" "signed" "unsigned" "_Bool" "_Complex"
+ *     struct-or-union-specifier
+ *     enum-specifier
+ *     typedef-name
+ *
+ * type-qualifier:
+ *     one of: "const" "volatile" "restrict"
+ *
+ * function-specifier:
+ *     "inline"
+ */
+static Type *nread_decl_spec(ReadContext *ctx) {
+    Type *r = NULL;
+    Token *tok;
+    enum { NONE, SIGNED, UNSIGNED } sign = NONE;
+    for (;;) {
+        tok = read_token(ctx);
+        if (tok->toktype != TOKTYPE_KEYWORD)
+            goto end;
+        switch (tok->val.i) {
+        case KEYWORD_STRUCT:
+            r = nread_struct_or_union_spec(ctx, true);
+            break;
+        case KEYWORD_UNION:
+            r = nread_struct_or_union_spec(ctx, false);
+            break;
+        case KEYWORD_CONST:
+            // ignore the type specifier for now.
+            break;
+        case KEYWORD_SIGNED:
+            if (sign == SIGNED)
+                error_token(tok, "'signed' specified twice");
+            if (sign == UNSIGNED)
+                sign_error(tok);
+            sign = SIGNED;
+            break;
+        case KEYWORD_UNSIGNED:
+            if (sign == UNSIGNED)
+                error_token(tok, "'unsigned' specified twice");
+            if (sign == SIGNED)
+                sign_error(tok);
+            sign = UNSIGNED;
+            break;
+#define CHECK_DUP()                                                     \
+            if (r) error_token(tok, "two or more data types in declaration specifiers");
+        case KEYWORD_CHAR:
+            CHECK_DUP();
+            r = make_int_type(ICHAR);
+            break;
+        case KEYWORD_SHORT:
+            CHECK_DUP();
+            r = make_int_type(ISHORT);
+            break;
+        case KEYWORD_INT:
+            CHECK_DUP();
+            r = make_int_type(IINT);
+            break;
+        case KEYWORD_LONG:
+            CHECK_DUP();
+            r = make_int_type(ILONG);
+            break;
+        case KEYWORD_FLOAT:
+            CHECK_DUP();
+            if (sign != NONE)
+                error_token(tok, "float cannot be signed nor unsigned");
+            r = make_float_type(FFLOAT);
+            break;
+        case KEYWORD_DOUBLE:
+            CHECK_DUP();
+            if (sign != NONE)
+                error_token(tok, "double cannot be signed nor unsigned");
+            r = make_float_type(FDOUBLE);
+            break;
+#undef CHECK_DUP
+        default:
+            goto end;
+        }
+    }
+ end:
+    unget_token(ctx, tok);
+    if (!r)
+        r = make_int_type(IINT);
+    if (sign == UNSIGNED)
+        r = make_int_type(INT_TYPE(r)->kind + 1);
+    return r;
+}
+
+/*
+ * external-declaration:
+ *     function-definition
+ *     declaration
+ */
+static void nread_external_decl(ReadContext *ctx, Global *global) {
+    Type *ctype = nread_decl_spec(ctx);
+    
+}
+
+/*
  * translation-unit:
  *     external-declaration
  *     translation-unit external-declaration
@@ -1892,8 +2024,17 @@ static Function *read_func_declaration(ReadContext *ctx) {
  *     declaration
  */
 
-static Node *read_trans_unit(ReadContext *ctx) {
-    return NULL;
+static Global *make_global(void) {
+    Global *r = malloc(sizeof(Global));
+    r->var = make_list();
+    r->func = make_list();
+    return r;
+}
+
+static Global *nread_trans_unit(ReadContext *ctx) {
+    Global *global = make_global();
+    nread_external_decl(ctx, global);
+    return global;
 }
 
 /*============================================================

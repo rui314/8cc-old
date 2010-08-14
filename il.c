@@ -86,15 +86,8 @@ Type *make_void_type(void) {
     return (Type *)&void_type;
 }
 
-Type *make_struct_type(String *name, List *field) {
-    StructType *r = type_alloc(sizeof(StructType), TSTRUCT);
-    r->name = name;
-    r->field = field;
-    return (Type *)r;
-}
-
-Type *make_union_type(String *name, List *field) {
-    UnionType *r = type_alloc(sizeof(UnionType), TUNION);
+Type *make_struct_or_union_type(TypeEnum type, String *name, List *field) {
+    StructType *r = type_alloc(sizeof(StructType), type);
     r->name = name;
     r->field = field;
     return (Type *)r;

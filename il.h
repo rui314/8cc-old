@@ -123,8 +123,7 @@ extern Type *make_func_type(Type *ret, List *param);
 extern Type *make_int_type(IntKind kind);
 extern Type *make_float_type(FloatKind kind);
 extern Type *make_void_type(void);
-extern Type *make_struct_type(String *name, List *field);
-extern Type *make_union_type(String *name, List *field);
+extern Type *make_struct_or_union_type(TypeEnum type, String *name, List *field);
 extern Type *make_enum_type(String *name, Dict *item);
 
 /*==============================================================================
