@@ -206,6 +206,8 @@ static void test(char *expected, char *input) {
  * Various tests
  */
 
+#if 0
+
 /*
  * Basic tests
  */
@@ -559,6 +561,8 @@ TEST(numbers) {
     test("255 255", "main(){printf(\"%d %d\", 0xff, 0XFF);}");
     test("7 7", "main(){printf(\"%d %d\", 0b111, 0B111);}");
 }
+
+#endif
 
 /*==============================================================================
  * Entry point

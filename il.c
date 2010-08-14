@@ -52,8 +52,8 @@ Type *make_ellipsis_func_type(Type *ret, List *param) {
 }
 
 bool has_param(Type *ctype) {
-    assert(ctype->type == TFUNC);
-    return ctype->param;
+    ASSERT(ctype->type == TFUNC);
+    return FUNC_TYPE(ctype)->param;
 }
 
 Type *make_int_type(IntKind kind) {

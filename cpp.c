@@ -710,7 +710,6 @@ static int eval_const_expr(CppContext *cppctx, List *tokens) {
 
     CppContext *virt = make_virt_cpp_context(cppctx, tokens);
     ReadContext *readctx = make_read_context(cppctx->file, NULL, virt);
-    readctx->in_const_expr = true;
     Var *var = read_comma_expr(readctx);
 
     Token *tok = read_token(readctx);

@@ -177,8 +177,7 @@ bool ctype_equal(Ctype *ctype, int type) {
 }
 
 static bool require_consts(ReadContext *ctx, Var *v0, Var *v1) {
-    return ctx->in_const_expr
-        && v0->stype == VAR_IMM
+    return v0->stype == VAR_IMM
         && v1->stype == VAR_IMM
         && v0->ctype->type == CTYPE_INT
         && v1->ctype->type == CTYPE_INT;
@@ -199,7 +198,7 @@ ReadContext *make_read_context(File *file, Elf *elf, CppContext *cppctx) {
     ReadContext *r = malloc(sizeof(ReadContext));
     r->file = file;
     r->elf = elf;
-    r->scope = make_list();
+    r->var_frame = make_list();
     r->entry = make_block();
     r->blockstack = make_list();
     list_push(r->blockstack, r->entry);
@@ -209,16 +208,15 @@ ReadContext *make_read_context(File *file, Elf *elf, CppContext *cppctx) {
     r->label = make_string_dict();
     r->label_tbf = make_string_dict();
     r->cppctx = cppctx;
-    r->in_const_expr = false;
     return r;
 }
 
 static void push_scope(ReadContext *ctx) {
-    list_push(ctx->scope, make_list());
+    list_push(ctx->var_frame, make_list());
 }
 
 static void pop_scope(ReadContext *ctx) {
-    list_pop(ctx->scope);
+    list_pop(ctx->var_frame);
 }
 
 static void push_block(ReadContext *ctx, Block *block) {
@@ -243,14 +241,14 @@ static void emit(ReadContext *ctx, Inst *inst) {
 }
 
 static void add_local_var(ReadContext *ctx, String *name, Var *var) {
-    List *current_scope = LIST_BOTTOM(ctx->scope);
-    list_push(current_scope, name);
-    list_push(current_scope, var);
+    List *current_frame = LIST_BOTTOM(ctx->var_frame);
+    list_push(current_frame, name);
+    list_push(current_frame, var);
 }
 
 static Var *find_var(ReadContext *ctx, String *name) {
-    for (int i = LIST_LEN(ctx->scope) - 1; i >= 0; i--) {
-        List *scope = LIST_REF(ctx->scope, i);
+    for (int i = LIST_LEN(ctx->var_frame) - 1; i >= 0; i--) {
+        List *scope = LIST_REF(ctx->var_frame, i);
         for (int j = 0; j < LIST_LEN(scope); j += 2) {
             String *str = LIST_REF(scope, j);
             if (string_equal(str, name))
@@ -460,7 +458,7 @@ static Var *emit_log_or(ReadContext *ctx, Var *v0, Var *v1) {
  * Parser
  */
 
-static void read_token_nonnull(ReadContext *ctx) {
+static Token *read_token_nonnull(ReadContext *ctx) {
     Token *tok = read_token(ctx);
     if (!tok)
         error_ctx(ctx, "premature end of input");
@@ -777,30 +775,36 @@ static Var *read_unary_expr(ReadContext *ctx) {
     }
 }
 
+static Exp *nread_postfix_expr(ReadContext *ctx) {
+    return NULL;
+}
+
+static Exp *nread_comma_expr(ReadContext *ctx) {
+    return NULL;
+}
+
 static Exp *nread_unary_expr(ReadContext *ctx) {
     // ( type-name ) or ( expression )
     if (next_token_is(ctx, '(')) {
         Token *tok = read_token_nonnull(ctx);
         if (is_type_keyword(tok)) {
             unget_token(ctx, tok);
-            nread_
         }
     }
 
-    Token *tok = read_token(ctx);
-    check_not_eof(tok);
-
+    Token *tok = read_token_nonnull(ctx);
     if (tok->toktype != TOKTYPE_KEYWORD) {
         unget_token(ctx, tok);
-        return read_postfix_expr(ctx);
+        return nread_postfix_expr(ctx);
     }
     switch (tok->val.i) {
     case '(': {
-        Var *r = read_comma_expr(ctx);
+        Exp *r = nread_comma_expr(ctx);
         expect(ctx, ')');
         return r;
     }
     }
+    return NULL;
 }
 
 /*
@@ -1077,123 +1081,6 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     return v0;
 }
 
-static Exp *nread_expr1(ReadContext *ctx, Var *v0, int prec0) {
-    for (;;) {
-        Token *tok = read_token(ctx);
-        int prec1 = prec_token(tok);
-        if (prec1 < 0 || prec0 < prec1) {
-            unget_token(ctx, tok);
-            return v0;
-        }
-        if (is_keyword(tok, '?')) {
-            v0 = read_cond_expr(ctx, v0);
-            v0 = unary_conv(ctx, v0);
-            continue;
-        }
-        if (is_keyword(tok, KEYWORD_LOG_AND) || is_keyword(tok, KEYWORD_LOG_OR)) {
-            push_block(ctx, make_block());
-        }
-        Var *v1 = read_unary_expr(ctx);
-        for (;;) {
-            Token *tok1 = peek_token(ctx);
-            int prec2 = prec_token(tok1);
-            if (prec2 < 0 || prec1 < prec2 || (prec1 == prec2 && !is_rassoc(tok1))) {
-                break;
-            }
-            v1 = read_expr1(ctx, v1, prec2);
-        }
-        if (is_keyword(tok, '=')) {
-            emit_assign(ctx, v0, v1);
-            continue;
-        }
-
-        v0 = unary_conv(ctx, v0);
-        v1 = unary_conv(ctx, v1);
-        int op;
-        switch (tok->val.i) {
-        case ',':
-            v0 = v1;
-            break;
-        case '+': case '-':
-            v0 = emit_arith(ctx, tok->val.i, v0, v1);
-            break;
-        case '*':
-        case '/': {
-            v0 = emit_arith_inst3(ctx, tok->val.i, v0, v1);
-            break;
-        }
-        case '^':
-        case '&':
-        case '|': {
-            Var *tmp = make_var(binary_type_conv(v0, v1));
-            if (is_flonum(tmp->ctype))
-                error_token(tok, "invalid operand to binary '%c'", tok->val.i);
-            emit(ctx, make_inst3(tok->val.i, tmp, v0, v1));
-            v0 = tmp;
-            break;
-        }
-        case KEYWORD_EQ:
-            op = OP_EQ; goto cmp;
-        case KEYWORD_NE:
-            op = OP_NE; goto cmp;
-        case '>':
-            SWAP(Var *, v0, v1);
-            // FALL THROUGH
-        case '<':
-            op = '<'; goto cmp;
-        case KEYWORD_GE:
-            SWAP(Var *, v0, v1);
-            // FALL THROUGH
-        case KEYWORD_LE:
-            op = OP_LE; goto cmp;
-        cmp:
-            v0 = emit_log_inst3(ctx, op, v0, v1);
-            break;
-        case KEYWORD_A_ADD:
-            op = '+'; goto assign_arith_op;
-        case KEYWORD_A_SUB:
-            op = '-'; goto assign_arith_op;
-        assign_arith_op:
-            ensure_lvalue(ctx, v0);
-            emit_assign(ctx, v0, emit_arith(ctx, op, v0, v1));
-            break;
-        case KEYWORD_A_MUL:
-            op = '*'; goto assign_op;
-        case KEYWORD_A_DIV:
-            op = '/'; goto assign_op;
-        case KEYWORD_A_AND:
-            op = '&'; goto assign_op;
-        case KEYWORD_A_OR:
-            op = '|'; goto assign_op;
-        case KEYWORD_A_XOR:
-            op = '^'; goto assign_op;
-        case KEYWORD_A_LSH:
-            op = OP_SHL; goto assign_op;
-        case KEYWORD_A_RSH:
-            op = OP_SHR; goto assign_op;
-        assign_op:
-            ensure_lvalue(ctx, v0);
-            emit(ctx, make_inst3(op, v0, v0, v1));
-            break;
-        case KEYWORD_LOG_AND:
-            v0 = emit_log_and(ctx, v0, v1);
-            break;
-        case KEYWORD_LOG_OR:
-            v0 = emit_log_or(ctx, v0, v1);
-            break;
-        case KEYWORD_LSH:
-            v0 = emit_arith_inst3(ctx, OP_SHL, v0, v1);
-            break;
-        case KEYWORD_RSH:
-            v0 = emit_arith_inst3(ctx, OP_SHR, v0, v1);
-            break;
-        default:
-            error_token(tok, "unsupported operator: %s", token_to_string(tok));
-        }
-    }
-    return v0;
-}
-
 /*
  * declaration-specifiers:
  *     storage-class-specifier declaration-specifiers?
@@ -1315,19 +1202,19 @@ static Type *nread_declaration_spec(ReadContext *ctx) {
             if (r) error_token(tok, "two or more data types in declaration specifiers");
         case KEYWORD_CHAR:
             CHECK_DUP();
-            r = get_int_type(SCHAR);
+            r = make_int_type(SCHAR);
             break;
         case KEYWORD_SHORT:
             CHECK_DUP();
-            r = get_int_type(SSHORT);
+            r = make_int_type(SSHORT);
             break;
         case KEYWORD_INT:
             CHECK_DUP();
-            r = get_int_type(SINT);
+            r = make_int_type(SINT);
             break;
         case KEYWORD_LONG:
             CHECK_DUP();
-            r = get_int_type(SLONG);
+            r = make_int_type(SLONG);
             break;
         case KEYWORD_FLOAT:
             CHECK_DUP();
@@ -1349,9 +1236,9 @@ static Type *nread_declaration_spec(ReadContext *ctx) {
  end:
     unget_token(ctx, tok);
     if (!r)
-        r = get_int_type(SINT);
+        r = make_int_type(SINT);
     if (sign == UNSIGNED)
-        r = get_int_type(INT_TYPE(r)->kind + 1);
+        r = make_int_type(INT_TYPE(r)->kind + 1);
     return r;
 }
 
@@ -1382,23 +1269,9 @@ static void check_array_dimension(ReadContext *ctx, Exp *exp) {
         error_ctx(ctx, "Only fixed size array is supported");
 }
 
-static Type *nread_array_dimensions(ReadContext *ctx, Type *ctype) {
-    Exp *size = NULL;
-    if (!next_token_is(ctx, ']')) {
-        size = nread_assign_expr(ctx);
-        check_array_dimension(ctx, size);
-        expect(ctx, ']');
-    }
-    if (next_token_is(ctx, '[')) {
-        Type *ctype1 = nread_array_dimensions(ctx, ctype);
-        if (ARRAY_TYPE(ctype1)->size)
-            error_ctx(ctx, "Dimension is not specified for a multimentional array");
-        check_array_dimension(ctx, size);
-        return make_array_type(ctype1, size);
-    }
-    return make_ctype_array(ctype, size);
+static Exp *nread_array_dimensions(ReadContext *ctx) {
+    return NULL;
 }
-
 
 static Type *nread_func_declarator_params(ReadContext *ctx, Type *ctype) {
     List *params = nread_param_type_list(ctx);
@@ -1408,7 +1281,6 @@ static Type *nread_func_declarator_params(ReadContext *ctx, Type *ctype) {
         list_push(ctypes, var->ctype);
     }
     Type *r = make_func_type(ctype, ctypes);
-    r->params;
     return r;
 }
 
@@ -1438,14 +1310,14 @@ static NVar *make_nvar(ReadContext *ctx, Type *ctype, Token *tok) {
         : make_global_var(ctype, tok->val.str, NULL);
 }
 
-static Ctype *nread_direct_or_abst_declarator(ReadContext *ctx, Token **pname) {
+static Type *nread_direct_or_abst_declarator(ReadContext *ctx, String **pname) {
     if (next_token_is(ctx, '*'))
         return make_ptr_type(nread_direct_or_abst_declarator(ctx, pname));
 
     Type *ctype = NULL;
     Token *tok = read_token_nonnull(ctx);
     if (tok->toktype == TOKTYPE_IDENT) {
-        *pname = tok->var.str;
+        *pname = tok->val.str;
     } else if (is_keyword(tok, '(')) {
         Token *tok1 = peek_token_nonnull(ctx);
         if (!pname && is_type_keyword(tok1)) {
@@ -1486,6 +1358,10 @@ static Var *read_pointer_declarator(ReadContext *ctx, Ctype *ctype) {
         : read_direct_declarator(ctx, ctype);
     r->ctype = make_ctype_ptr(r->ctype);
     return r;
+}
+
+static NVar *nread_direct_declarator(ReadContext *ctx, Type *ctype) {
+    return NULL;
 }
 
 static NVar *nread_pointer_declarator(ReadContext *ctx, Type *ctype) {
@@ -1959,7 +1835,7 @@ static List *nread_param_type_list(ReadContext *ctx) {
         Type *type = nread_declaration_spec(ctx);
         NVar *param = nread_declarator(ctx, type);
         if (param->ctype->type == TARRAY)
-            param->ctype = make_ptr_type(param->ctype->ptr);
+            param->ctype = make_ptr_type(PTR_TYPE(param->ctype)->ptr);
         list_push(params, param);
         if (next_token_is(ctx, ')'))
             return params;
@@ -2022,8 +1898,8 @@ static Function *read_func_declaration(ReadContext *ctx) {
  *     declaration
  */
 
-static Node read_trans_unit(ReadContext *ctx) {
-    
+static Node *read_trans_unit(ReadContext *ctx) {
+    return NULL;
 }
 
 /*============================================================

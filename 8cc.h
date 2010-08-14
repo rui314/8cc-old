@@ -490,7 +490,7 @@ typedef struct ReadContext {
     Elf *elf;
     // List of string dictionaries, representing nested scope for
     // variables.
-    List *var;
+    List *var_frame;
     // List of string dictionaries, representing union or struct tag
     // namespace.
     List *union_tag;
