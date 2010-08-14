@@ -1304,12 +1304,6 @@ static Var *read_direct_declarator(ReadContext *ctx, Ctype *ctype) {
     return r;
 }
 
-static NVar *make_nvar(ReadContext *ctx, Type *ctype, Token *tok) {
-    return ctx->func
-        ? make_local_var(ctype, tok->val.str)
-        : make_global_var(ctype, tok->val.str, NULL);
-}
-
 static Type *nread_direct_or_abst_declarator(ReadContext *ctx, String **pname) {
     if (next_token_is(ctx, '*'))
         return make_ptr_type(nread_direct_or_abst_declarator(ctx, pname));

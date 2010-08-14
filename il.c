@@ -86,28 +86,40 @@ Type *make_void_type(void) {
     return (Type *)&void_type;
 }
 
+Type *make_struct_type(String *name, List *field) {
+    StructType *r = type_alloc(sizeof(StructType), TSTRUCT);
+    r->name = name;
+    r->field = field;
+    return (Type *)r;
+}
+
+Type *make_union_type(String *name, List *field) {
+    UnionType *r = type_alloc(sizeof(UnionType), TUNION);
+    r->name = name;
+    r->field = field;
+    return (Type *)r;
+}
+
+Type *make_enum_type(String *name, Dict *item) {
+    EnumType *r = type_alloc(sizeof(EnumType), TENUM);
+    r->name = name;
+    r->item = item;
+    return (Type *)r;
+}
 
 /*==============================================================================
  * Variables
  */
 
-void *var_alloc(size_t size, VarType type, Type *ctype, String *name) {
-    NVar *r = malloc(size);
-    r->type = type;
+NVar *make_nvar(VarType vartype, Storage st, Type *ctype, String *name) {
+    NVar *r = malloc(sizeof(NVar));
+    r->type = vartype;
+    r->storage = st;
     r->ctype = ctype;
     r->name = name;
     return r;
 }
 
-NVar *make_local_var(Type *ctype, String *name) {
-    return var_alloc(sizeof(LocalVar), LOCAL, ctype, name);
-}
-
-NVar *make_global_var(Type *ctype, String *name, Exp *init) {
-    GlobalVar *r = var_alloc(sizeof(LocalVar), LOCAL, ctype, name);
-    r->init = init;
-    return (NVar *)r;
-}
 
 /*==============================================================================
  * Expressions
@@ -713,3 +725,4 @@ String *pp_nfunction(NFunction *fn) {
     string_append(b, "}");
     return b;
 }
+

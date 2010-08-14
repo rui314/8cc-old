@@ -20,6 +20,9 @@ typedef enum {
     TFUNC,
     TINT,
     TFLOAT,
+    TSTRUCT,
+    TUNION,
+    TENUM,
 } TypeEnum;
 
 typedef enum {
@@ -80,12 +83,39 @@ typedef struct VoidType {
     TYPE_HEADER;
 } VoidType;
 
-#define ARRAY_TYPE(obj) ((ArrayType *)(obj))
-#define PTR_TYPE(obj)   ((PtrType *)(obj))
-#define FUNC_TYPE(obj)  ((FuncType *)(obj))
-#define INT_TYPE(obj)   ((IntType *)(obj))
-#define FLOAT_TYPE(obj) ((FloatType *)(obj))
-#define VOID_TYPE(obj)  ((VoidType *)(obj))
+// Structure fields.
+typedef struct Field {
+    Type *ctype;
+    String *name;
+    // If a bitfield, "bitfield" >= 0.  -1 indicate that this is not a bitfield.
+    int bitfield;
+} Field;
+
+typedef struct StructType {
+    TYPE_HEADER;
+    String *name;
+    // List of Fields
+    List *field;
+} StructType;
+
+typedef StructType UnionType;
+
+typedef struct EnumType {
+    TYPE_HEADER;
+    String *name;
+    // Map from String to Exp
+    Dict *item;
+} EnumType;
+
+#define ARRAY_TYPE(obj)  ((ArrayType *)(obj))
+#define PTR_TYPE(obj)    ((PtrType *)(obj))
+#define FUNC_TYPE(obj)   ((FuncType *)(obj))
+#define INT_TYPE(obj)    ((IntType *)(obj))
+#define FLOAT_TYPE(obj)  ((FloatType *)(obj))
+#define VOID_TYPE(obj)   ((VoidType *)(obj))
+#define STRUCT_TYPE(obj) ((StructType *)(obj))
+#define UNION_TYPE(obj)  ((UnionType *)(obj))
+#define ENUM_TYPE(obj)   ((EnumType *)(obj))
 
 extern Type *make_array_type(Type *ptr, struct Exp *size);
 extern Type *make_ptr_type(Type *ptr);
@@ -93,6 +123,9 @@ extern Type *make_func_type(Type *ret, List *param);
 extern Type *make_int_type(IntKind kind);
 extern Type *make_float_type(FloatKind kind);
 extern Type *make_void_type(void);
+extern Type *make_struct_type(String *name, List *field);
+extern Type *make_union_type(String *name, List *field);
+extern Type *make_enum_type(String *name, Dict *item);
 
 /*==============================================================================
  * Data type for Node
@@ -131,31 +164,25 @@ typedef struct Node {
  */
 
 typedef enum {
+    NO_STORAGE,
+    STATIC,
+    REGISTER,
+    EXTERN
+} Storage;
+
+typedef enum {
     GLOBAL,
     LOCAL,
 } VarType;
 
-#define VAR_HEADER VarType type; Type *ctype; String *name
-
 typedef struct NVar {
-    VAR_HEADER;
+    VarType type;
+    Storage storage;
+    Type *ctype;
+    String *name;
 } NVar;
 
-typedef struct LocalVar {
-    VAR_HEADER;
-} LocalVar;
-
-typedef struct GlobalVar {
-    VAR_HEADER;
-    struct Exp *init;
-} GlobalVar;
-
-#define VAR(obj)        ((Var *)(obj))
-#define LOCAL_VAR(obj)  ((LocalVar *)(obj))
-#define GLOBAL_VAR(obj) ((GlobalVar *)(obj))
-
-extern NVar *make_local_var(Type *ctype, String *name);
-extern NVar *make_global_var(Type *ctype, String *name, struct Exp *init);
+extern NVar *make_nvar(VarType vartype, Storage st, Type *ctype, String *name);
 
 
 /*==============================================================================
