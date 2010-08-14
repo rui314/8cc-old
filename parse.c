@@ -466,7 +466,7 @@ static Token *read_token_nonnull(ReadContext *ctx) {
 }
 
 static bool is_keyword(Token *tok, int type) {
-    return tok->toktype == TOKTYPE_KEYWORD && tok->val.i == type;
+    return tok && tok->toktype == TOKTYPE_KEYWORD && tok->val.i == type;
 }
 
 static void unget_token(ReadContext *ctx, Token *tok) {
@@ -1285,7 +1285,10 @@ static Var *read_pointer_declarator(ReadContext *ctx, Ctype *ctype) {
 }
 
 static NVar *nread_direct_declarator(ReadContext *ctx, Type *ctype) {
-    return NULL;
+    Token *tok = read_token_nonnull(ctx);
+    if (tok->toktype != TOKTYPE_IDENT)
+        panic("direct-declarator is not fully implemented yet");
+    return make_nvar(LOCAL, NO_STORAGE, ctype, tok->val.str);
 }
 
 static NVar *nread_pointer_declarator(ReadContext *ctx, Type *ctype) {
@@ -1838,12 +1841,15 @@ static Field *read_struct_decl(ReadContext *ctx) {
     Token *tok = peek_token_nonnull(ctx);
     if (!is_keyword(tok, ':')) {
         NVar *var = nread_declarator(ctx, ctype);
+        ASSERT(var);
         ctype = var->ctype;
         name = var->name;
         tok = read_token_nonnull(ctx);
     }
     if (is_keyword(tok, ':'))
         bitfield = read_const_expr(ctx);
+    else
+        unget_token(ctx, tok);
     expect(ctx, ';');
     return make_field(ctype, name, bitfield);
 }
@@ -1884,14 +1890,16 @@ static Type *nread_struct_or_union_spec(ReadContext *ctx, TypeEnum type) {
     Token *tok = read_token_nonnull(ctx);
     if (tok->toktype == TOKTYPE_IDENT) {
         name = tok;
-        tok = read_token_nonnull(ctx);
+        tok = read_token(ctx);
     }
 
     if (is_keyword(tok, '{')) {
         List *field = read_struct_decl_list(ctx);
         return make_struct_or_union_type(type, name->val.str, field);
-    } else if (!name)
+    } else if (!name) {
         error_token(tok, "'{' or identifier expected, but got %s", token_to_string(tok));
+    } else
+        unget_token(ctx, tok);
 
     Type *r = find_struct_or_union(ctx, name->val.str);
     if (!r) {
@@ -1899,8 +1907,8 @@ static Type *nread_struct_or_union_spec(ReadContext *ctx, TypeEnum type) {
         add_struct_or_union(ctx, name->val.str, r);
         return r;
     }
-    if (r->type == TSTRUCT && type == TUNION
-        || r->type == TUNION && type == TSTRUCT)
+    if ((r->type == TSTRUCT && type == TUNION)
+        || (r->type == TUNION && type == TSTRUCT))
         error_token(name, "tag type '%s' does not match previous declaration", STRING_BODY(name->val.str));
     return r;
 }
@@ -1938,10 +1946,10 @@ static Type *nread_decl_spec(ReadContext *ctx) {
             goto end;
         switch (tok->val.i) {
         case KEYWORD_STRUCT:
-            r = nread_struct_or_union_spec(ctx, true);
+            r = nread_struct_or_union_spec(ctx, TSTRUCT);
             break;
         case KEYWORD_UNION:
-            r = nread_struct_or_union_spec(ctx, false);
+            r = nread_struct_or_union_spec(ctx, TUNION);
             break;
         case KEYWORD_CONST:
             // ignore the type specifier for now.
@@ -2010,8 +2018,7 @@ static Type *nread_decl_spec(ReadContext *ctx) {
  *     declaration
  */
 static void nread_external_decl(ReadContext *ctx, Global *global) {
-    Type *ctype = nread_decl_spec(ctx);
-    
+    nread_decl_spec(ctx);
 }
 
 /*

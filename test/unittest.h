@@ -13,6 +13,7 @@
 
 #define CONSTRUCTOR __attribute__((constructor))
 
+#define IS_NULL(p) do { if (p) error("Line %d: must be null " #p, __LINE__); } while (0)
 #define NOT_NULL(p) do { if (!(p)) error("Line %d: must not be null " #p, __LINE__); } while (0)
 #define EQ(x, y) do { if ((x) != (y)) error("Line %d: must be the same: '%s' and '%s'", __LINE__, #x, #y); } while (0)
 #define EQ_CHAR(x, y) do { eq_char(__LINE__, (x), (y)); } while (0)
