@@ -7,7 +7,20 @@
 
 #include "8cc.h"
 
-/*
+/*==============================================================================
+ * Source file location
+ */
+
+Location *make_location(String *filename, int line, int column, int len) {
+    Location *r = malloc(sizeof(Location));
+    r->filename = filename;
+    r->line = line;
+    r->column = column;
+    r->len = len;
+    return r;
+}
+
+/*==============================================================================
  * A wrapper object for stdio's FILE.  You can pushback up to two characters to
  * a File.
  *

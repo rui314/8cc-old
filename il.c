@@ -58,25 +58,25 @@ bool has_param(Type *ctype) {
 
 Type *make_int_type(IntKind kind) {
     static const IntType int_types[] = {
-        { TINT, SCHAR },
-        { TINT, UCHAR },
-        { TINT, SSHORT },
-        { TINT, USHORT },
-        { TINT, SINT },
-        { TINT, UINT },
-        { TINT, SLONG },
-        { TINT, ULONG },
-        { TINT, SLLONG },
-        { TINT, ULLONG },
+        { TINT, ICHAR },
+        { TINT, IUCHAR },
+        { TINT, ISHORT },
+        { TINT, IUSHORT },
+        { TINT, IINT },
+        { TINT, IUINT },
+        { TINT, ILONG },
+        { TINT, IULONG },
+        { TINT, ILLONG },
+        { TINT, IULLONG },
     };
     return (Type *)&int_types[kind];
 }
 
 Type *make_float_type(FloatKind kind) {
     static const IntType float_types[] = {
-        { TFLOAT, FLOAT },
-        { TFLOAT, DOUBLE },
-        { TFLOAT, LDOUBLE },
+        { TFLOAT, FFLOAT },
+        { TFLOAT, FDOUBLE },
+        { TFLOAT, FLDOUBLE },
     };
     return (Type *)&float_types[kind];
 }
@@ -327,16 +327,16 @@ static String *quote_type_maybe(String *b) {
 static String *pp_int_type(Type *ctype, String *b) {
     String *r = make_string();
     switch (INT_TYPE(ctype)->kind) {
-    case SCHAR:  string_append(r, "char"); break;
-    case SSHORT: string_append(r, "short"); break;
-    case SINT:   string_append(r, "int"); break;
-    case SLONG:  string_append(r, "long"); break;
-    case SLLONG: string_append(r, "long long"); break;
-    case UCHAR:  string_append(r, "unsigned char"); break;
-    case USHORT: string_append(r, "unsigned short"); break;
-    case UINT:   string_append(r, "unsigned int"); break;
-    case ULONG:  string_append(r, "unsigned long"); break;
-    case ULLONG: string_append(r, "unsigned long long"); break;
+    case ICHAR:  string_append(r, "char"); break;
+    case ISHORT: string_append(r, "short"); break;
+    case IINT:   string_append(r, "int"); break;
+    case ILONG:  string_append(r, "long"); break;
+    case ILLONG: string_append(r, "long long"); break;
+    case IUCHAR:  string_append(r, "unsigned char"); break;
+    case IUSHORT: string_append(r, "unsigned short"); break;
+    case IUINT:   string_append(r, "unsigned int"); break;
+    case IULONG:  string_append(r, "unsigned long"); break;
+    case IULLONG: string_append(r, "unsigned long long"); break;
     }
     return type_join(r, b);
 }
@@ -344,9 +344,9 @@ static String *pp_int_type(Type *ctype, String *b) {
 static String *pp_float_type(Type *ctype, String *b) {
     String *r = make_string();
     switch (FLOAT_TYPE(ctype)->kind) {
-    case FLOAT:   string_append(r, "float"); break;
-    case DOUBLE:  string_append(r, "double"); break;
-    case LDOUBLE: string_append(r, "long double"); break;
+    case FFLOAT:   string_append(r, "float"); break;
+    case FDOUBLE:  string_append(r, "double"); break;
+    case FLDOUBLE: string_append(r, "long double"); break;
     }
     return type_join(r, b);
 }
@@ -457,16 +457,16 @@ static String *pp_lval_exp(LvalExp *e, int prec) {
 
 static String *pp_const_int_exp(IntKind kind, long val) {
     switch (kind) {
-    case SCHAR: case UCHAR:
+    case ICHAR: case IUCHAR:
         return make_string_printf("'%c'", val);
-    case SINT:   return make_string_printf("%d", val);
-    case SLONG:  return make_string_printf("%ldL", val);
-    case SLLONG: return make_string_printf("%lldLL", val);
-    case UINT:   return make_string_printf("%uU", val);
-    case ULONG:  return make_string_printf("%luUL", val);
-    case ULLONG:
+    case IINT:   return make_string_printf("%d", val);
+    case ILONG:  return make_string_printf("%ldL", val);
+    case ILLONG: return make_string_printf("%lldLL", val);
+    case IUINT:   return make_string_printf("%uU", val);
+    case IULONG:  return make_string_printf("%luUL", val);
+    case IULLONG:
         panic("Printing long long is not supported yet");
-    case SSHORT: case USHORT:
+    case ISHORT: case IUSHORT:
         panic("Nonexistent literal data type: %d", kind);
     default:
         panic("Unknown integer kind: %d", kind);
@@ -475,9 +475,9 @@ static String *pp_const_int_exp(IntKind kind, long val) {
 
 static String *pp_const_float_exp(FloatKind kind, double val) {
     switch (kind) {
-    case FLOAT:   return make_string_printf("%fF", val);
-    case DOUBLE:  return make_string_printf("%f", val);
-    case LDOUBLE:
+    case FFLOAT:   return make_string_printf("%fF", val);
+    case FDOUBLE:  return make_string_printf("%f", val);
+    case FLDOUBLE:
         panic("Printing long double is not supported yet");
     default:
         panic("Unknown float kind: %d", kind);

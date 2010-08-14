@@ -26,17 +26,17 @@ typedef enum {
 } TypeEnum;
 
 typedef enum {
-    SCHAR, UCHAR,
-    SSHORT, USHORT,
-    SINT, UINT,
-    SLONG, ULONG,
-    SLLONG, ULLONG,
+    ICHAR, IUCHAR,
+    ISHORT, IUSHORT,
+    IINT, IUINT,
+    ILONG, IULONG,
+    ILLONG, IULLONG,
 } IntKind;
 
 typedef enum {
-    FLOAT,
-    DOUBLE,
-    LDOUBLE,
+    FFLOAT,
+    FDOUBLE,
+    FLDOUBLE,
 } FloatKind;
 
 #define TYPE_HEADER TypeEnum type;

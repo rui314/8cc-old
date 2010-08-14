@@ -16,20 +16,20 @@
  * C types
  */
 
-#define INT make_int_type(SINT)
+#define INT make_int_type(IINT)
 #define VOID make_void_type()
 
 TEST(pp_type) {
     EQ_STRING("int", pp_type(INT));
-    EQ_STRING("unsigned int", pp_type(make_int_type(UINT)));
+    EQ_STRING("unsigned int", pp_type(make_int_type(IUINT)));
 
-    EQ_STRING("float", pp_type(make_float_type(FLOAT)));
-    EQ_STRING("double", pp_type(make_float_type(DOUBLE)));
+    EQ_STRING("float", pp_type(make_float_type(FFLOAT)));
+    EQ_STRING("double", pp_type(make_float_type(FDOUBLE)));
 
     EQ_STRING("void", pp_type(VOID));
 
     EQ_STRING("int*", pp_type(P(INT)));
-    EQ_STRING("float*", pp_type(P(make_float_type(FLOAT))));
+    EQ_STRING("float*", pp_type(P(make_float_type(FFLOAT))));
     EQ_STRING("void**", pp_type(P(P(make_void_type()))));
 }
 
@@ -86,7 +86,7 @@ TEST(pp_exp) {
     TEST_EXP("(1+2)*3", BIN('*', BIN('+', ONE, TWO), THREE));
     TEST_EXP("&x", ADDR(P(INT), LVALVAR(INT, VARX)));
 
-    TEST_EXP("2.000000", make_const_float(make_float_type(DOUBLE), 2));
+    TEST_EXP("2.000000", make_const_float(make_float_type(FDOUBLE), 2));
 
     LvalExp *lval = LVAL_EXP(LVALVAR(INT, VARX));
     lval->off = make_lval_off(INDEX, THREE);

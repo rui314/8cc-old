@@ -324,7 +324,6 @@ typedef struct File {
     // If FILE_STRING
     char *buf;
     int pos;
-
     int line;
     int column;
     int last_column;
@@ -341,6 +340,19 @@ extern void unreadc(int c, File *file);
 extern int peekc(File *file);
 extern int readc(File *file);
 extern bool next_char_is(File *file, int c);
+
+/*
+ * Source code location
+ */
+
+typedef struct Location {
+    String *filename;
+    int line;
+    int column;
+    int len;
+} Location;
+
+extern Location *make_location(String *filename, int line, int column, int len);
 
 /*============================================================
  * Lexer

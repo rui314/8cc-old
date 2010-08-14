@@ -1202,31 +1202,31 @@ static Type *nread_declaration_spec(ReadContext *ctx) {
             if (r) error_token(tok, "two or more data types in declaration specifiers");
         case KEYWORD_CHAR:
             CHECK_DUP();
-            r = make_int_type(SCHAR);
+            r = make_int_type(ICHAR);
             break;
         case KEYWORD_SHORT:
             CHECK_DUP();
-            r = make_int_type(SSHORT);
+            r = make_int_type(ISHORT);
             break;
         case KEYWORD_INT:
             CHECK_DUP();
-            r = make_int_type(SINT);
+            r = make_int_type(IINT);
             break;
         case KEYWORD_LONG:
             CHECK_DUP();
-            r = make_int_type(SLONG);
+            r = make_int_type(ILONG);
             break;
         case KEYWORD_FLOAT:
             CHECK_DUP();
             if (sign != NONE)
                 error_token(tok, "float cannot be signed nor unsigned");
-            r = make_float_type(FLOAT);
+            r = make_float_type(FFLOAT);
             break;
         case KEYWORD_DOUBLE:
             CHECK_DUP();
             if (sign != NONE)
                 error_token(tok, "double cannot be signed nor unsigned");
-            r = make_float_type(DOUBLE);
+            r = make_float_type(FDOUBLE);
             break;
 #undef CHECK_DUP
         default:
@@ -1236,7 +1236,7 @@ static Type *nread_declaration_spec(ReadContext *ctx) {
  end:
     unget_token(ctx, tok);
     if (!r)
-        r = make_int_type(SINT);
+        r = make_int_type(IINT);
     if (sign == UNSIGNED)
         r = make_int_type(INT_TYPE(r)->kind + 1);
     return r;
