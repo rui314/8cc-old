@@ -384,6 +384,17 @@ typedef struct NFunction {
 extern NFunction *make_nfunction(String *name, Type *ctype, List *param, List *var, List *stmt);
 
 /*==============================================================================
+ * Global definitions
+ */
+
+typedef struct Global {
+    // List of NVars
+    List *var;
+    // List of NFunctions
+    List *func;
+} Global;
+
+/*==============================================================================
  * Pretty printer
  */
 
