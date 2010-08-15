@@ -1203,12 +1203,89 @@ static Exp *nread_array_dimensions(ReadContext *ctx) {
     return NULL;
 }
 
+typedef struct Decl {
+    Type *ctype;
+    String *name;
+} Decl;
+
+static Decl *make_decl(Type *ctype, String *name) {
+    Decl *r = malloc(sizeof(Decl));
+    r->ctype = ctype;
+    r->name = name;
+    return r;
+}
+
+typedef struct FuncParam {
+    enum { NO_DECL, KANDR, ANSI } type;
+    // List of Decls (ANSI) or Strings (K&R)
+    List *param;
+} FuncParam;
+
+static FuncParam *make_func_param(int type, List *param) {
+    FuncParam *r = malloc(sizeof(FuncParam));
+    r->type = type;
+    r->param = param;
+    return r;
+}
+
+static Type *nread_decl_spec(ReadContext *ctx);
+static Decl *nread_declarator(ReadContext *ctx, Type *ctype);
+
+static List *nread_param_type_list(ReadContext *ctx) {
+    List *r = make_list();
+    for (;;) {
+        Type *ctype = nread_decl_spec(ctx);
+        if (next_token_is(ctx, ',')) {
+            list_push(r, make_decl(ctype, NULL));
+            continue;
+        }
+        if (next_token_is(ctx, ')')) {
+            list_push(r, make_decl(ctype, NULL));
+            break;
+        }
+        Decl *decl = nread_declarator(ctx, ctype);
+        list_push(r, make_decl(decl->ctype, decl->name));
+        if (next_token_is(ctx, ','))
+            continue;
+        if (next_token_is(ctx, ')'))
+            break;
+    }
+    return r;
+}
+
+struct List *nread_ident_list(ReadContext *ctx) {
+    List *r = make_list();
+    for (;;) {
+        Token *tok = read_token_nonnull(ctx);
+        if (tok->toktype != TOKTYPE_IDENT)
+            error("identifier expected, but got '%s'", token_to_string(tok));
+        list_push(r, tok->val.str);
+        if (next_token_is(ctx, ')'))
+            break;
+        expect(ctx, ',');
+    }
+    return r;
+}
+
+static FuncParam *nread_func_params(ReadContext *ctx) {
+    if (next_token_is(ctx, ')'))
+        return make_func_param(NO_DECL, NULL);
+    Token *tok = read_token_nonnull(ctx);
+    if (is_keyword(tok, KEYWORD_VOID) && next_token_is(ctx, ')'))
+        return make_func_param(ANSI, make_list());
+    if (is_type_keyword(tok)) {
+        unget_token(ctx, tok);
+        return make_func_param(ANSI, nread_param_type_list(ctx));
+    }
+    return make_func_param(KANDR, nread_ident_list(ctx));
+}
+
 static Type *nread_func_declarator_params(ReadContext *ctx, Type *ctype) {
-    List *params = NULL;
+    FuncParam *param = nread_func_params(ctx);
     List *ctypes = make_list();
-    for (int i = 0; i < LIST_LEN(params); i++) {
-        NVar *var = LIST_REF(params, i);
-        list_push(ctypes, var->ctype);
+    for (int i = 0; i < LIST_LEN(param->param); i++) {
+        Decl *decl = LIST_REF(param->param, i);
+        list_push(ctypes, decl->ctype);
     }
     Type *r = make_func_type(ctype, ctypes);
     return r;
@@ -1284,15 +1361,15 @@ static Var *read_pointer_declarator(ReadContext *ctx, Ctype *ctype) {
     return r;
 }
 
-static NVar *nread_direct_declarator(ReadContext *ctx, Type *ctype) {
+static Decl *nread_direct_declarator(ReadContext *ctx, Type *ctype) {
     Token *tok = read_token_nonnull(ctx);
     if (tok->toktype != TOKTYPE_IDENT)
         panic("direct-declarator is not fully implemented yet");
-    return make_nvar(LOCAL, NO_STORAGE, ctype, tok->val.str);
+    return make_decl(ctype, tok->val.str);
 }
 
-static NVar *nread_pointer_declarator(ReadContext *ctx, Type *ctype) {
-    NVar *r = next_token_is(ctx, '*')
+static Decl *nread_pointer_declarator(ReadContext *ctx, Type *ctype) {
+    Decl *r = next_token_is(ctx, '*')
         ? nread_pointer_declarator(ctx, ctype)
         : nread_direct_declarator(ctx, ctype);
     r->ctype = make_ptr_type(r->ctype);
@@ -1311,7 +1388,7 @@ static Var *read_declarator(ReadContext *ctx, Ctype *ctype) {
     return read_direct_declarator(ctx, ctype);
 }
 
-static NVar *nread_declarator(ReadContext *ctx, Type *ctype) {
+static Decl *nread_declarator(ReadContext *ctx, Type *ctype) {
     if (next_token_is(ctx, '*')) {
         return nread_pointer_declarator(ctx, ctype);
     }
@@ -1818,7 +1895,6 @@ static Function *read_func_declaration(ReadContext *ctx) {
  *     declarator
  *     declarator? ":" constant-expression
  */
-static Type *nread_decl_spec(ReadContext *ctx);
 
 static Field *make_field(Type *ctype, String *name, int bitfield) {
     Field *r = malloc(sizeof(Field));
@@ -1829,7 +1905,10 @@ static Field *make_field(Type *ctype, String *name, int bitfield) {
 }
 
 static int read_const_expr(ReadContext *ctx) {
-    return 0;
+    Token *tok = read_token_nonnull(ctx);
+    if (tok->toktype != TOKTYPE_INT)
+        panic("read_const_expr is not fully implemented yet");
+    return tok->val.i;
 }
 
 static Field *read_struct_decl(ReadContext *ctx) {
@@ -1838,12 +1917,12 @@ static Field *read_struct_decl(ReadContext *ctx) {
     int bitfield = -1;
 
     ctype = nread_decl_spec(ctx);
-    Token *tok = peek_token_nonnull(ctx);
+    Token *tok = read_token_nonnull(ctx);
     if (!is_keyword(tok, ':')) {
-        NVar *var = nread_declarator(ctx, ctype);
-        ASSERT(var);
-        ctype = var->ctype;
-        name = var->name;
+        unget_token(ctx, tok);
+        Decl *decl = nread_declarator(ctx, ctype);
+        ctype = decl->ctype;
+        name = decl->name;
         tok = read_token_nonnull(ctx);
     }
     if (is_keyword(tok, ':'))
@@ -1885,31 +1964,33 @@ static void add_struct_or_union(ReadContext *ctx, String *tag, Type *ctype) {
  *     struct-or-union identifier
  */
 static Type *nread_struct_or_union_spec(ReadContext *ctx, TypeEnum type) {
-    Token *name = NULL;
+    Token *nametok = NULL;
+    String *name = NULL;
 
     Token *tok = read_token_nonnull(ctx);
     if (tok->toktype == TOKTYPE_IDENT) {
-        name = tok;
+        nametok = tok;
+        name = tok->val.str;
         tok = read_token(ctx);
     }
 
     if (is_keyword(tok, '{')) {
         List *field = read_struct_decl_list(ctx);
-        return make_struct_or_union_type(type, name->val.str, field);
-    } else if (!name) {
-        error_token(tok, "'{' or identifier expected, but got %s", token_to_string(tok));
+        return make_struct_or_union_type(type, name, field);
+    } else if (!nametok) {
+        error_token(nametok, "'{' or identifier expected, but got %s", token_to_string(nametok));
     } else
         unget_token(ctx, tok);
 
-    Type *r = find_struct_or_union(ctx, name->val.str);
+    Type *r = find_struct_or_union(ctx, name);
     if (!r) {
-        r = make_struct_or_union_type(type, name->val.str, NULL);
-        add_struct_or_union(ctx, name->val.str, r);
+        r = make_struct_or_union_type(type, name, NULL);
+        add_struct_or_union(ctx, name, r);
         return r;
     }
     if ((r->type == TSTRUCT && type == TUNION)
         || (r->type == TUNION && type == TSTRUCT))
-        error_token(name, "tag type '%s' does not match previous declaration", STRING_BODY(name->val.str));
+        error_token(nametok, "tag type '%s' does not match previous declaration", name);
     return r;
 }
 
@@ -2012,13 +2093,24 @@ static Type *nread_decl_spec(ReadContext *ctx) {
     return r;
 }
 
+static List *nread_compound_stmt(ReadContext *ctx) {
+    return NULL;
+}
+
 /*
  * external-declaration:
  *     function-definition
  *     declaration
  */
 static void nread_external_decl(ReadContext *ctx, Global *global) {
-    nread_decl_spec(ctx);
+    Type *ctype = nread_decl_spec(ctx);
+    Decl *decl = nread_declarator(ctx, ctype);
+    if (decl->ctype->type == TFUNC) {
+        if (next_token_is(ctx, '{')) {
+            List *entry = nread_compound_stmt(ctx);
+            make_nfunction(decl->name, decl->ctype, NULL, NULL, entry);
+        }
+    }
 }
 
 /*

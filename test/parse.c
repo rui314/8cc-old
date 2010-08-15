@@ -122,7 +122,7 @@ TEST(nread_decl_spec) {
     EQ(make_float_type(FDOUBLE), nread_decl_spec(make_context("double x")));
 }
 
-static void ed_field(Field *a, Field *b) {
+static void eq_field(Field *a, Field *b) {
     if (!a->name)
         IS_NULL(b->name);
     else
@@ -134,15 +134,18 @@ static void eq_struct_type(Type *expected, Type *got) {
     EQ(expected->type, got->type);
     StructType *a = STRUCT_TYPE(expected);
     StructType *b = STRUCT_TYPE(got);
-    EQ_STRING(STRING_BODY(a->name), b->name);
-    if (!a->field) {
+    if (a->name)
+        EQ_STRING(STRING_BODY(a->name), b->name);
+    else
+        IS_NULL(b->name);
+    if (!a->field)
         IS_NULL(b->field);
-        return;
+    else {
+        EQ(LIST_LEN(a->field), LIST_LEN(b->field));
+        for (int i = 0; i < LIST_LEN(a->field); i++)
+            eq_field((Field *)LIST_REF(a->field, i),
+                     (Field *)LIST_REF(b->field, i));
     }
-    EQ(LIST_LEN(a->field), LIST_LEN(b->field));
-    for (int i = 0; i < LIST_LEN(a->field); i++)
-        ed_field((Field *)LIST_REF(a->field, i),
-                 (Field *)LIST_REF(b->field, i));
 }
 
 TEST(nread_struct_or_union_spec) {
@@ -154,4 +157,13 @@ TEST(nread_struct_or_union_spec) {
     expect = make_struct_or_union_type(TSTRUCT, to_string("foo"), make_list1(field));
     got = nread_struct_or_union_spec(make_context("foo { int a; }"), TSTRUCT);
     eq_struct_type(expect, got);
+
+    STRUCT_TYPE(expect)->name = NULL;
+    got = nread_struct_or_union_spec(make_context("{ int a; }"), TSTRUCT);
+    eq_struct_type(expect, got);
+}
+
+TEST(read_struct_decl) {
+    eq_field(make_field(make_int_type(IINT), to_string("a"), 2),
+             read_struct_decl(make_context("int a : 2;")));
 }
