@@ -1206,12 +1206,14 @@ static Exp *nread_array_dimensions(ReadContext *ctx) {
 typedef struct Decl {
     Type *ctype;
     String *name;
+    Exp *init;
 } Decl;
 
-static Decl *make_decl(Type *ctype, String *name) {
+static Decl *make_decl(Type *ctype, String *name, Exp *init) {
     Decl *r = malloc(sizeof(Decl));
     r->ctype = ctype;
     r->name = name;
+    r->init = init;
     return r;
 }
 
@@ -1236,15 +1238,15 @@ static List *nread_param_type_list(ReadContext *ctx) {
     for (;;) {
         Type *ctype = nread_decl_spec(ctx);
         if (next_token_is(ctx, ',')) {
-            list_push(r, make_decl(ctype, NULL));
+            list_push(r, make_decl(ctype, NULL, NULL));
             continue;
         }
         if (next_token_is(ctx, ')')) {
-            list_push(r, make_decl(ctype, NULL));
+            list_push(r, make_decl(ctype, NULL, NULL));
             break;
         }
         Decl *decl = nread_declarator(ctx, ctype);
-        list_push(r, make_decl(decl->ctype, decl->name));
+        list_push(r, make_decl(decl->ctype, decl->name, NULL));
         if (next_token_is(ctx, ','))
             continue;
         if (next_token_is(ctx, ')'))
@@ -1267,6 +1269,19 @@ struct List *nread_ident_list(ReadContext *ctx) {
     return r;
 }
 
+static Field *read_struct_decl(ReadContext *ctx);
+
+static List *read_decl_list(ReadContext *ctx) {
+    List *r = make_list();
+    for (;;) {
+        Token *tok = peek_token_nonnull(ctx);
+        if (is_keyword(tok, '}'))
+            return r;
+        Field *field = read_struct_decl(ctx);
+        list_push(r, field);
+    }
+}
+
 static FuncParam *nread_func_params(ReadContext *ctx) {
     if (next_token_is(ctx, ')'))
         return make_func_param(NO_DECL, NULL);
@@ -1282,13 +1297,14 @@ static FuncParam *nread_func_params(ReadContext *ctx) {
 
 static Type *nread_func_declarator_params(ReadContext *ctx, Type *ctype) {
     FuncParam *param = nread_func_params(ctx);
-    List *ctypes = make_list();
-    for (int i = 0; i < LIST_LEN(param->param); i++) {
-        Decl *decl = LIST_REF(param->param, i);
-        list_push(ctypes, decl->ctype);
+    if (param->type == ANSI) {
+        List *ctypes = make_list();
+        for (int i = 0; i < LIST_LEN(param->param); i++) {
+            Decl *decl = LIST_REF(param->param, i);
+            list_push(ctypes, decl->ctype);
+        }
+        return make_func_type(ctype, ctypes);
     }
-    Type *r = make_func_type(ctype, ctypes);
-    return r;
 }
 
 /*
@@ -1365,7 +1381,7 @@ static Decl *nread_direct_declarator(ReadContext *ctx, Type *ctype) {
     Token *tok = read_token_nonnull(ctx);
     if (tok->toktype != TOKTYPE_IDENT)
         panic("direct-declarator is not fully implemented yet");
-    return make_decl(ctype, tok->val.str);
+    return make_decl(ctype, tok->val.str, NULL);
 }
 
 static Decl *nread_pointer_declarator(ReadContext *ctx, Type *ctype) {
@@ -1467,6 +1483,25 @@ static void read_declaration(ReadContext *ctx) {
             break;
     }
     expect(ctx, ';');
+}
+
+static Exp *nread_initialized_declarator(ReadContext *ctx, Type *ctype) {
+    return NULL;
+}
+
+static List *nread_declaration(ReadContext *ctx, bool allow_init) {
+    List *r = make_list();
+    Type *ctype = nread_decl_spec(ctx);
+    for (;;) {
+        if (allow_init)
+            list_push(r, nread_initialized_declarator(ctx, ctype));
+        else
+            list_push(r, make_decl(ctype, NULL, NULL));
+        if (!next_token_is(ctx, ','))
+            break;
+    }
+    expect(ctx, ';');
+    return r;
 }
 
 /*
