@@ -33,8 +33,17 @@ void contains(int line, char *expected, char *got) {
         error("line %d: '%s' expected, but got '%s'", line, expected, got);
 }
 
+/*
+ * Parser
+ */
+
 File *mkfile(char *str) {
     return make_string_file(to_string(str));
+}
+
+ReadContext *mkctx(char *str) {
+    File *file = mkfile(str);
+    return make_read_context(file, NULL, make_cpp_context(file));
 }
 
 /*

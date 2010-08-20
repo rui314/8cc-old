@@ -11,17 +11,14 @@
  */
 
 TEST(read_comment) {
-    File *file = mkfile("/* 1 * */ 2 // 3 \n 4");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
+    ReadContext *ctx = mkctx("/* 1 * */ 2 // 3 \n 4");
     EQ(2, read_token(ctx)->val.i);
     EQ(4, read_token(ctx)->val.i);
     EQ(NULL, read_token(ctx));
 }
 
 TEST(read_float) {
-    File *file = mkfile("1 2.0");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
-
+    ReadContext *ctx = mkctx("1 2.0");
     Token *tok = read_token(ctx);
     EQ(TOKTYPE_INT, tok->toktype);
     EQ(1, tok->val.i);
@@ -32,9 +29,7 @@ TEST(read_float) {
 }
 
 TEST(read_char) {
-    File *file = mkfile("'a' '\\n' '\\0' '\\23' '\\233' '\\x3' '\\x3f'");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
-
+    ReadContext *ctx = mkctx("'a' '\\n' '\\0' '\\23' '\\233' '\\x3' '\\x3f'");
     Token *tok = read_token(ctx);
     EQ(TOKTYPE_CHAR, tok->toktype);
     EQ('a', tok->val.i);
@@ -54,9 +49,7 @@ TEST(read_char) {
     } while (0)
 
 TEST(read_keywords) {
-    File *file = mkfile("int float ( ) { } ! = ^ == ++ -- ||");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
-
+    ReadContext *ctx = mkctx("int float ( ) { } ! = ^ == ++ -- ||");
     TEST_READ_KEYWORDS(ctx, KEYWORD_INT);
     TEST_READ_KEYWORDS(ctx, KEYWORD_FLOAT);
     TEST_READ_KEYWORDS(ctx, '(');
@@ -73,9 +66,7 @@ TEST(read_keywords) {
 }
 
 TEST(read_unget_token) {
-    File *file = mkfile("int float (");
-    ReadContext *ctx = make_read_context(file, NULL, make_cpp_context(file));
-
+    ReadContext *ctx = mkctx("int float (");
     Token *t0 = read_token(ctx);
     Token *t1 = read_token(ctx);
     Token *t2 = read_token(ctx);

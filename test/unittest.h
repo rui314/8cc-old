@@ -36,4 +36,5 @@ extern void eq_str(int line, char *expected, char *got);
 extern void eq_str1(int line, char *expected, char *got, char *msg);
 extern void eq_char(int line, int expected, int got);
 extern File *mkfile(char *str);
+extern ReadContext *mkctx(char *str);
 extern void contains(int line, char *expected, char *got);
