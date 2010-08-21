@@ -29,6 +29,14 @@ String *to_string(char *str) {
     return r;
 }
 
+String *string_copy(String *b) {
+    String *r = malloc(sizeof(String));
+    *r = *b;
+    r->buf = malloc(r->nalloc);
+    memcpy(r->buf, b->buf, r->len);
+    return r;
+}
+
 bool string_equal(String *a, String *b) {
     return !strcmp(STRING_BODY(a), STRING_BODY(b));
 }
@@ -36,6 +44,13 @@ bool string_equal(String *a, String *b) {
 void string_append(String *b, char *p) {
     out(b, p, strlen(p) + 1);
     string_seek(b, b->len - 1);
+}
+
+String *string_prepend(String *b, char *p) {
+    String *r = make_string();
+    string_append(r, p);
+    string_append(r, STRING_BODY(b));
+    return r;
 }
 
 static void ensure_room(String *b, long room) {
