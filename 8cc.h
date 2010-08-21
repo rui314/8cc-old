@@ -544,6 +544,7 @@ extern bool is_keyword(Token *tok, int type);
 extern void unget_token(ReadContext *ctx, Token *tok);
 extern Token *peek_token(ReadContext *ctx);
 extern bool next_token_is(ReadContext *ctx, int keyword);
+extern char *keyword_to_string(int v);
 extern bool is_type_keyword(Token *tok);
 
 /*============================================================

@@ -488,7 +488,7 @@ bool next_token_is(ReadContext *ctx, int keyword) {
     return false;
 }
 
-static char *keyword_to_string(int v) {
+char *keyword_to_string(int v) {
     switch (v) {
 #define KEYWORD(id, str) case id: return str;
 #define PUNCT(id, str) case id: return str;
