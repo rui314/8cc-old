@@ -441,6 +441,7 @@ extern NORETURN void error_cpp_ctx(CppContext *ctx, char *msg, ...);
 
 struct ReadContext;
 extern Token *read_token(struct ReadContext *ctx);
+extern Token *read_token_nonnull(struct ReadContext *ctx);
 extern void define_predefined_macros(CppContext *ctx);
 extern void cpp_write(CppContext *ctx, FILE *out);
 
@@ -536,6 +537,14 @@ extern ReadContext *make_read_context(File *file, Elf *elf, CppContext *ctx);
 extern char *token_to_string(Token *tok);
 extern struct Var *read_comma_expr(ReadContext *ctx);
 extern NORETURN void error_token(Token *tok, char *msg, ...);
+extern NORETURN void error_ctx(ReadContext *ctx, char *msg, ...);
+
+extern void parse_expect(ReadContext *ctx, int expected);
+extern bool is_keyword(Token *tok, int type);
+extern void unget_token(ReadContext *ctx, Token *tok);
+extern Token *peek_token(ReadContext *ctx);
+extern bool next_token_is(ReadContext *ctx, int keyword);
+extern bool is_type_keyword(Token *tok);
 
 /*============================================================
  * Code generator

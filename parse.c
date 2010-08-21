@@ -57,7 +57,7 @@ NORETURN void error_token(Token *tok, char *msg, ...) {
     va_end(ap);
 }
 
-static NORETURN void error_ctx(ReadContext *ctx, char *msg, ...) {
+NORETURN void error_ctx(ReadContext *ctx, char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     print_parse_error(ctx->file->line, ctx->file->column, msg, ap);
@@ -458,22 +458,29 @@ static Var *emit_log_or(ReadContext *ctx, Var *v0, Var *v1) {
  * Parser
  */
 
-static bool is_keyword(Token *tok, int type) {
+Token *read_token_nonnull(ReadContext *ctx) {
+    Token *tok = read_token(ctx);
+    if (!tok)
+        error_ctx(ctx, "premature end of input");
+    return tok;
+}
+
+bool is_keyword(Token *tok, int type) {
     return tok->toktype == TOKTYPE_KEYWORD && tok->val.i == type;
 }
 
-static void unget_token(ReadContext *ctx, Token *tok) {
+void unget_token(ReadContext *ctx, Token *tok) {
     if (tok)
         list_push(ctx->ungotten, tok);
 }
 
-static Token *peek_token(ReadContext *ctx) {
+Token *peek_token(ReadContext *ctx) {
     Token *r = read_token(ctx);
     unget_token(ctx, r);
     return r;
 }
 
-static bool next_token_is(ReadContext *ctx, int keyword) {
+bool next_token_is(ReadContext *ctx, int keyword) {
     Token *tok = read_token(ctx);
     if (is_keyword(tok, keyword))
         return true;
@@ -539,6 +546,10 @@ static void expect(ReadContext *ctx, int expected) {
         error_token(tok, "keyword expected, but got '%s'", token_to_string(tok));
     if (!is_keyword(tok, expected))
         error_token(tok, "'%c' expected, but got '%c'", expected, tok->val.i);
+}
+
+void parse_expect(ReadContext *ctx, int expected) {
+    return expect(ctx, expected);
 }
 
 static void process_break(ReadContext *ctx, Token *tok) {
@@ -1231,7 +1242,7 @@ static void read_initialized_declarator(ReadContext *ctx, Ctype *ctype) {
     emit(ctx, make_inst1(OP_ALLOC, var));
 }
 
-static bool is_type_keyword(Token *tok) {
+bool is_type_keyword(Token *tok) {
     if (tok->toktype != TOKTYPE_KEYWORD)
         return false;
     switch (tok->val.i) {
