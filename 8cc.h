@@ -446,6 +446,12 @@ extern void define_predefined_macros(CppContext *ctx);
 extern void cpp_write(CppContext *ctx, FILE *out);
 
 /*============================================================
+ * Intermediate Language
+ */
+
+#include "il.h"
+
+/*============================================================
  * Parser
  */
 

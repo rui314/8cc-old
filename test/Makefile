@@ -2,7 +2,7 @@ SHELL=/bin/bash
 CC=gcc
 CFLAGS=-std=c99 -Wall -g
 LDFLAGS=-lpthread -ldl -rdynamic
-OBJS=string.o list.o gen.o lex.o cpp.o parse.o file.o dict.o error.o elf.o run.o init.o decl.o
+OBJS=string.o list.o gen.o lex.o cpp.o parse.o file.o dict.o error.o elf.o run.o init.o decl.o il.o
 HEADERS=../8cc.h unittest.h
 TESTS=string alltests
 
