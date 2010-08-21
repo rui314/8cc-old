@@ -792,10 +792,9 @@ static Var *read_unary_expr(ReadContext *ctx) {
  * 14      = op=                           right
  * 15      ,                               left
  */
-static int prec(Token *tok) {
-    if (!tok || tok->toktype != TOKTYPE_KEYWORD)
-        return -1;
-    switch (tok->val.i) {
+
+int precedence(int op) {
+    switch (op) {
     case '[':
         return 1;
     case KEYWORD_INC: case KEYWORD_DEC: case '~':
@@ -832,6 +831,12 @@ static int prec(Token *tok) {
     default:
         return -1;
     }
+}
+
+static int prec_token(Token *tok) {
+    if (!tok || tok->toktype != TOKTYPE_KEYWORD)
+        return -1;
+    return precedence(tok->val.i);
 }
 
 
@@ -927,7 +932,7 @@ static Var *read_cond_expr(ReadContext *ctx, Var *condvar) {
 static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
     for (;;) {
         Token *tok = read_token(ctx);
-        int prec1 = prec(tok);
+        int prec1 = prec_token(tok);
         if (prec1 < 0 || prec0 < prec1) {
             unget_token(ctx, tok);
             return v0;
@@ -943,7 +948,7 @@ static Var *read_expr1(ReadContext *ctx, Var *v0, int prec0) {
         Var *v1 = read_unary_expr(ctx);
         for (;;) {
             Token *tok1 = peek_token(ctx);
-            int prec2 = prec(tok1);
+            int prec2 = prec_token(tok1);
             if (prec2 < 0 || prec1 < prec2 || (prec1 == prec2 && !is_rassoc(tok1))) {
                 break;
             }
