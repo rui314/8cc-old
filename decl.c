@@ -135,3 +135,44 @@ static DeclType guess_decl_type(ReadContext *ctx) {
     unget_token(ctx, tok);
     return isptr ? DECL_VARABST : DECL_NONE;
 }
+
+/*==============================================================================
+ * Variable declaration
+ */
+
+static int read_type_qual(ReadContext *ctx) {
+    int mask = 0;
+    for (;;) {
+        Token *tok = read_token_nonnull(ctx);
+        if (is_keyword(tok, KEYWORD_CONST)) {
+            mask |= QCONST;
+        } else if (is_keyword(tok, KEYWORD_RESTRICT)) {
+            mask |= QRESTRICT;
+        } else if (is_keyword(tok, KEYWORD_VOLATILE)) {
+            mask |= QVOLATILE;
+        } else {
+            unget_token(ctx, tok);
+            return mask;
+        }
+    }
+}
+
+static Type *read_var_decl(ReadContext *ctx, Token **ident, Type *basetype) {
+    if (next_token_is(ctx, '*')) {
+        int mask = read_type_qual(ctx);
+        Type *ctype0 = read_var_decl(ctx, ident, basetype);
+        Type *ctype1 = make_ptr_type(ctype0);
+        return mask ? make_qual_type(ctype1, mask) : ctype1;
+    }
+    if (next_token_is(ctx, '(')) {
+        Type *r = read_var_decl(ctx, ident, basetype);
+        parse_expect(ctx, ')');
+        return r;
+    }
+    Token *tok = read_token_nonnull(ctx);
+    if (tok->toktype != TOKTYPE_IDENT)
+        error_token(tok, "identifier expected, but got %s", token_to_string(tok));
+    if (ident)
+        *ident = tok;
+    return basetype;
+}

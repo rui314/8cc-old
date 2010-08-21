@@ -36,3 +36,10 @@ TEST(guess_decl_type) {
     TEST_GUESS(DECL_OLD_FUNCDEF, "a(a) int a; {");
     TEST_GUESS(DECL_OLD_FUNCABST, "(*)();");
 }
+
+TEST(read_var_decl) {
+    EQ_STRING("int", pp_type(read_var_decl(mkctx("a"), NULL, make_int_type(IINT))));
+    EQ_STRING("int*", pp_type(read_var_decl(mkctx("*a"), NULL, make_int_type(IINT))));
+    EQ_STRING("int*", pp_type(read_var_decl(mkctx("(*a)"), NULL, make_int_type(IINT))));
+    EQ_STRING("int*", pp_type(read_var_decl(mkctx("(*(a))"), NULL, make_int_type(IINT))));
+}
