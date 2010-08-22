@@ -137,6 +137,24 @@ static DeclType guess_decl_type(ReadContext *ctx) {
 }
 
 /*==============================================================================
+ * Declaration parser context
+ */
+
+typedef struct DeclCtx {
+    Type *basetype;
+    Token **ident;
+    Type *(*array)(ReadContext *, struct DeclCtx *);
+} DeclCtx;
+
+DeclCtx *make_decl_ctx(Type *base, Token **ident) {
+    DeclCtx *r = malloc(sizeof(DeclCtx));
+    r->basetype = base;
+    r->ident = ident;
+    r->array = NULL;
+    return r;
+}
+
+/*==============================================================================
  * Variable declaration
  */
 
@@ -157,27 +175,35 @@ static int read_type_qual(ReadContext *ctx) {
     }
 }
 
-static Type *read_var_decl(ReadContext *ctx, Type *base, Token **ident) {
+static Type *read_decl(ReadContext *ctx, DeclCtx *declctx) {
     if (next_token_is(ctx, '*')) {
         int mask = read_type_qual(ctx);
-        Type *ctype0 = read_var_decl(ctx, base, ident);
+        Type *ctype0 = read_decl(ctx, declctx);
         Type *ctype1 = make_ptr_type(ctype0);
         return mask ? make_qual_type(ctype1, mask) : ctype1;
     }
     if (next_token_is(ctx, '(')) {
-        Type *r = read_var_decl(ctx, base, ident);
+        Type *r = read_decl(ctx, declctx);
         parse_expect(ctx, ')');
         return r;
     }
-    if (ident) {
+    if (declctx->ident) {
         Token *tok = read_token_nonnull(ctx);
         if (tok->toktype != TOKTYPE_IDENT)
             error_token(tok, "identifier expected, but got %s", token_to_string(tok));
-        *ident = tok;
+        *declctx->ident = tok;
     }
-    return base;
+    if (declctx->array && next_token_is(ctx, '['))
+        return declctx->array(ctx, declctx);
+    return declctx->basetype;
+}
+
+static Type *read_var_decl(ReadContext *ctx, Type *base, Token **ident) {
+    DeclCtx *declctx = make_decl_ctx(base, ident);
+    return read_decl(ctx, declctx);
 }
 
 static Type *read_var_abst_decl(ReadContext *ctx, Type *base) {
-    return read_var_decl(ctx, base, NULL);
+    DeclCtx *declctx = make_decl_ctx(base, NULL);
+    return read_decl(ctx, declctx);
 }
