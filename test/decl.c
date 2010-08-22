@@ -37,9 +37,12 @@ TEST(guess_decl_type) {
     TEST_GUESS(DECL_OLD_FUNCABST, "(*)();");
 }
 
+#define TEST_VAR_DECL(type, input) \
+    EQ_STRING(type, pp_type(read_var_decl(mkctx(input), NULL, make_int_type(IINT))))
+
 TEST(read_var_decl) {
-    EQ_STRING("int", pp_type(read_var_decl(mkctx("a"), NULL, make_int_type(IINT))));
-    EQ_STRING("int*", pp_type(read_var_decl(mkctx("*a"), NULL, make_int_type(IINT))));
-    EQ_STRING("int*", pp_type(read_var_decl(mkctx("(*a)"), NULL, make_int_type(IINT))));
-    EQ_STRING("int*", pp_type(read_var_decl(mkctx("(*(a))"), NULL, make_int_type(IINT))));
+    TEST_VAR_DECL("int", "a");
+    TEST_VAR_DECL("int*", "*a");
+    TEST_VAR_DECL("int*", "(*a)");
+    TEST_VAR_DECL("int*", "(*(a))");
 }
