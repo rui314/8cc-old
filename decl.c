@@ -157,22 +157,27 @@ static int read_type_qual(ReadContext *ctx) {
     }
 }
 
-static Type *read_var_decl(ReadContext *ctx, Token **ident, Type *basetype) {
+static Type *read_var_decl(ReadContext *ctx, Type *base, Token **ident) {
     if (next_token_is(ctx, '*')) {
         int mask = read_type_qual(ctx);
-        Type *ctype0 = read_var_decl(ctx, ident, basetype);
+        Type *ctype0 = read_var_decl(ctx, base, ident);
         Type *ctype1 = make_ptr_type(ctype0);
         return mask ? make_qual_type(ctype1, mask) : ctype1;
     }
     if (next_token_is(ctx, '(')) {
-        Type *r = read_var_decl(ctx, ident, basetype);
+        Type *r = read_var_decl(ctx, base, ident);
         parse_expect(ctx, ')');
         return r;
     }
-    Token *tok = read_token_nonnull(ctx);
-    if (tok->toktype != TOKTYPE_IDENT)
-        error_token(tok, "identifier expected, but got %s", token_to_string(tok));
-    if (ident)
+    if (ident) {
+        Token *tok = read_token_nonnull(ctx);
+        if (tok->toktype != TOKTYPE_IDENT)
+            error_token(tok, "identifier expected, but got %s", token_to_string(tok));
         *ident = tok;
-    return basetype;
+    }
+    return base;
+}
+
+static Type *read_var_abst_decl(ReadContext *ctx, Type *base) {
+    return read_var_decl(ctx, base, NULL);
 }

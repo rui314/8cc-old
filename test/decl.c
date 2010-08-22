@@ -38,11 +38,23 @@ TEST(guess_decl_type) {
 }
 
 #define TEST_VAR_DECL(type, input) \
-    EQ_STRING(type, pp_type(read_var_decl(mkctx(input), NULL, make_int_type(IINT))))
+    EQ_STRING(type, pp_type(read_var_decl(mkctx(input), make_int_type(IINT), &token)))
 
 TEST(read_var_decl) {
+    Token *token;
     TEST_VAR_DECL("int", "a");
-    TEST_VAR_DECL("int*", "*a");
-    TEST_VAR_DECL("int*", "(*a)");
-    TEST_VAR_DECL("int*", "(*(a))");
+    TEST_VAR_DECL("int*", "*b");
+    TEST_VAR_DECL("int*", "(*c)");
+    TEST_VAR_DECL("int*", "(*(d))");
 }
+
+#define TEST_VAR_ABST_DECL(type, input) \
+    EQ_STRING(type, pp_type(read_var_abst_decl(mkctx(input), make_int_type(IINT))))
+
+TEST(read_var_abst_decl) {
+    TEST_VAR_ABST_DECL("int", ";");
+    TEST_VAR_ABST_DECL("int*", "*;");
+    TEST_VAR_ABST_DECL("int*", "(*);");
+    TEST_VAR_ABST_DECL("int**", "(*(*));");
+}
+
