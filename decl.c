@@ -143,7 +143,7 @@ static DeclType guess_decl_type(ReadContext *ctx) {
 typedef struct DeclCtx {
     Type *basetype;
     Token **ident;
-    Type *(*array)(ReadContext *, struct DeclCtx *);
+    Type *(*array)(ReadContext *, Type *);
 } DeclCtx;
 
 DeclCtx *make_decl_ctx(Type *base, Token **ident) {
@@ -182,20 +182,19 @@ static Type *read_decl(ReadContext *ctx, DeclCtx *declctx) {
         Type *ctype1 = make_ptr_type(ctype0);
         return mask ? make_qual_type(ctype1, mask) : ctype1;
     }
+    Type *basetype = declctx->basetype;
     if (next_token_is(ctx, '(')) {
-        Type *r = read_decl(ctx, declctx);
+        basetype = read_decl(ctx, declctx);
         parse_expect(ctx, ')');
-        return r;
-    }
-    if (declctx->ident) {
+    } else if (declctx->ident) {
         Token *tok = read_token_nonnull(ctx);
         if (tok->toktype != TOKTYPE_IDENT)
             error_token(tok, "identifier expected, but got %s", token_to_string(tok));
         *declctx->ident = tok;
     }
     if (declctx->array && next_token_is(ctx, '['))
-        return declctx->array(ctx, declctx);
-    return declctx->basetype;
+        return declctx->array(ctx, basetype);
+    return basetype;
 }
 
 static Type *read_var_decl(ReadContext *ctx, Type *base, Token **ident) {
@@ -203,7 +202,21 @@ static Type *read_var_decl(ReadContext *ctx, Type *base, Token **ident) {
     return read_decl(ctx, declctx);
 }
 
-static Type *read_var_abst_decl(ReadContext *ctx, Type *base) {
-    DeclCtx *declctx = make_decl_ctx(base, NULL);
+/*==============================================================================
+ * Array declaration
+ */
+
+static Type *read_array_dimensions(ReadContext *ctx, Type *base) {
+    parse_expect(ctx, ']');
+    if (next_token_is(ctx, '[')) {
+        Type *type = read_array_dimensions(ctx, base);
+        return make_array_type(type, NULL);
+    }
+    return make_array_type(base, NULL);
+}
+
+struct Type *read_array_decl(ReadContext *ctx, Type *base, Token **ident) {
+    DeclCtx *declctx = make_decl_ctx(base, ident);
+    declctx->array = read_array_dimensions;
     return read_decl(ctx, declctx);
 }
