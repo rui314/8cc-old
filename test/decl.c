@@ -66,3 +66,12 @@ TEST(read_array_decl) {
     TEST_ARRAY_DECL("int[][]", "[][];", NULL);
     TEST_ARRAY_DECL("int*[][]", "(*)[][];", NULL);
 }
+
+#define TEST_FUNC_DECL(type, input, token) \
+    EQ_STRING(type, pp_type(read_func_decl(mkctx(input), make_int_type(IINT), token)))
+
+TEST(read_func_decl) {
+    Token *token;
+    TEST_FUNC_DECL("int(int*)", "f(int*)", &token);
+    TEST_FUNC_DECL("int(int*,int)", "f(int*, int)", &token);
+}

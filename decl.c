@@ -144,6 +144,7 @@ typedef struct DeclCtx {
     Type *basetype;
     Token **ident;
     Type *(*array)(ReadContext *, Type *);
+    Type *(*func)(ReadContext *, Type *);
 } DeclCtx;
 
 DeclCtx *make_decl_ctx(Type *base, Token **ident) {
@@ -151,6 +152,7 @@ DeclCtx *make_decl_ctx(Type *base, Token **ident) {
     r->basetype = base;
     r->ident = ident;
     r->array = NULL;
+    r->func = NULL;
     return r;
 }
 
@@ -194,6 +196,8 @@ static Type *read_decl(ReadContext *ctx, DeclCtx *declctx) {
     }
     if (declctx->array && next_token_is(ctx, '['))
         return declctx->array(ctx, basetype);
+    if (declctx->func && next_token_is(ctx, '('))
+        return declctx->func(ctx, basetype);
     return basetype;
 }
 
@@ -218,5 +222,41 @@ static Type *read_array_dimensions(ReadContext *ctx, Type *base) {
 struct Type *read_array_decl(ReadContext *ctx, Type *base, Token **ident) {
     DeclCtx *declctx = make_decl_ctx(base, ident);
     declctx->array = read_array_dimensions;
+    return read_decl(ctx, declctx);
+}
+
+/*==============================================================================
+ * Function declaration
+ */
+
+static Type *read_decl_spec(ReadContext *ctx) {
+    Token *tok = read_token_nonnull(ctx);
+    if (!is_keyword(tok, KEYWORD_INT))
+        panic("only 'int' is allowed for now");
+    return make_int_type(IINT);
+}
+
+static List *fix_param_type(List *param) {
+    if (LIST_LEN(param) != 1)
+        return param;
+    Type *type = LIST_REF(param, 0);
+    return type->type == TVOID ? make_list() : param;
+}
+
+static Type *read_func_params(ReadContext *ctx, Type *rettype) {
+    List *paramtype = make_list();
+    for (;;) {
+        Type *basetype = read_decl_spec(ctx);
+        Type *type = read_var_decl(ctx, basetype, NULL);
+        list_push(paramtype, type);
+        if (next_token_is(ctx, ')'))
+            return make_func_type(rettype, fix_param_type(paramtype));
+        parse_expect(ctx, ',');
+    }
+}
+
+static Type *read_func_decl(ReadContext *ctx, Type *base, Token **ident) {
+    DeclCtx *declctx = make_decl_ctx(base, ident);
+    declctx->func = read_func_params;
     return read_decl(ctx, declctx);
 }
