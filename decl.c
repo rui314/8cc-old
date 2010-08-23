@@ -143,14 +143,17 @@ static DeclType guess_decl_type(ReadContext *ctx) {
 typedef struct DeclCtx {
     Type *basetype;
     Token **ident;
+    enum { REQUIRE_IDENT, REQUIRE_ABST, ALLOW_BOTH } flag;
     Type *(*array)(ReadContext *, Type *);
     Type *(*func)(ReadContext *, Type *);
+    List *param;
 } DeclCtx;
 
 DeclCtx *make_decl_ctx(Type *base, Token **ident) {
     DeclCtx *r = malloc(sizeof(DeclCtx));
     r->basetype = base;
     r->ident = ident;
+    r->flag = (ident == NULL ? REQUIRE_ABST : REQUIRE_IDENT);
     r->array = NULL;
     r->func = NULL;
     return r;
@@ -188,11 +191,18 @@ static Type *read_decl(ReadContext *ctx, DeclCtx *declctx) {
     if (next_token_is(ctx, '(')) {
         basetype = read_decl(ctx, declctx);
         parse_expect(ctx, ')');
-    } else if (declctx->ident) {
+    } else if (declctx->flag == ALLOW_BOTH) {
+        Token *tok = read_token_nonnull(ctx);
+        if (tok->toktype != TOKTYPE_IDENT)
+            unget_token(ctx, tok);
+        else if (declctx->ident)
+            *declctx->ident = tok;
+    } else if (declctx->flag == REQUIRE_IDENT) {
         Token *tok = read_token_nonnull(ctx);
         if (tok->toktype != TOKTYPE_IDENT)
             error_token(tok, "identifier expected, but got %s", token_to_string(tok));
-        *declctx->ident = tok;
+        if (declctx->ident)
+            *declctx->ident = tok;
     }
     if (declctx->array && next_token_is(ctx, '['))
         return declctx->array(ctx, basetype);
@@ -247,7 +257,9 @@ static Type *read_func_params(ReadContext *ctx, Type *rettype) {
     List *paramtype = make_list();
     for (;;) {
         Type *basetype = read_decl_spec(ctx);
-        Type *type = read_var_decl(ctx, basetype, NULL);
+        DeclCtx *declctx = make_decl_ctx(basetype, NULL);
+        declctx->flag = ALLOW_BOTH;
+        Type *type = read_decl(ctx, declctx);
         list_push(paramtype, type);
         if (next_token_is(ctx, ')'))
             return make_func_type(rettype, fix_param_type(paramtype));
