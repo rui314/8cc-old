@@ -4,7 +4,6 @@
  */
 
 #include "unittest.h"
-#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -48,40 +47,6 @@ File *mkfile(char *str) {
 ReadContext *mkctx(char *str) {
     File *file = mkfile(str);
     return make_read_context(file, NULL, make_cpp_context(file));
-}
-
-/*
- * Concurrency
- */
-
-static pthread_mutex_t test_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t test_cond = PTHREAD_COND_INITIALIZER;
-static int nthreads;
-
-static void *thread_main(void* ignore) {
-    for (;;) {
-        pthread_mutex_lock(&test_lock);
-        if (!LIST_LEN(test_funcs)) {
-            nthreads--;
-            if (!nthreads)
-                pthread_cond_signal(&test_cond);
-            pthread_mutex_unlock(&test_lock);
-            return NULL;
-        } else {
-            char *name = (char *)list_pop(test_funcs);
-            printf("  %s\n", name);
-            void (*fn)(void) = list_pop(test_funcs);
-            pthread_mutex_unlock(&test_lock);
-            fn();
-        }
-    }
-}
-
-static void start_test_threads(int n) {
-    for (int i = 0; i < n; i++) {
-        pthread_t thread;
-        pthread_create(&thread, NULL, thread_main, NULL);
-    }
 }
 
 /*
@@ -573,18 +538,18 @@ TEST(numbers) {
  * Entry point
  */
 
+static void *run_tests() {
+    while (LIST_LEN(test_funcs) > 0) {
+        char *fname = (char *)list_pop(test_funcs);
+        printf("  %s\n", fname);
+        void (*testfn)(void) = list_pop(test_funcs);
+        testfn();
+    }
+}
+
 int main(int argc, char **argv) {
     printf("Running unit tests ...\n");
-    if (argc == 2 && !strcmp(argv[1], "-n")) {
-        run_in_memory = false;
-        thread_main(NULL);
-    } else {
-        run_in_memory = true;
-        pthread_mutex_lock(&test_lock);
-        nthreads = 1;
-        start_test_threads(nthreads);
-        while (nthreads)
-            pthread_cond_wait(&test_cond, &test_lock);
-    }
+    run_in_memory = !(argc == 2 && !strcmp(argv[1], "-n"));
+    run_tests();
     printf("ALL TESTS PASSED\n");
 }
